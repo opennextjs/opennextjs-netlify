@@ -16,6 +16,7 @@ import { nextResponseProxy } from '../revalidate.js'
 
 import { createRequestContext, getLogger, getRequestContext } from './request-context.cjs'
 import { getTracer } from './tracer.cjs'
+import { setWaitUntil } from './wait-until.cjs'
 
 const nextImportPromise = import('../next.cjs')
 
@@ -52,7 +53,7 @@ interface FutureContext extends Context {
 
 export default async (request: Request, context: FutureContext) => {
   const tracer = getTracer()
-
+  setWaitUntil(context)
   if (!nextHandler) {
     await tracer.withActiveSpan('initialize next server', async () => {
       // set the server config
