@@ -1,10 +1,17 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
+import type { Context } from '@netlify/functions'
 import { LogLevel, systemLogger } from '@netlify/functions/internal'
 
 import type { NetlifyCachedRouteValue } from '../../shared/cache-types.cjs'
 
 type SystemLogger = typeof systemLogger
+
+// TODO: remove once https://github.com/netlify/serverless-functions-api/pull/219
+// is released and public types are updated
+export interface FutureContext extends Context {
+  waitUntil?: (promise: Promise<unknown>) => void
+}
 
 export type RequestContext = {
   captureServerTiming: boolean
@@ -28,13 +35,17 @@ export type RequestContext = {
 
 type RequestContextAsyncLocalStorage = AsyncLocalStorage<RequestContext>
 
-export function createRequestContext(request?: Request): RequestContext {
+export function createRequestContext(request?: Request, context?: FutureContext): RequestContext {
   const backgroundWorkPromises: Promise<unknown>[] = []
 
   return {
     captureServerTiming: request?.headers.has('x-next-debug-logging') ?? false,
     trackBackgroundWork: (promise) => {
-      backgroundWorkPromises.push(promise)
+      if (context?.waitUntil) {
+        context.waitUntil(promise)
+      } else {
+        backgroundWorkPromises.push(promise)
+      }
     },
     get backgroundWorkPromise() {
       return Promise.allSettled(backgroundWorkPromises)

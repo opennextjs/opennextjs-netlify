@@ -1,3 +1,5 @@
+import { getRequestContext } from './request-context.cjs'
+
 /**
  *  @see https://github.com/vercel/next.js/blob/canary/packages/next/src/server/after/builtin-request-context.ts
  */
@@ -14,15 +16,11 @@ type GlobalThisWithRequestContext = typeof globalThis & {
 /**
  * Registers a `waitUntil` to be used by Next.js for next/after
  */
-
-export function setWaitUntil({ waitUntil }: { waitUntil?: (promise: Promise<unknown>) => void }) {
-  if (!waitUntil) {
-    return
-  }
+export function setupWaitUntil() {
   // eslint-disable-next-line @typescript-eslint/no-extra-semi
   ;(globalThis as GlobalThisWithRequestContext)[NEXT_REQUEST_CONTEXT_SYMBOL] = {
     get() {
-      return { waitUntil }
+      return { waitUntil: getRequestContext()?.trackBackgroundWork }
     },
   }
 }

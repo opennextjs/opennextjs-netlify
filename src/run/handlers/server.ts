@@ -1,7 +1,6 @@
 import type { OutgoingHttpHeaders } from 'http'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
-import { Context } from '@netlify/functions'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
@@ -16,9 +15,11 @@ import { nextResponseProxy } from '../revalidate.js'
 
 import { createRequestContext, getLogger, getRequestContext } from './request-context.cjs'
 import { getTracer } from './tracer.cjs'
-import { setWaitUntil } from './wait-until.cjs'
+import { setupWaitUntil } from './wait-until.cjs'
 
 const nextImportPromise = import('../next.cjs')
+
+setupWaitUntil()
 
 let nextHandler: WorkerRequestHandler, nextConfig: NextConfigComplete
 
@@ -45,15 +46,9 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
   }
 }
 
-// TODO: remove once https://github.com/netlify/serverless-functions-api/pull/219
-// is released and public types are updated
-interface FutureContext extends Context {
-  waitUntil?: (promise: Promise<unknown>) => void
-}
-
-export default async (request: Request, context: FutureContext) => {
+export default async (request: Request) => {
   const tracer = getTracer()
-  setWaitUntil(context)
+
   if (!nextHandler) {
     await tracer.withActiveSpan('initialize next server', async () => {
       // set the server config
@@ -129,19 +124,19 @@ export default async (request: Request, context: FutureContext) => {
       return new Response(body || null, response)
     }
 
-    if (context.waitUntil) {
-      context.waitUntil(requestContext.backgroundWorkPromise)
-    }
-
     const keepOpenUntilNextFullyRendered = new TransformStream({
       async flush() {
         // it's important to keep the stream open until the next handler has finished
         await nextHandlerPromise
-        if (!context.waitUntil) {
-          // if waitUntil is not available, we have to keep response stream open until background promises are resolved
-          // to ensure that all background work executes
-          await requestContext.backgroundWorkPromise
-        }
+
+        // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
+        // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
+        // otherwise Next would never run the callback variant of `next/after`
+        res.emit('close')
+
+        // if waitUntil is not available, we have to keep response stream open until background promises are resolved
+        // to ensure that all background work executes
+        await requestContext.backgroundWorkPromise
       },
     })
 
