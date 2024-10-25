@@ -35,6 +35,7 @@ export class NextDeployInstance extends NextInstance {
   private _cliOutput: string
   private _buildId: string
   private _deployId: string
+  private _shouldDeleteDeploy: boolean = false
 
   public get buildId() {
     // get deployment ID via fetch since we can't access
@@ -50,6 +51,9 @@ export class NextDeployInstance extends NextInstance {
       this._buildId = process.env.BUILD_ID
       return
     }
+
+    const setupStartTime = Date.now()
+
     // create the test site
     await super.createTestDir({ parentSpan, skipInstall: true })
 
@@ -146,6 +150,7 @@ export class NextDeployInstance extends NextInstance {
       this._url = url
       this._parsedUrl = new URL(this._url)
       this._deployId = deployID
+      this._shouldDeleteDeploy = !process.env.NEXT_TEST_SKIP_CLEANUP
       this._cliOutput = deployRes.stdout + deployRes.stderr
       require('console').log(`Deployment URL: ${this._url}`)
 
@@ -169,6 +174,32 @@ export class NextDeployInstance extends NextInstance {
     ).trim()
 
     require('console').log(`Got buildId: ${this._buildId}`)
+    require('console').log(`Setup time: ${(Date.now() - setupStartTime) / 1000.0}s`)
+  }
+
+  public async destroy(): Promise<void> {
+    if (this._shouldDeleteDeploy) {
+      require('console').log(`Deleting project with deploy_id ${this._deployId}`)
+
+      const deleteResponse = await execa('npx', [
+        'ntl',
+        'api',
+        'deleteDeploy',
+        '--data',
+        `{ "deploy_id": "${this._deployId}" }`,
+      ])
+
+      if (deleteResponse.exitCode !== 0) {
+        require('console').error(
+          `Failed to delete deploy ${deleteResponse.stdout} ${deleteResponse.stderr} (${deleteResponse.exitCode})`,
+        )
+      } else {
+        require('console').log(`Successfully deleted deploy with deploy_id ${this._deployId}`)
+        this._shouldDeleteDeploy = false
+      }
+    }
+
+    await super.destroy()
   }
 
   public get cliOutput() {
