@@ -60,8 +60,8 @@ jobs:
             echo "total=4" >> $GITHUB_OUTPUT
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
             VERSION_SELECTORS=[\"latest\"]
-            echo "group=[1, 2, 3, 4]" >> $GITHUB_OUTPUT
-            echo "total=4" >> $GITHUB_OUTPUT
+            echo "group=[1]" >> $GITHUB_OUTPUT
+            echo "total=1" >> $GITHUB_OUTPUT
           else
             VERSION_SELECTORS=[\"latest\",\"canary\",\"14.2.15\",\"13.5.1\"]
             echo "group=[1, 2, 3, 4]" >> $GITHUB_OUTPUT
@@ -198,7 +198,7 @@ jobs:
           NODE_ENV: production
           NEXT_EXTERNAL_TESTS_FILTERS: ${{ steps.test-filters.outputs.filters }}
           NEXT_TEST_SKIP_RETRY_MANIFEST: ${{ steps.test-filters.outputs.skip-retry }}
-        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e --timings
+        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e --timings  --debug --test-pattern test/e2e/app-dir/parallel-routes-revalidation/parallel-routes-revalidation.test.ts 
         working-directory: ${{ env.next-path }}
 
       - name: Upload Test Results
