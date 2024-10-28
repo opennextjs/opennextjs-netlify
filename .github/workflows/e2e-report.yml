@@ -31,7 +31,7 @@ jobs:
         id: get-run-id
         run: |
           if [ "${{ inputs.use-branch }}" == "true" ]; then
-            E2E_RUN_ID=$(gh run list -w test-e2e.yml -e workflow_dispatch -s success -b $GITHUB_REF_NAME --json databaseId --jq ".[0].databaseId" --repo $GITHUB_REPOSITORY)
+            E2E_RUN_ID=$(gh run list -w test-e2e.yml -s success -b $GITHUB_REF_NAME --json databaseId --jq ".[0].databaseId" --repo $GITHUB_REPOSITORY)
           else
             E2E_RUN_ID=$(gh run list -w test-e2e.yml -e schedule -s success --json databaseId --jq ".[0].databaseId" --repo $GITHUB_REPOSITORY)
           fi
