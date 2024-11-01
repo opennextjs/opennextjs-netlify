@@ -81,7 +81,7 @@ export const setVaryHeaders = (
     header: ['x-nextjs-data', 'x-next-debug-logging'],
     language: [],
     cookie: ['__prerender_bypass', '__next_preview_data'],
-    query: [],
+    query: ['__nextDataReq'],
     country: [],
   }
 
