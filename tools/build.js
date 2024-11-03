@@ -77,9 +77,9 @@ async function bundle(entryPoints, format, watch) {
   })
 }
 
-async function vendorDeno() {
-  const vendorSource = resolve('edge-runtime/vendor.ts')
-  const vendorDest = resolve('edge-runtime/vendor')
+export async function vendorDeno(dir) {
+  const vendorSource = resolve(join(dir, 'vendor.ts'))
+  const vendorDest = resolve(join(dir, 'vendor'))
 
   try {
     await execaCommand('deno --version')
@@ -100,7 +100,7 @@ const args = new Set(process.argv.slice(2))
 const watch = args.has('--watch') || args.has('-w')
 
 await Promise.all([
-  vendorDeno(),
+  vendorDeno('edge-runtime'),
   bundle(entryPointsESM, 'esm', watch),
   ...entryPointsCJS.map((entry) => bundle([entry], 'cjs', watch)),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),

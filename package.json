@@ -19,7 +19,9 @@
     "pretest:integration": "npm run build && node tests/prepare.mjs",
     "build": "node ./tools/build.js",
     "build:watch": "node ./tools/build.js --watch",
-    "lint": "eslint --cache --format=codeframe --max-warnings=0 --ext .ts,.cts,.js src",
+    "lint:node": "eslint --cache --format=codeframe --max-warnings=0 --ext .ts,.cts,.js src",
+    "lint:deno": "deno lint",
+    "lint": "npm run lint:node && npm run lint:deno",
     "format:fix": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest",
@@ -30,7 +32,10 @@
     "test:ci:unit-and-integration": "vitest run --reporter=default --retry=3 --project=unit --project=integration",
     "test:ci:smoke": "vitest run --reporter=default --retry=3 --project=smoke",
     "test:ci:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "test:deno": "deno test -A",
+    "typecheck:node": "tsc --noEmit",
+    "typecheck:deno": "deno task typecheck",
+    "typecheck": "npm run typecheck:node && npm run typecheck:deno"
   },
   "repository": {
     "type": "git",

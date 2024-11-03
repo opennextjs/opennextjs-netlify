@@ -1,0 +1,29 @@
+{
+  "exclude": [
+    "edge-runtime/vendor/",
+    "edge-runtime/shim/"
+  ],
+  "lint": {
+    "include": [
+      "tools/deno/",
+      "edge-runtime/"
+    ],
+    "exclude": [
+      // TODO(serhalp) Remove this exclusion and fix the lint errors here.
+      "edge-runtime/lib"
+    ]
+  },
+  "test": {
+    "include": [
+      "tools/deno/",
+      "edge-runtime/"
+    ]
+  },
+  "tasks": {
+    // TODO(serhalp) Add `edge-runtime/**/*.ts` and add a vendoring step in CI.
+    "typecheck": "deno check tools/deno/**/*.ts"
+  },
+  "imports": {
+    "@netlify/edge-functions": "https://edge.netlify.com/v1/index.ts"
+  }
+}
