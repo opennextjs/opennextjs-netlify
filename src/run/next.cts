@@ -17,8 +17,6 @@ import { getRegionalBlobStore } from './regional-blob-store.cjs'
 // @ts-ignore ignoring readonly NODE_ENV
 process.env.NODE_ENV = 'production'
 
-console.time('import next server')
-
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { getRequestHandlers } = require('next/dist/server/lib/start-server.js')
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -75,8 +73,6 @@ ResponseCache.prototype.get = function get(...getArgs: unknown[]) {
   }
   return originalGet.apply(this, getArgs)
 }
-
-console.timeEnd('import next server')
 
 type FS = typeof import('fs')
 
