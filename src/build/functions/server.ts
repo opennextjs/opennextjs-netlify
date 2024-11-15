@@ -100,12 +100,26 @@ const applyTemplateVariables = (template: string, variables: Record<string, stri
   }, template)
 }
 
+/** Convert Next.js route syntax to URLPattern syntax */
+const transformRoutePattern = (route: string): string => {
+  return route
+    .replace(/\[\[\.\.\.(\w+)]]/g, ':$1*') // [[...slug]] -> :slug*
+    .replace(/\[\.{3}(\w+)]/g, ':$1+') // [...slug] -> :slug+
+    .replace(/\[(\w+)]/g, ':$1') // [id] -> :id
+}
+
 /** Get's the content of the handler file that will be written to the lambda */
 const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
   const templatesDir = join(ctx.pluginDir, 'dist/build/templates')
 
+  const routesManifest = await ctx.getRoutesManifest()
+  const routes = [...routesManifest.staticRoutes, ...routesManifest.dynamicRoutes]
+    .map((route) => transformRoutePattern(route.page))
+    .join("','")
+
   const templateVariables: Record<string, string> = {
     '{{useRegionalBlobs}}': ctx.useRegionalBlobs.toString(),
+    '{{paths}}': routes,
   }
   // In this case it is a monorepo and we need to use a own template for it
   // as we have to change the process working directory
