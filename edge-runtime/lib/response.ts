@@ -1,5 +1,5 @@
 import type { Context } from '@netlify/edge-functions'
-import { HTMLRewriter } from '../vendor/deno.land/x/html_rewriter@v0.1.0-pre.17/index.ts'
+import { HTMLRewriter, init, type TextChunk } from 'https://deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
 
 import { updateModifiedHeaders } from './headers.ts'
 import type { StructuredLogger } from './logging.ts'
@@ -12,6 +12,8 @@ import {
   normalizeTrailingSlash,
   relativizeURL,
 } from './util.ts'
+
+await init();
 
 export interface FetchEventResult {
   response: Response
@@ -79,7 +81,7 @@ export const buildResponse = async ({
 
     if (response.dataTransforms.length > 0) {
       rewriter.on('script[id="__NEXT_DATA__"]', {
-        text(textChunk) {
+        text(textChunk: TextChunk) {
           // Grab all the chunks in the Next data script tag
           buffer += textChunk.text
           if (textChunk.lastInTextNode) {
