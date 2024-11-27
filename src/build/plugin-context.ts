@@ -315,6 +315,22 @@ export class PluginContext {
     return JSON.parse(await readFile(join(this.publishDir, 'routes-manifest.json'), 'utf-8'))
   }
 
+  /**
+   * Get Next.js app path routes manifest from the build output
+   */
+  async getAppPathRoutesManifest(): Promise<Record<string, string>> {
+    return JSON.parse(
+      await readFile(join(this.publishDir, 'app-path-routes-manifest.json'), 'utf-8'),
+    )
+  }
+
+  /**
+   * Get Next.js app path routes manifest from the build output
+   */
+  async getPagesManifest(): Promise<Record<string, string>> {
+    return JSON.parse(await readFile(join(this.publishDir, 'server/pages-manifest.json'), 'utf-8'))
+  }
+
   #nextVersion: string | null | undefined = undefined
 
   /**

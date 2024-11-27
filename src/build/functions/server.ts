@@ -101,25 +101,61 @@ const applyTemplateVariables = (template: string, variables: Record<string, stri
 }
 
 /** Convert Next.js route syntax to URLPattern syntax */
-const transformRoutePattern = (route: string): string => {
+const transformRoutePatterns = (route: string): string => {
   return route
     .replace(/\[\[\.\.\.(\w+)]]/g, ':$1*') // [[...slug]] -> :slug*
     .replace(/\[\.{3}(\w+)]/g, ':$1+') // [...slug] -> :slug+
     .replace(/\[(\w+)]/g, ':$1') // [id] -> :id
 }
 
-/** Get's the content of the handler file that will be written to the lambda */
-const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
-  const templatesDir = join(ctx.pluginDir, 'dist/build/templates')
+const getRoutes = async (ctx: PluginContext) => {
+  const internalRoutes = [
+    '/_next/static/*',
+    '/_next/data/*',
+    '/_next/image/*',
+    '/_next/postponed/*',
+  ]
 
   const routesManifest = await ctx.getRoutesManifest()
-  const routes = [...routesManifest.staticRoutes, ...routesManifest.dynamicRoutes]
-    .map((route) => transformRoutePattern(route.page))
-    .join("','")
+  const staticRoutes = routesManifest.staticRoutes.map((route) => route.page)
+  const dynamicRoutes = routesManifest.dynamicRoutes.map((route) => route.page)
 
+  // route.source conforms to the URLPattern syntax, which will work with our redirect engine
+  // however this will be a superset of possible routes as it does not parse the
+  // header/cookie/query matching that Next.js offers
+  const redirects = routesManifest.redirects.map((route) => route.source)
+  const rewrites = Array.isArray(routesManifest.rewrites)
+    ? routesManifest.rewrites.map((route) => route.source)
+    : []
+
+  // this contains the static Route Handler routes
+  const appPathRoutesManifest = await ctx.getAppPathRoutesManifest()
+  const appRoutes = Object.values(appPathRoutesManifest)
+
+  // this contains the API handler routes
+  const pagesManifest = await ctx.getPagesManifest()
+  const pagesRoutes = Object.keys(pagesManifest)
+
+  return [
+    ...internalRoutes,
+    ...staticRoutes,
+    ...dynamicRoutes,
+    ...redirects,
+    ...rewrites,
+    ...appRoutes,
+    ...pagesRoutes,
+    '/*', // retain the catch-all route for our initial testing
+  ].map(transformRoutePatterns)
+}
+
+/** Get's the content of the handler file that will be written to the lambda */
+const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
+  const routes = await getRoutes(ctx)
+
+  const templatesDir = join(ctx.pluginDir, 'dist/build/templates')
   const templateVariables: Record<string, string> = {
     '{{useRegionalBlobs}}': ctx.useRegionalBlobs.toString(),
-    '{{paths}}': routes,
+    '{{paths}}': routes.join("','"),
   }
   // In this case it is a monorepo and we need to use a own template for it
   // as we have to change the process working directory
