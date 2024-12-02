@@ -1,0 +1,250 @@
+version: 2.1
+
+orbs:
+  node: circleci/node@6.3.0
+  bun: ksylvest/bun@1.0.1
+  deno: ksylvest/deno@1.0.0
+
+executors:
+  ubuntu:
+    machine:
+      image: 'ubuntu-2404:2024.11.1'
+    resource_class: xlarge
+  windows:
+    machine:
+      image: 'windows-server-2022-gui:2024.07.1'
+    resource_class: windows.xlarge
+    shell: powershell.exe -ExecutionPolicy Bypass
+
+parameters:
+  # Comma separated list, e.g. canary, latest, 14.2.15, 13.5.1
+  next-versions:
+    type: string
+    default: latest
+  # Should match the buildbot node version
+  node-version:
+    type: string
+    default: '18.20'
+  # Should match the DENO_VERSION_RANGE from https://github.com/netlify/edge-bundler/blob/main/node/bridge.ts#L17
+  deno-version:
+    type: string
+    default: '1.37.0'
+
+jobs:
+  e2e:
+    parameters:
+      next-version:
+        type: string
+      shard:
+        type: integer
+    executor: ubuntu
+    steps:
+      - checkout
+      - node/install:
+          install-yarn: true
+          install-pnpm: true
+          node-version: << pipeline.parameters.node-version >>
+      - bun/install
+      - deno/install
+      - run:
+          name: Set Deno Version
+          command: deno upgrade --version << pipeline.parameters.deno-version >>
+      - node/install-packages
+      - run:
+          name: Install Netlify CLI
+          environment:
+            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
+          command: |
+            # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
+            npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
+            npx netlify login
+      - run:
+          name: Get Playwright Version
+          command: |
+            PLAYWRIGHT_VERSION=$(npm view @playwright/test version)
+            echo "export PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION" >> $BASH_ENV
+      - restore_cache:
+          name: Restore Playwright Cache
+          key: v1-{{ arch }}-playwright-{{ .Environment.PLAYWRIGHT_VERSION }}
+      - run:
+          name: Install Playwright Browsers
+          command: |
+            if [ ! -d ~/.cache/ms-playwright ]; then
+              npx playwright install --with-deps
+            fi
+      - save_cache:
+          name: Save Playwright Cache
+          paths:
+            - ~/.cache/ms-playwright
+          key: v1-{{ arch }}-playwright-{{ .Environment.PLAYWRIGHT_VERSION }}
+      - run:
+          name: Resolve Next.js version
+          command: |
+            RESOLVED_VERSION=$(npm view next@${NEXT_VERSION} version)
+            echo "export RESOLVED_VERSION=$RESOLVED_VERSION" >> $BASH_ENV
+            echo "Resolved Next.js version for 'next@${NEXT_VERSION}' is '$RESOLVED_VERSION'"
+      - run:
+          name: Run Playwright tests
+          command: npm run test:ci:e2e -- --shard=<< parameters.shard >>/5
+          environment:
+            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
+            NEXT_VERSION: << parameters.next-version >>
+            NEXT_RESOLVED_VERSION: $RESOLVED_VERSION
+            PLAYWRIGHT_BLOB_OUTPUT_NAME:
+              report-<< parameters.next-version >>-<< parameters.shard >>.zip
+      - persist_to_workspace:
+          name: Upload Blob Report to CircleCI Artifacts
+          root: .
+          paths:
+            - ./blob-reports
+
+  test:
+    parameters:
+      next-version:
+        type: string
+      os:
+        type: executor
+        default: ubuntu
+      shard:
+        type: integer
+    executor: << parameters.os >>
+    steps:
+      - checkout
+      - node/install:
+          install-yarn: true
+          install-pnpm: true
+          node-version: << pipeline.parameters.node-version >>
+      - deno/install
+      - run:
+          name: Set Deno Version
+          command: deno upgrade --version << pipeline.parameters.deno-version >>
+      - node/install-packages
+      - run:
+          name: Build
+          command: npm run build
+      - run:
+          name: Resolve Next.js version
+          command: |
+            RESOLVED_VERSION=$(npm view next@${NEXT_VERSION} version)
+            echo "export RESOLVED_VERSION=$RESOLVED_VERSION" >> $BASH_ENV
+            echo "Resolved Next.js version for 'next@${NEXT_VERSION}' is '$RESOLVED_VERSION'"
+      - run:
+          name: Compute Fixtures Cache Key
+          command: |
+            CACHE_KEY=$(git ls-files -s tests/fixtures/ tests/utils/ tests/prepare.mjs | git hash-object --stdin)
+            echo "export CACHE_KEY=$CACHE_KEY" >> $BASH_ENV
+      - restore_cache:
+          name: Restore Fixtures Cache
+          key:
+            v1-{{ arch }}-fixtures-{{ .Environment.RESOLVED_VERSION }}-{{ .Environment.CACHE_KEY }}
+      - run:
+          name: Prepare Fixtures
+          command: |
+            if [ ! -d tests/fixtures ]; then
+              npm run pretest
+            fi
+          environment:
+            NEXT_VERSION: << parameters.next-version >>
+            NEXT_RESOLVED_VERSION: $RESOLVED_VERSION
+      - save_cache:
+          name: Save Fixtures Cache
+          paths:
+            - tests/fixtures
+          key:
+            v1-{{ arch }}-fixtures-{{ .Environment.RESOLVED_VERSION }}-{{ .Environment.CACHE_KEY }}
+      - run:
+          name: Run Unit and Integration Tests
+          command: npm run test:ci:unit-and-integration -- --shard=<< parameters.shard >>/8
+          environment:
+            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
+            NEXT_VERSION: << parameters.next-version >>
+            NEXT_RESOLVED_VERSION: $RESOLVED_VERSION
+            TEMP: /tmp
+
+  smoke:
+    parameters:
+      next-version:
+        type: string
+    executor: ubuntu
+    steps:
+      - checkout
+      - node/install:
+          install-yarn: true
+          install-pnpm: true
+          node-version: << pipeline.parameters.node-version >>
+      - deno/install
+      - run:
+          name: Set Deno Version
+          command: deno upgrade --version << pipeline.parameters.deno-version >>
+      - node/install-packages
+      - run:
+          name: Build
+          command: npm run build
+      - run:
+          name: Install Netlify CLI
+          environment:
+            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
+          command: |
+            # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
+            npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
+            npx netlify login
+      - run:
+          name: Resolve Next.js version
+          command: |
+            RESOLVED_VERSION=$(npm view next@${NEXT_VERSION} version)
+            echo "export RESOLVED_VERSION=$RESOLVED_VERSION" >> $BASH_ENV
+            echo "Resolved Next.js version for 'next@${NEXT_VERSION}' is '$RESOLVED_VERSION'"
+      - run:
+          name: Run Smoke Tests
+          command: npm run test:ci:smoke
+          environment:
+            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
+            NEXT_VERSION: << parameters.next-version >>
+            NEXT_RESOLVED_VERSION: $RESOLVED_VERSION
+
+  merge-reports:
+    parameters:
+      next-version:
+        type: string
+    executor: ubuntu
+    steps:
+      - checkout
+      - node/install:
+          node-version: << pipeline.parameters.node-version >>
+      - node/install-packages
+      - attach_workspace:
+          at: .
+      - run:
+          name: Merge reports
+          command: npx playwright merge-reports --reporter html ./blob-reports
+      - store_artifacts:
+          path: playwright-report
+          destination: html-report-<< parameters.next-version >>-${ .Environment.CIRCLE_BUILD_NUM}
+
+workflows:
+  'Run adapter tests':
+    jobs:
+      - e2e:
+          context: [shared-secrets]
+          matrix:
+            parameters:
+              next-version: [<< pipeline.parameters.next-versions >>]
+              shard: [1, 2, 3, 4, 5]
+      - test:
+          context: [shared-secrets]
+          matrix:
+            parameters:
+              next-version: [<< pipeline.parameters.next-versions >>]
+              os: [ubuntu, windows]
+              shard: [1, 2, 3, 4, 5, 6, 7, 8]
+      - smoke:
+          context: [shared-secrets]
+          matrix:
+            parameters:
+              next-version: [<< pipeline.parameters.next-versions >>]
+      - merge-reports:
+          requires: [e2e]
+          context: [shared-secrets]
+          matrix:
+            parameters:
+              next-version: [<< pipeline.parameters.next-versions >>]
