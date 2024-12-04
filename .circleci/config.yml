@@ -9,11 +9,11 @@ executors:
   ubuntu:
     machine:
       image: 'ubuntu-2404:2024.11.1'
-    resource_class: xlarge
+    resource_class: large
   windows:
     machine:
       image: 'windows-server-2022-gui:2024.07.1'
-    resource_class: windows.xlarge
+    resource_class: windows.large
     shell: powershell.exe -ExecutionPolicy Bypass
 
 parameters:
