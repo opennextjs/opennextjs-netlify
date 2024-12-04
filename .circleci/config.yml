@@ -40,9 +40,8 @@ jobs:
     steps:
       - checkout
       - node/install:
-          install-yarn: true
-          install-pnpm: true
           node-version: << pipeline.parameters.node-version >>
+      - run: corepack enable
       - bun/install
       - deno/install
       - run:
@@ -88,9 +87,7 @@ jobs:
             SHARD=$((${CIRCLE_NODE_INDEX}+1))
             npm run test:ci:e2e -- --shard=${SHARD}/${CIRCLE_NODE_TOTAL}
           environment:
-            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             NEXT_VERSION: << parameters.next-version >>
-            NEXT_RESOLVED_VERSION: $RESOLVED_VERSION
             PLAYWRIGHT_BLOB_OUTPUT_NAME:
               report-<< parameters.next-version >>-{{ .Environment.CIRCLE_NODE_INDEX }}.zip
       - persist_to_workspace:
@@ -111,9 +108,8 @@ jobs:
     steps:
       - checkout
       - node/install:
-          install-yarn: true
-          install-pnpm: true
           node-version: << pipeline.parameters.node-version >>
+      - run: corepack enable
       - deno/install
       - run:
           name: Set Deno Version
@@ -156,9 +152,7 @@ jobs:
             SHARD=$((${CIRCLE_NODE_INDEX}+1))
             npm run test:ci:unit-and-integration -- --shard=${SHARD}/${CIRCLE_NODE_TOTAL}
           environment:
-            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             NEXT_VERSION: << parameters.next-version >>
-            NEXT_RESOLVED_VERSION: $RESOLVED_VERSION
             TEMP: /tmp
 
   smoke:
@@ -169,9 +163,8 @@ jobs:
     steps:
       - checkout
       - node/install:
-          install-yarn: true
-          install-pnpm: true
           node-version: << pipeline.parameters.node-version >>
+      - run: corepack enable
       - deno/install
       - run:
           name: Set Deno Version
@@ -198,9 +191,7 @@ jobs:
           name: Run Smoke Tests
           command: npm run test:ci:smoke
           environment:
-            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             NEXT_VERSION: << parameters.next-version >>
-            NEXT_RESOLVED_VERSION: $RESOLVED_VERSION
 
   merge-reports:
     parameters:
