@@ -35,9 +35,8 @@ jobs:
     parameters:
       next-version:
         type: string
-      shard:
-        type: integer
     executor: ubuntu
+    parallelism: 2
     steps:
       - checkout
       - node/install:
@@ -62,10 +61,10 @@ jobs:
           name: Get Playwright Version
           command: |
             PLAYWRIGHT_VERSION=$(npm view @playwright/test version)
-            echo "export PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION" >> $BASH_ENV
+            echo $PLAYWRIGHT_VERSION > /tmp/playwright-version
       - restore_cache:
           name: Restore Playwright Cache
-          key: v1-{{ arch }}-playwright-{{ .Environment.PLAYWRIGHT_VERSION }}
+          key: v1-{{ arch }}-playwright-{{ checksum "/tmp/playwright-version" }}
       - run:
           name: Install Playwright Browsers
           command: |
@@ -76,22 +75,24 @@ jobs:
           name: Save Playwright Cache
           paths:
             - ~/.cache/ms-playwright
-          key: v1-{{ arch }}-playwright-{{ .Environment.PLAYWRIGHT_VERSION }}
+          key: v1-{{ arch }}-playwright-{{ checksum "/tmp/playwright-version" }}
       - run:
           name: Resolve Next.js version
           command: |
-            RESOLVED_VERSION=$(npm view next@${NEXT_VERSION} version)
+            RESOLVED_VERSION=$(npm view next@<< parameters.next-version >> version)
             echo "export RESOLVED_VERSION=$RESOLVED_VERSION" >> $BASH_ENV
-            echo "Resolved Next.js version for 'next@${NEXT_VERSION}' is '$RESOLVED_VERSION'"
+            echo "Resolved Next.js version for 'next@<< parameters.next-version >>' is '$RESOLVED_VERSION'"
       - run:
           name: Run Playwright tests
-          command: npm run test:ci:e2e -- --shard=<< parameters.shard >>/5
+          command: |
+            SHARD=$((${CIRCLE_NODE_INDEX}+1))
+            npm run test:ci:e2e -- --shard=${SHARD}/${CIRCLE_NODE_TOTAL}
           environment:
             NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             NEXT_VERSION: << parameters.next-version >>
             NEXT_RESOLVED_VERSION: $RESOLVED_VERSION
             PLAYWRIGHT_BLOB_OUTPUT_NAME:
-              report-<< parameters.next-version >>-<< parameters.shard >>.zip
+              report-<< parameters.next-version >>-{{ .Environment.CIRCLE_NODE_INDEX }}.zip
       - persist_to_workspace:
           name: Upload Blob Report to CircleCI Artifacts
           root: .
@@ -105,9 +106,8 @@ jobs:
       os:
         type: executor
         default: ubuntu
-      shard:
-        type: integer
     executor: << parameters.os >>
+    parallelism: 4
     steps:
       - checkout
       - node/install:
@@ -125,18 +125,17 @@ jobs:
       - run:
           name: Resolve Next.js version
           command: |
-            RESOLVED_VERSION=$(npm view next@${NEXT_VERSION} version)
+            RESOLVED_VERSION=$(npm view next@<< parameters.next-version >> version)
             echo "export RESOLVED_VERSION=$RESOLVED_VERSION" >> $BASH_ENV
-            echo "Resolved Next.js version for 'next@${NEXT_VERSION}' is '$RESOLVED_VERSION'"
+            echo "Resolved Next.js version for 'next@<< parameters.next-version >>' is '$RESOLVED_VERSION'"
       - run:
           name: Compute Fixtures Cache Key
           command: |
             CACHE_KEY=$(git ls-files -s tests/fixtures/ tests/utils/ tests/prepare.mjs | git hash-object --stdin)
-            echo "export CACHE_KEY=$CACHE_KEY" >> $BASH_ENV
+            echo "{$RESOLVED_VERSION}-{$CACHE_KEY}" > /tmp/fixtures-cache-key
       - restore_cache:
           name: Restore Fixtures Cache
-          key:
-            v1-{{ arch }}-fixtures-{{ .Environment.RESOLVED_VERSION }}-{{ .Environment.CACHE_KEY }}
+          key: v1-{{ arch }}-fixtures-{{ checksum "/tmp/fixtures-cache-key" }}
       - run:
           name: Prepare Fixtures
           command: |
@@ -150,11 +149,12 @@ jobs:
           name: Save Fixtures Cache
           paths:
             - tests/fixtures
-          key:
-            v1-{{ arch }}-fixtures-{{ .Environment.RESOLVED_VERSION }}-{{ .Environment.CACHE_KEY }}
+          key: v1-{{ arch }}-fixtures-{{ checksum "/tmp/fixtures-cache-key" }}
       - run:
           name: Run Unit and Integration Tests
-          command: npm run test:ci:unit-and-integration -- --shard=<< parameters.shard >>/8
+          command: |
+            SHARD=$((${CIRCLE_NODE_INDEX}+1))
+            npm run test:ci:unit-and-integration -- --shard=${SHARD}/${CIRCLE_NODE_TOTAL}
           environment:
             NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             NEXT_VERSION: << parameters.next-version >>
@@ -191,9 +191,9 @@ jobs:
       - run:
           name: Resolve Next.js version
           command: |
-            RESOLVED_VERSION=$(npm view next@${NEXT_VERSION} version)
+            RESOLVED_VERSION=$(npm view next@<< parameters.next-version >> version)
             echo "export RESOLVED_VERSION=$RESOLVED_VERSION" >> $BASH_ENV
-            echo "Resolved Next.js version for 'next@${NEXT_VERSION}' is '$RESOLVED_VERSION'"
+            echo "Resolved Next.js version for 'next@<< parameters.next-version >>' is '$RESOLVED_VERSION'"
       - run:
           name: Run Smoke Tests
           command: npm run test:ci:smoke
@@ -222,29 +222,23 @@ jobs:
           destination: html-report-<< parameters.next-version >>-${ .Environment.CIRCLE_BUILD_NUM}
 
 workflows:
-  'Run adapter tests':
+  build-and-test-adapter:
     jobs:
       - e2e:
-          context: [shared-secrets]
           matrix:
             parameters:
               next-version: [<< pipeline.parameters.next-versions >>]
-              shard: [1, 2, 3, 4, 5]
       - test:
-          context: [shared-secrets]
           matrix:
             parameters:
               next-version: [<< pipeline.parameters.next-versions >>]
               os: [ubuntu, windows]
-              shard: [1, 2, 3, 4, 5, 6, 7, 8]
       - smoke:
-          context: [shared-secrets]
           matrix:
             parameters:
               next-version: [<< pipeline.parameters.next-versions >>]
       - merge-reports:
           requires: [e2e]
-          context: [shared-secrets]
           matrix:
             parameters:
               next-version: [<< pipeline.parameters.next-versions >>]
