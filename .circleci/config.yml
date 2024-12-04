@@ -14,7 +14,7 @@ executors:
     machine:
       image: 'windows-server-2022-gui:2024.07.1'
     resource_class: windows.large
-    shell: powershell.exe -ExecutionPolicy Bypass
+    shell: bash.exe
 
 parameters:
   # Comma separated list, e.g. canary, latest, 14.2.15, 13.5.1
@@ -36,7 +36,7 @@ jobs:
       next-version:
         type: string
     executor: ubuntu
-    parallelism: 2
+    parallelism: 4
     steps:
       - checkout
       - node/install:
@@ -104,7 +104,7 @@ jobs:
         type: executor
         default: ubuntu
     executor: << parameters.os >>
-    parallelism: 4
+    parallelism: 8
     steps:
       - checkout
       - node/install:
