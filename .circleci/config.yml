@@ -88,13 +88,14 @@ jobs:
             npm run test:ci:e2e -- --shard=${SHARD}/${CIRCLE_NODE_TOTAL}
           environment:
             NEXT_VERSION: << parameters.next-version >>
+            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             PLAYWRIGHT_BLOB_OUTPUT_NAME:
               report-<< parameters.next-version >>-{{ .Environment.CIRCLE_NODE_INDEX }}.zip
       - persist_to_workspace:
           name: Upload Blob Report to CircleCI Artifacts
           root: .
           paths:
-            - ./blob-reports
+            - ./blob-report
 
   test:
     parameters:
@@ -135,7 +136,7 @@ jobs:
       - run:
           name: Prepare Fixtures
           command: |
-            if [ ! -d tests/fixtures ]; then
+            if [ ! -d tests/fixtures/simple/.next ]; then
               npm run pretest
             fi
           environment:
@@ -153,6 +154,7 @@ jobs:
             npm run test:ci:unit-and-integration -- --shard=${SHARD}/${CIRCLE_NODE_TOTAL}
           environment:
             NEXT_VERSION: << parameters.next-version >>
+            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             TEMP: /tmp
 
   smoke:
@@ -192,6 +194,7 @@ jobs:
           command: npm run test:ci:smoke
           environment:
             NEXT_VERSION: << parameters.next-version >>
+            NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
 
   merge-reports:
     parameters:
