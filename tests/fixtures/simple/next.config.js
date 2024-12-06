@@ -8,6 +8,7 @@ const nextConfig = {
     outputFileTracingIncludes: {
       '/': ['public/**'],
     },
+    after: true,
   },
   images: {
     remotePatterns: [
