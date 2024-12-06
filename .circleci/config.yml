@@ -51,6 +51,7 @@ jobs:
       - run:
           name: Install Netlify CLI
           environment:
+            NETLIFY_SITE_ID: $NETLIFY_SITE_ID
             NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
           command: |
             # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
@@ -88,6 +89,7 @@ jobs:
             npm run test:ci:e2e -- --shard=${SHARD}/${CIRCLE_NODE_TOTAL}
           environment:
             NEXT_VERSION: << parameters.next-version >>
+            NETLIFY_SITE_ID: $NETLIFY_SITE_ID
             NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             PLAYWRIGHT_BLOB_OUTPUT_NAME:
               report-<< parameters.next-version >>-{{ .Environment.CIRCLE_NODE_INDEX }}.zip
@@ -154,6 +156,7 @@ jobs:
             npm run test:ci:unit-and-integration -- --shard=${SHARD}/${CIRCLE_NODE_TOTAL}
           environment:
             NEXT_VERSION: << parameters.next-version >>
+            NETLIFY_SITE_ID: $NETLIFY_SITE_ID
             NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
             TEMP: /tmp
 
@@ -178,6 +181,7 @@ jobs:
       - run:
           name: Install Netlify CLI
           environment:
+            NETLIFY_SITE_ID: $NETLIFY_SITE_ID
             NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
           command: |
             # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
@@ -194,6 +198,7 @@ jobs:
           command: npm run test:ci:smoke
           environment:
             NEXT_VERSION: << parameters.next-version >>
+            NETLIFY_SITE_ID: $NETLIFY_SITE_ID
             NETLIFY_AUTH_TOKEN: $NETLIFY_AUTH_TOKEN
 
   merge-reports:
