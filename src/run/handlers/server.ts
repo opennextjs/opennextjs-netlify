@@ -60,10 +60,10 @@ export default async (request: Request, context: FutureContext) => {
       nextConfig = await getRunConfig()
       setRunConfig(nextConfig)
 
-      const { getMockedRequestHandlers } = await nextImportPromise
+      const { getMockedRequestHandler } = await nextImportPromise
       const url = new URL(request.url)
 
-      ;[nextHandler] = await getMockedRequestHandlers({
+      nextHandler = await getMockedRequestHandler({
         port: Number(url.port) || 443,
         hostname: url.hostname,
         dir: process.cwd(),
