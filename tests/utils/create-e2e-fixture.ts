@@ -428,4 +428,5 @@ export const fixtureFactories = {
       publishDirectory: 'apps/site/.next',
       smoke: true,
     }),
+  after: () => createE2EFixture('after'),
 }

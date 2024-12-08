@@ -58,7 +58,6 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
   const blobEntries = await getBlobEntries(ctx)
   expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual([
     '/404',
-    '/after/check',
     '/api/cached-permanent',
     '/api/cached-revalidate',
     '/image/local',
