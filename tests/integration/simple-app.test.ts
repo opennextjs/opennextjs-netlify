@@ -83,7 +83,9 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
 
   const notFound = await invokeFunction(ctx, { url: 'route-resolves-to-not-found' })
   expect(notFound.statusCode).toBe(404)
-  expect(notFound.body).toContain('NEXT_NOT_FOUND')
+  expect(notFound.body).toContain(
+    nextVersionSatisfies('>=15.0.4-canary.18') ? 'NEXT_HTTP_ERROR_FALLBACK' : 'NEXT_NOT_FOUND',
+  )
 
   const notExisting = await invokeFunction(ctx, { url: 'non-exisitng' })
   expect(notExisting.statusCode).toBe(404)
