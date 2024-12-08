@@ -7,8 +7,7 @@ import type { NetlifyCachedRouteValue } from '../../shared/cache-types.cjs'
 
 type SystemLogger = typeof systemLogger
 
-// TODO: remove once https://github.com/netlify/serverless-functions-api/pull/219
-// is released and public types are updated
+// TODO: remove once public types are updated
 export interface FutureContext extends Context {
   waitUntil?: (promise: Promise<unknown>) => void
 }
