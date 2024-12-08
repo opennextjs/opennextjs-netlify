@@ -16,7 +16,7 @@ export default async function (req, context) {
     tracing.start()
   }
 
-  const requestContext = createRequestContext(req)
+  const requestContext = createRequestContext(req, context)
   const tracer = getTracer()
 
   const handlerResponse = await runWithRequestContext(requestContext, () => {

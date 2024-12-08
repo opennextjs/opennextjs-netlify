@@ -71,9 +71,13 @@ describe('version check', () => {
       )
     },
   )
-  test('yarn monorepo multiple next versions site is compatible', { retry: 0 }, async () => {
-    await smokeTest(selfCleaningFixtureFactories.yarnMonorepoMultipleNextVersionsSiteCompatible)
-  })
+  test(
+    'yarn monorepo multiple next versions site is compatible',
+    { retry: 0, timeout: 1_000 * 60 * 5 },
+    async () => {
+      await smokeTest(selfCleaningFixtureFactories.yarnMonorepoMultipleNextVersionsSiteCompatible)
+    },
+  )
 
   test(
     'yarn monorepo multiple next versions site is incompatible should not deploy',

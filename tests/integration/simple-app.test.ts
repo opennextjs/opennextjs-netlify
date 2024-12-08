@@ -83,7 +83,13 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
 
   const notFound = await invokeFunction(ctx, { url: 'route-resolves-to-not-found' })
   expect(notFound.statusCode).toBe(404)
-  expect(notFound.body).toContain('NEXT_NOT_FOUND')
+  // depending on Next version code found in 404 page can be either NEXT_NOT_FOUND or NEXT_HTTP_ERROR_FALLBACK
+  // see https://github.com/vercel/next.js/commit/997105d27ebc7bfe01b7e907cd659e5e056e637c that moved from NEXT_NOT_FOUND to NEXT_HTTP_ERROR_FALLBACK
+  expect(
+    notFound.body?.includes('NEXT_NOT_FOUND') ||
+      notFound.body?.includes('NEXT_HTTP_ERROR_FALLBACK'),
+    '404 page should contain NEXT_NOT_FOUND or NEXT_HTTP_ERROR_FALLBACK code',
+  ).toBe(true)
 
   const notExisting = await invokeFunction(ctx, { url: 'non-exisitng' })
   expect(notExisting.statusCode).toBe(404)
