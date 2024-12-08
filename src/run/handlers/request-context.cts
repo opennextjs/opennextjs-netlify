@@ -22,11 +22,15 @@ export type RequestContext = {
   serverTiming?: string
   routeHandlerRevalidate?: NetlifyCachedRouteValue['revalidate']
   /**
-   * Track promise running in the background and need to be waited for
+   * Track promise running in the background and need to be waited for.
+   * Uses `context.waitUntil` if available, otherwise stores promises to
+   * await on.
    */
   trackBackgroundWork: (promise: Promise<unknown>) => void
   /**
-   * Promise that need to be executed even if response was already sent
+   * Promise that need to be executed even if response was already sent.
+   * If `context.waitUntil` is available this promise will be always resolved
+   * because background work tracking was offloaded to `context.waitUntil`.
    */
   backgroundWorkPromise: Promise<unknown>
   logger: SystemLogger

@@ -134,8 +134,9 @@ export default async (request: Request) => {
         // otherwise Next would never run the callback variant of `next/after`
         res.emit('close')
 
-        // if waitUntil is not available, we have to keep response stream open until background promises are resolved
-        // to ensure that all background work executes
+        // We have to keep response stream open until tracked background promises that are don't use `context.waitUntil`
+        // are resolved. If `context.waitUntil` is available, `requestContext.backgroundWorkPromise` will be empty
+        // resolved promised and so awaiting it is no-op
         await requestContext.backgroundWorkPromise
       },
     })
