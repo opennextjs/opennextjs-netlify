@@ -1,6 +1,6 @@
 import type { Context } from '@netlify/edge-functions'
 
-import { ElementHandlers } from '../vendor/deno.land/x/html_rewriter@v0.1.0-pre.17/index.ts'
+import type { ElementHandlers } from '../vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
 
 type NextDataTransform = <T>(data: T) => T
 
