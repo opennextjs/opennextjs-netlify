@@ -1,7 +1,6 @@
 import type { OutgoingHttpHeaders } from 'http'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
-import { Context } from '@netlify/functions'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
@@ -16,8 +15,11 @@ import { nextResponseProxy } from '../revalidate.js'
 
 import { createRequestContext, getLogger, getRequestContext } from './request-context.cjs'
 import { getTracer } from './tracer.cjs'
+import { setupWaitUntil } from './wait-until.cjs'
 
 const nextImportPromise = import('../next.cjs')
+
+setupWaitUntil()
 
 let nextHandler: WorkerRequestHandler, nextConfig: NextConfigComplete
 
@@ -44,13 +46,7 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
   }
 }
 
-// TODO: remove once https://github.com/netlify/serverless-functions-api/pull/219
-// is released and public types are updated
-interface FutureContext extends Context {
-  waitUntil?: (promise: Promise<unknown>) => void
-}
-
-export default async (request: Request, context: FutureContext) => {
+export default async (request: Request) => {
   const tracer = getTracer()
 
   if (!nextHandler) {
@@ -60,10 +56,10 @@ export default async (request: Request, context: FutureContext) => {
       nextConfig = await getRunConfig()
       setRunConfig(nextConfig)
 
-      const { getMockedRequestHandlers } = await nextImportPromise
+      const { getMockedRequestHandler } = await nextImportPromise
       const url = new URL(request.url)
 
-      ;[nextHandler] = await getMockedRequestHandlers({
+      nextHandler = await getMockedRequestHandler({
         port: Number(url.port) || 443,
         hostname: url.hostname,
         dir: process.cwd(),
@@ -128,19 +124,20 @@ export default async (request: Request, context: FutureContext) => {
       return new Response(body || null, response)
     }
 
-    if (context.waitUntil) {
-      context.waitUntil(requestContext.backgroundWorkPromise)
-    }
-
     const keepOpenUntilNextFullyRendered = new TransformStream({
       async flush() {
         // it's important to keep the stream open until the next handler has finished
         await nextHandlerPromise
-        if (!context.waitUntil) {
-          // if waitUntil is not available, we have to keep response stream open until background promises are resolved
-          // to ensure that all background work executes
-          await requestContext.backgroundWorkPromise
-        }
+
+        // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
+        // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
+        // otherwise Next would never run the callback variant of `next/after`
+        res.emit('close')
+
+        // We have to keep response stream open until tracked background promises that are don't use `context.waitUntil`
+        // are resolved. If `context.waitUntil` is available, `requestContext.backgroundWorkPromise` will be empty
+        // resolved promised and so awaiting it is no-op
+        await requestContext.backgroundWorkPromise
       },
     })
 

@@ -13,7 +13,7 @@ export default async function handler(req, context) {
   if (process.env.NETLIFY_OTLP_TRACE_EXPORTER_URL) {
     tracing.start()
   }
-  const requestContext = createRequestContext(req)
+  const requestContext = createRequestContext(req, context)
   const tracer = getTracer()
 
   const handlerResponse = await runWithRequestContext(requestContext, () => {

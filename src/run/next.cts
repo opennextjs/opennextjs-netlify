@@ -85,7 +85,7 @@ export type HtmlBlob = {
   isFallback: boolean
 }
 
-export async function getMockedRequestHandlers(...args: Parameters<typeof getRequestHandlers>) {
+export async function getMockedRequestHandler(...args: Parameters<typeof getRequestHandlers>) {
   const tracer = getTracer()
   return tracer.withActiveSpan('mocked request handler', async () => {
     const ofs = { ...fs }
@@ -131,6 +131,9 @@ export async function getMockedRequestHandlers(...args: Parameters<typeof getReq
       require('fs').promises,
     )
 
-    return getRequestHandlers(...args)
+    const requestHandlers = await getRequestHandlers(...args)
+    // depending on Next.js version requestHandlers might be an array of object
+    // see https://github.com/vercel/next.js/commit/08e7410f15706379994b54c3195d674909a8d533#diff-37243d614f1f5d3f7ea50bbf2af263f6b1a9a4f70e84427977781e07b02f57f1R742
+    return Array.isArray(requestHandlers) ? requestHandlers[0] : requestHandlers.requestHandler
   })
 }
