@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.9.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.8.1...v5.9.0) (2024-12-09)
+
+
+### Features
+
+* support after() ([#2717](https://github.com/opennextjs/opennextjs-netlify/issues/2717)) ([51e5373](https://github.com/opennextjs/opennextjs-netlify/commit/51e5373e4914e9b76edf439e8de01c561742bdaa))
+
+
+### Bug Fixes
+
+* add data request query param to the cache key ([#2701](https://github.com/opennextjs/opennextjs-netlify/issues/2701)) ([00e3a4b](https://github.com/opennextjs/opennextjs-netlify/commit/00e3a4be19bf8428ea6ce1ed2ae74a8ac8375532))
+
 ## [5.8.1](https://github.com/netlify/next-runtime/compare/v5.8.0...v5.8.1) (2024-10-21)
 
 
