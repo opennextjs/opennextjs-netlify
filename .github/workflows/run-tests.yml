@@ -96,7 +96,7 @@ jobs:
           echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
           echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
       - name: Run Playwright tests
-        run: npm run test:ci:e2e -- --workers=8
+        run: npm run test:ci:e2e -- --workers=40
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NEXT_VERSION: ${{ matrix.version }}
