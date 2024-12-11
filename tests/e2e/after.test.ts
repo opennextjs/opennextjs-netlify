@@ -3,7 +3,10 @@ import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 
 test('next/after callback is executed and finishes', async ({ page, after }) => {
-  test.skip(!nextVersionSatisfies('>=15.0.0'), 'This test is only for Next.js 15+')
+  test.skip(
+    !nextVersionSatisfies('>=15.1.0'),
+    'This test is only for Next.js >=15.1.0 that has stable after() support',
+  )
 
   // trigger initial request to check page which might be stale and allow regenerating in background
   await page.goto(`${after.url}/after/check`)
@@ -25,7 +28,9 @@ test('next/after callback is executed and finishes', async ({ page, after }) => 
 
   expect(pageInfo2.timestamp, 'Check page should be cached').toBe(pageInfo1.timestamp)
 
-  await page.goto(`${after.url}/after/trigger`)
+  const response = await page.goto(`${after.url}/after/trigger`)
+
+  expect(response?.status(), 'Trigger should return 200').toBe(200)
 
   // wait for next/after to trigger revalidation of check page
   await new Promise((resolve) => setTimeout(resolve, 5000))

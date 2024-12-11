@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache'
-import { unstable_after as after, connection } from 'next/server'
+import { after, connection } from 'next/server'
 
 export default async function Page() {
   await connection()
