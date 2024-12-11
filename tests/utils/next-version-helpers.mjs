@@ -85,7 +85,7 @@ export async function setNextVersionInFixture(
         if (
           operation === 'update' &&
           versionConstraint &&
-          !satisfies(checkVersion, versionConstraint) &&
+          !satisfies(checkVersion, versionConstraint, { includePrerelease: true }) &&
           version !== versionConstraint
         ) {
           if (!silent) {
