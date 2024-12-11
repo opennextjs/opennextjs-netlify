@@ -48,7 +48,6 @@ jobs:
       fail-fast: false
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
-        shard: [1, 2, 3, 4, 5]
 
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +96,7 @@ jobs:
           echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
           echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
       - name: Run Playwright tests
-        run: npm run test:ci:e2e -- --shard=${{ matrix.shard }}/5
+        run: npm run test:ci:e2e -- --workers=8
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NEXT_VERSION: ${{ matrix.version }}
