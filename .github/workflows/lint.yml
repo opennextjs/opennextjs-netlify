@@ -34,9 +34,9 @@ jobs:
       - name: Lint
         # github adds inline annotation for compact or stylish format
         # which is different than our default for local usage
-        run: npm run lint -- --format=compact
+        run: npm run lint:node -- --format=compact
       - name: Types
-        run: npm run typecheck
+        run: npm run typecheck:node
         # we still want to check types if lint fails just to know everything
         # and not peel errors to uncover new ones of different type
         if: always()
