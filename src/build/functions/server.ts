@@ -100,25 +100,60 @@ const applyTemplateVariables = (template: string, variables: Record<string, stri
   }, template)
 }
 
-/** Convert Next.js route syntax to URLPattern syntax */
-const transformRoutePatterns = (route: string): string => {
-  return route
+// Convert Next.js route syntax to URLPattern syntax and add basePath and locales if present
+const transformRoutePatterns = (
+  route: string,
+  basePath: string,
+  locales: string[] = [],
+): string[] => {
+  const transformedRoute = route
     .replace(/\[\[\.\.\.(\w+)]]/g, ':$1*') // [[...slug]] -> :slug*
     .replace(/\[\.{3}(\w+)]/g, ':$1+') // [...slug] -> :slug+
     .replace(/\[(\w+)]/g, ':$1') // [id] -> :id
+
+  return [
+    posixJoin('/', basePath, transformedRoute),
+    ...locales.map((locale) => posixJoin('/', basePath, locale, transformedRoute)),
+  ]
 }
 
-const getRoutes = async (ctx: PluginContext) => {
+export const getRoutes = async (ctx: PluginContext) => {
+  const routesManifest = await ctx.getRoutesManifest()
+  const prerenderManifest = await ctx.getPrerenderManifest()
+
+  // static routes
+  const staticRoutes = routesManifest.staticRoutes.map((route) => route.page)
+
+  // dynamic routes (no wildcard for routes without fallback)
+  const dynamicRoutes = routesManifest.dynamicRoutes
+    .filter((route) => prerenderManifest.dynamicRoutes[route.page]?.fallback !== false)
+    .map((route) => route.page)
+  const prerenderedDynamicRoutes = Object.keys(prerenderManifest.routes)
+
+  // static Route Handler routes (App Router)
+  const appPathRoutesManifest = await ctx.getAppPathRoutesManifest()
+  const appRoutes = Object.values(appPathRoutesManifest)
+
+  // API handler routes (Page Router)
+  const pagesManifest = await ctx.getPagesManifest()
+  const pagesRoutes = Object.keys(pagesManifest).filter((route) => route.startsWith('/api'))
+
+  const transformedRoutes = [
+    ...staticRoutes,
+    ...dynamicRoutes,
+    ...prerenderedDynamicRoutes,
+    ...appRoutes,
+    ...pagesRoutes,
+  ].flatMap((route) =>
+    transformRoutePatterns(route, ctx.buildConfig.basePath, ctx.buildConfig.i18n?.locales),
+  )
+
   const internalRoutes = [
     '/_next/static/*',
     '/_next/data/*',
     '/_next/image/*',
     '/_next/postponed/*',
   ]
-
-  const routesManifest = await ctx.getRoutesManifest()
-  const staticRoutes = routesManifest.staticRoutes.map((route) => route.page)
-  const dynamicRoutes = routesManifest.dynamicRoutes.map((route) => route.page)
 
   // route.source conforms to the URLPattern syntax, which will work with our redirect engine
   // however this will be a superset of possible routes as it does not parse the
@@ -128,24 +163,15 @@ const getRoutes = async (ctx: PluginContext) => {
     ? routesManifest.rewrites.map((route) => route.source)
     : []
 
-  // this contains the static Route Handler routes
-  const appPathRoutesManifest = await ctx.getAppPathRoutesManifest()
-  const appRoutes = Object.values(appPathRoutesManifest)
-
-  // this contains the API handler routes
-  const pagesManifest = await ctx.getPagesManifest()
-  const pagesRoutes = Object.keys(pagesManifest)
-
-  return [
+  const uniqueRoutes = new Set([
+    ...transformedRoutes,
     ...internalRoutes,
-    ...staticRoutes,
-    ...dynamicRoutes,
     ...redirects,
     ...rewrites,
-    ...appRoutes,
-    ...pagesRoutes,
-    '/*', // retain the catch-all route for our initial testing
-  ].map(transformRoutePatterns)
+    // '/*', // retain the catch-all route for our initial testing
+  ])
+
+  return [...uniqueRoutes]
 }
 
 /** Get's the content of the handler file that will be written to the lambda */
