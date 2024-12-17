@@ -1,7 +1,6 @@
 import type { Context } from '@netlify/edge-functions'
 import {
   HTMLRewriter,
-  init,
   type TextChunk,
 } from '../vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
 
@@ -16,8 +15,6 @@ import {
   normalizeTrailingSlash,
   relativizeURL,
 } from './util.ts'
-
-await init()
 
 export interface FetchEventResult {
   response: Response
