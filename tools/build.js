@@ -109,6 +109,7 @@ async function vendorDeno() {
       const destination = join(vendorDest, url.hostname, url.pathname)
 
       const res = await fetch(url)
+      if (!res.ok) throw new Error('Failed to fetch .wasm file to vendor', { cause: err })
       const fileStream = createWriteStream(destination, { flags: 'wx' })
       await finished(Readable.fromWeb(res.body).pipe(fileStream))
     }),
