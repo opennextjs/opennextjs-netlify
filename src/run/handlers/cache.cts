@@ -353,7 +353,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
           getLogger().debug(`Purging CDN cache for: [${tag}]`)
           requestContext.trackBackgroundWork(
-            purgeCache({ tags: tag.split(/,|%2c/gi) }).catch((error) => {
+            purgeCache({ tags }).catch((error) => {
               // TODO: add reporting here
               getLogger()
                 .withError(error)
