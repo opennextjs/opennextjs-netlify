@@ -345,6 +345,12 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
           const tag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
+          const tags = tag.split(/,|%2c/gi)
+
+          if (tags.length === 0) {
+            return
+          }
+
           getLogger().debug(`Purging CDN cache for: [${tag}]`)
           requestContext.trackBackgroundWork(
             purgeCache({ tags: tag.split(/,|%2c/gi) }).catch((error) => {
@@ -378,6 +384,10 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     const tags = (Array.isArray(tagOrTags) ? tagOrTags : [tagOrTags]).flatMap((tag) =>
       tag.split(/,|%2c/gi),
     )
+
+    if (tags.length === 0) {
+      return
+    }
 
     const data: TagManifest = {
       revalidatedAt: Date.now(),
