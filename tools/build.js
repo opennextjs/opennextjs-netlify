@@ -1,5 +1,8 @@
+import { createWriteStream } from 'node:fs'
 import { cp, rm } from 'node:fs/promises'
-import { resolve, join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { Readable } from 'stream'
+import { finished } from 'stream/promises'
 
 import { build, context } from 'esbuild'
 import { execaCommand } from 'execa'
@@ -94,6 +97,23 @@ async function vendorDeno() {
   console.log(`📦 Vendoring Deno modules into '${vendorDest}'...`)
 
   await execaCommand(`deno vendor ${vendorSource} --output=${vendorDest} --force`)
+
+  // htmlrewriter contains wasm files and those don't currently work great with vendoring
+  // see https://github.com/denoland/deno/issues/14123
+  // to workaround this we copy the wasm files manually
+  const filesToDownload = ['https://deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm']
+  await Promise.all(
+    filesToDownload.map(async (urlString) => {
+      const url = new URL(urlString)
+
+      const destination = join(vendorDest, url.hostname, url.pathname)
+
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('Failed to fetch .wasm file to vendor', { cause: err })
+      const fileStream = createWriteStream(destination, { flags: 'wx' })
+      await finished(Readable.fromWeb(res.body).pipe(fileStream))
+    }),
+  )
 }
 
 const args = new Set(process.argv.slice(2))

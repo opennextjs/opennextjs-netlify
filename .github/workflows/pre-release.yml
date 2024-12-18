@@ -23,8 +23,8 @@ jobs:
       - name: Install Deno
         uses: denoland/setup-deno@v1
         with:
-          # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/edge-bundler/blob/e55f825bd985d3c92e21d1b765d71e70d5628fba/node/bridge.ts#L17
-          deno-version: v1.37.0
+          # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
+          deno-version: v1.44.4
       - name: Extract tag and version
         id: extract
         run: |-
