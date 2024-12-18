@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.9.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.0...v5.9.1) (2024-12-18)
+
+
+### Bug Fixes
+
+* use version of htmlrewriter which does not make use of asyncify, which looks to have a potential memory leak under high load ([#2721](https://github.com/opennextjs/opennextjs-netlify/issues/2721)) ([4d7ad97](https://github.com/opennextjs/opennextjs-netlify/commit/4d7ad97c3f16b01000989bde06352f86b5d526ba))
+
 ## [5.9.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.8.1...v5.9.0) (2024-12-09)
 
 
