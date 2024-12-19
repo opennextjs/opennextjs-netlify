@@ -348,7 +348,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
           const tag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
-          const tags = tag.split(/,|%2c/gi)
+          const tags = tag.split(/,|%2c/gi).filter(Boolean)
 
           if (tags.length === 0) {
             return
@@ -384,9 +384,9 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   private async doRevalidateTag(tagOrTags: string | string[], ...args: any) {
     getLogger().withFields({ tagOrTags, args }).debug('NetlifyCacheHandler.revalidateTag')
 
-    const tags = (Array.isArray(tagOrTags) ? tagOrTags : [tagOrTags]).flatMap((tag) =>
-      tag.split(/,|%2c/gi),
-    )
+    const tags = (Array.isArray(tagOrTags) ? tagOrTags : [tagOrTags])
+      .flatMap((tag) => tag.split(/,|%2c/gi))
+      .filter(Boolean)
 
     if (tags.length === 0) {
       return
