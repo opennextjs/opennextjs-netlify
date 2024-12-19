@@ -11,6 +11,7 @@ import { type Span } from '@opentelemetry/api'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 
+import { name as nextRuntimePkgName, version as nextRuntimePkgVersion } from '../../../package.json'
 import {
   type CacheHandlerContext,
   type CacheHandlerForMultipleVersions,
@@ -29,6 +30,8 @@ import { getTracer } from './tracer.cjs'
 type TagManifest = { revalidatedAt: number }
 
 type TagManifestBlobCache = Record<string, Promise<TagManifest>>
+
+const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   options: CacheHandlerContext
@@ -347,12 +350,14 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           const tag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
           getLogger().debug(`Purging CDN cache for: [${tag}]`)
           requestContext.trackBackgroundWork(
-            purgeCache({ tags: tag.split(/,|%2c/gi) }).catch((error) => {
-              // TODO: add reporting here
-              getLogger()
-                .withError(error)
-                .error(`[NetlifyCacheHandler]: Purging the cache for tag ${tag} failed`)
-            }),
+            purgeCache({ tags: tag.split(/,|%2c/gi), userAgent: purgeCacheUserAgent }).catch(
+              (error) => {
+                // TODO: add reporting here
+                getLogger()
+                  .withError(error)
+                  .error(`[NetlifyCacheHandler]: Purging the cache for tag ${tag} failed`)
+              },
+            ),
           )
         }
       }
@@ -393,7 +398,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       }),
     )
 
-    await purgeCache({ tags }).catch((error) => {
+    await purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
       // TODO: add reporting here
       getLogger()
         .withError(error)
