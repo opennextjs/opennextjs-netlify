@@ -64,8 +64,10 @@ test.describe('next/image is using Netlify Image CDN', () => {
 
     expect(nextImageResponse.status()).toBe(200)
     // ensure next/image is using Image CDN
-    // source image is jpg, but when requesting it through Image CDN avif will be returned
-    expect(await nextImageResponse.headerValue('content-type')).toEqual('image/avif')
+    // source image is jpg, but when requesting it through Image CDN avif or webp will be returned
+    expect(['image/avif', 'image/webp']).toContain(
+      await nextImageResponse.headerValue('content-type'),
+    )
 
     await expectImageWasLoaded(page.locator('img'))
   })
