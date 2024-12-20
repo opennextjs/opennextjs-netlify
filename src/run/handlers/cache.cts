@@ -11,6 +11,7 @@ import { type Span } from '@opentelemetry/api'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 
+import { name as nextRuntimePkgName, version as nextRuntimePkgVersion } from '../../../package.json'
 import {
   type CacheHandlerContext,
   type CacheHandlerForMultipleVersions,
@@ -29,6 +30,8 @@ import { getTracer } from './tracer.cjs'
 type TagManifest = { revalidatedAt: number }
 
 type TagManifestBlobCache = Record<string, Promise<TagManifest>>
+
+const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   options: CacheHandlerContext
@@ -345,9 +348,15 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
           const tag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
+          const tags = tag.split(/,|%2c/gi).filter(Boolean)
+
+          if (tags.length === 0) {
+            return
+          }
+
           getLogger().debug(`Purging CDN cache for: [${tag}]`)
           requestContext.trackBackgroundWork(
-            purgeCache({ tags: tag.split(/,|%2c/gi) }).catch((error) => {
+            purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
               // TODO: add reporting here
               getLogger()
                 .withError(error)
@@ -375,9 +384,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   private async doRevalidateTag(tagOrTags: string | string[], ...args: any) {
     getLogger().withFields({ tagOrTags, args }).debug('NetlifyCacheHandler.revalidateTag')
 
-    const tags = (Array.isArray(tagOrTags) ? tagOrTags : [tagOrTags]).flatMap((tag) =>
-      tag.split(/,|%2c/gi),
-    )
+    const tags = (Array.isArray(tagOrTags) ? tagOrTags : [tagOrTags])
+      .flatMap((tag) => tag.split(/,|%2c/gi))
+      .filter(Boolean)
+
+    if (tags.length === 0) {
+      return
+    }
 
     const data: TagManifest = {
       revalidatedAt: Date.now(),
@@ -393,7 +406,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       }),
     )
 
-    await purgeCache({ tags }).catch((error) => {
+    await purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
       // TODO: add reporting here
       getLogger()
         .withError(error)

@@ -4,9 +4,21 @@ import { cp } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
+import { HttpResponse, http, passthrough } from 'msw'
+import { setupServer } from 'msw/node'
 import { gt, prerelease } from 'semver'
 import { v4 } from 'uuid'
-import { Mock, afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  Mock,
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vitest'
 import { getPatchesToApply } from '../../src/build/content/server.js'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import {
@@ -36,8 +48,31 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   }
 })
 
+let server: ReturnType<typeof setupServer>
+
 // Disable the verbose logging of the lambda-local runtime
 getLogger().level = 'alert'
+
+const purgeAPI = vi.fn()
+
+beforeAll(() => {
+  server = setupServer(
+    http.post('https://api.netlify.com/api/v1/purge', async ({ request }) => {
+      purgeAPI(await request.json())
+
+      return HttpResponse.json({
+        ok: true,
+      })
+    }),
+    http.all(/.*/, () => passthrough()),
+  )
+  server.listen()
+})
+
+afterAll(() => {
+  // Disable API mocking after the tests are done.
+  server.close()
+})
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
@@ -48,7 +83,13 @@ beforeEach<FixtureTestContext>(async (ctx) => {
   // hide debug logs in tests
   vi.spyOn(console, 'debug').mockImplementation(() => {})
 
+  purgeAPI.mockClear()
+
   await startMockBlobStore(ctx)
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 test<FixtureTestContext>('Test that the simple next app is working', async (ctx) => {
@@ -208,6 +249,39 @@ test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=f
   expect(permanentlyCachedResponse.headers['netlify-cdn-cache-control']).toBe(
     's-maxage=31536000, stale-while-revalidate=31536000, durable',
   )
+})
+
+test<FixtureTestContext>('purge API is not used when unstable_cache cache entry gets stale', async (ctx) => {
+  await createFixture('simple', ctx)
+  await runPlugin(ctx)
+
+  // set the NETLIFY_PURGE_API_TOKEN to get pass token check and allow fetch call to be made
+  vi.stubEnv('NETLIFY_PURGE_API_TOKEN', 'mock')
+
+  const page1 = await invokeFunction(ctx, {
+    url: '/unstable_cache',
+  })
+  const data1 = load(page1.body)('pre').text()
+
+  // allow for cache entry to get stale
+  await new Promise((res) => setTimeout(res, 2000))
+
+  const page2 = await invokeFunction(ctx, {
+    url: '/unstable_cache',
+  })
+  const data2 = load(page2.body)('pre').text()
+
+  const page3 = await invokeFunction(ctx, {
+    url: '/unstable_cache',
+  })
+  const data3 = load(page3.body)('pre').text()
+
+  expect(purgeAPI, 'Purge API should not be hit').toHaveBeenCalledTimes(0)
+  expect(
+    data2,
+    'Should use stale cache entry for current request and invalidate it in background',
+  ).toBe(data1)
+  expect(data3, 'Should use updated cache entry').not.toBe(data2)
 })
 
 test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=15)', async (ctx) => {
