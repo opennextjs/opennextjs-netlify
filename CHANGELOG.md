@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.9.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.1...v5.9.2) (2024-12-20)
+
+
+### Bug Fixes
+
+* make `revalidateTags` no-op when list of tags is empty ([#2727](https://github.com/opennextjs/opennextjs-netlify/issues/2727)) ([38e58b3](https://github.com/opennextjs/opennextjs-netlify/commit/38e58b3f46b78b307bcf7576a00849c41f495b52))
+* set user agent for purge requests ([#2730](https://github.com/opennextjs/opennextjs-netlify/issues/2730)) ([871f7b9](https://github.com/opennextjs/opennextjs-netlify/commit/871f7b9d232015d1332756ad949bdd66d95f9084))
+
 ## [5.9.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.0...v5.9.1) (2024-12-18)
 
 
