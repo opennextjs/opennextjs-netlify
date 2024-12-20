@@ -8,7 +8,17 @@ import { HttpResponse, http, passthrough } from 'msw'
 import { setupServer } from 'msw/node'
 import { gt, prerelease } from 'semver'
 import { v4 } from 'uuid'
-import { Mock, afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  Mock,
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vitest'
 import { getPatchesToApply } from '../../src/build/content/server.js'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import {
@@ -24,8 +34,6 @@ import {
   startMockBlobStore,
 } from '../utils/helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
-import { purgeCache } from '@netlify/functions'
-import { afterEach } from 'node:test'
 
 const mockedCp = cp as Mock<
   Parameters<(typeof import('node:fs/promises'))['cp']>,
