@@ -325,6 +325,7 @@ export const fixtureFactories = {
   bun: () => createE2EFixture('simple', { packageManger: 'bun' }),
   middleware: () => createE2EFixture('middleware'),
   middlewareOg: () => createE2EFixture('middleware-og'),
+  middlewarePages: () => createE2EFixture('middleware-pages'),
   pageRouter: () => createE2EFixture('page-router'),
   pageRouterBasePathI18n: () => createE2EFixture('page-router-base-path-i18n'),
   turborepo: () =>

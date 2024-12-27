@@ -83,6 +83,15 @@ export default async (request: Request) => {
       },
     })
 
+    if (new URL(request.url).searchParams.get('__nextDataReq')) {
+      const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
+      // @ts-expect-error NEXT_REQUEST_META doesn't exist in IncomingMessage type
+      const meta = req[NEXT_REQUEST_META] ?? {}
+      meta.isNextDataReq = true
+      // @ts-expect-error NEXT_REQUEST_META doesn't exist in IncomingMessage type
+      req[NEXT_REQUEST_META] = meta
+    }
+
     disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
 
     const requestContext = getRequestContext() ?? createRequestContext()
