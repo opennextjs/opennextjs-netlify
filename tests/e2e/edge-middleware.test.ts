@@ -52,3 +52,23 @@ test('it should render OpenGraph image meta tag correctly', async ({ page, middl
   const size = await getImageSize(Buffer.from(imageBuffer), 'png')
   expect([size.width, size.height]).toEqual([1200, 630])
 })
+
+test('json data rewrite works', async ({ middlewarePages }) => {
+  const response = await fetch(
+    `${middlewarePages.url}/_next/data/build-id/sha.json?__nextDataReq=1`,
+    {
+      headers: {
+        'x-nextjs-data': '1',
+      },
+    },
+  )
+
+  expect(response.ok).toBe(true)
+  const body = await response.text()
+
+  expect(body).toMatch(/^{"pageProps":/)
+
+  const data = JSON.parse(body)
+
+  expect(data.pageProps.message).toBeDefined()
+})

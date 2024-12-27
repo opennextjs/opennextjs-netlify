@@ -21,6 +21,7 @@ if (platform === 'win32') {
   }
 }
 
+/** @type {import('next').NextConfig} */
 module.exports = {
   trailingSlash: true,
   output: 'standalone',
