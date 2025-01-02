@@ -54,14 +54,11 @@ test('it should render OpenGraph image meta tag correctly', async ({ page, middl
 })
 
 test('json data rewrite works', async ({ middlewarePages }) => {
-  const response = await fetch(
-    `${middlewarePages.url}/_next/data/build-id/sha.json?__nextDataReq=1`,
-    {
-      headers: {
-        'x-nextjs-data': '1',
-      },
+  const response = await fetch(`${middlewarePages.url}/_next/data/build-id/sha.json`, {
+    headers: {
+      'x-nextjs-data': '1',
     },
-  )
+  })
 
   expect(response.ok).toBe(true)
   const body = await response.text()
