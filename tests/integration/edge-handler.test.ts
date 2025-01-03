@@ -387,8 +387,7 @@ describe('page router', () => {
     })
     const res = await response.json()
     const url = new URL(res.url, 'http://n/')
-    expect(url.pathname).toBe('/ssr-page-2/')
-    expect(url.searchParams.get('__nextDataReq')).toBe('1')
+    expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
     expect(res.headers['x-nextjs-data']).toBe('1')
     expect(response.headers.get('x-nextjs-rewrite')).toBe('/ssr-page-2/')
     expect(response.status).toBe(200)
@@ -420,7 +419,7 @@ describe('page router', () => {
     expect(response.status).toBe(200)
   })
 
-  test<FixtureTestContext>('should rewrite un-rewritten data requests to page route', async (ctx) => {
+  test<FixtureTestContext>('should NOT rewrite un-rewritten data requests to page route', async (ctx) => {
     await createFixture('middleware-pages', ctx)
     await runPlugin(ctx)
     const origin = await LocalServer.run(async (req, res) => {
@@ -443,8 +442,7 @@ describe('page router', () => {
     })
     const res = await response.json()
     const url = new URL(res.url, 'http://n/')
-    expect(url.pathname).toBe('/ssg/hello/')
-    expect(url.searchParams.get('__nextDataReq')).toBe('1')
+    expect(url.pathname).toBe('/_next/data/build-id/ssg/hello.json')
     expect(res.headers['x-nextjs-data']).toBe('1')
     expect(response.status).toBe(200)
   })
@@ -472,8 +470,7 @@ describe('page router', () => {
     })
     const res = await response.json()
     const url = new URL(res.url, 'http://n/')
-    expect(url.pathname).toBe('/blog/first/')
-    expect(url.searchParams.get('__nextDataReq')).toBe('1')
+    expect(url.pathname).toBe('/_next/data/build-id/blog/first.json')
     expect(url.searchParams.get('slug')).toBe('first')
     expect(res.headers['x-nextjs-data']).toBe('1')
     expect(response.status).toBe(200)

@@ -95,22 +95,6 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
   expect(dateCacheInitial).not.toBe(dateCacheRevalidated)
 })
 
-test<FixtureTestContext>('Should return JSON for data req to page route', async (ctx) => {
-  await createFixture('page-router', ctx)
-  await runPlugin(ctx)
-
-  const response = await invokeFunction(ctx, {
-    url: '/static/revalidate-manual?__nextDataReq=1',
-    headers: { 'x-nextjs-data': '1' },
-  })
-
-  expect(response.body).toMatch(/^{"pageProps":/)
-
-  const data = JSON.parse(response.body)
-
-  expect(data.pageProps.show).toBeDefined()
-})
-
 test.skipIf(platform === 'win32')<FixtureTestContext>(
   'Should set permanent "netlify-cdn-cache-control" header on fully static pages"',
   async (ctx) => {
