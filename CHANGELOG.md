@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.9.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.2...v5.9.3) (2025-01-07)
+
+
+### Bug Fixes
+
+* adjust middleware json data rewrite to work with recent next@canary ([#2734](https://github.com/opennextjs/opennextjs-netlify/issues/2734)) ([5a602c3](https://github.com/opennextjs/opennextjs-netlify/commit/5a602c30af16a3d91272f03ebb53b3a49c57f728))
+
 ## [5.9.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.1...v5.9.2) (2024-12-20)
 
 
