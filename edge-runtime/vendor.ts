@@ -2,7 +2,6 @@
 // It acts as a seed that populates the `vendor/` directory and should not be
 // imported directly.
 
-import 'https://deno.land/std@0.175.0/encoding/base64.ts'
 import 'https://deno.land/std@0.175.0/http/cookie.ts'
 import 'https://deno.land/std@0.175.0/node/buffer.ts'
 import 'https://deno.land/std@0.175.0/node/events.ts'
