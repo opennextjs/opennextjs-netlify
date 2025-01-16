@@ -494,6 +494,45 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
       '.env.production.local': 'defined in .env.production.local',
     })
   })
+
+  test('ISR pages that are the same after regeneration execute background getStaticProps uninterrupted', async ({
+    page,
+    pageRouter,
+  }) => {
+    const slug = Date.now()
+
+    await page.goto(new URL(`always-the-same-body/${slug}`, pageRouter.url).href)
+
+    await new Promise((resolve) => setTimeout(resolve, 15_000))
+
+    await page.goto(new URL(`always-the-same-body/${slug}`, pageRouter.url).href)
+
+    await new Promise((resolve) => setTimeout(resolve, 15_000))
+
+    await page.goto(new URL(`always-the-same-body/${slug}`, pageRouter.url).href)
+
+    await new Promise((resolve) => setTimeout(resolve, 15_000))
+
+    // keep lambda executing to allow for background getStaticProps to finish in case background work execution was suspended
+    await fetch(new URL(`api/sleep-5`, pageRouter.url).href)
+
+    const response = await fetch(new URL(`read-static-props-blobs/${slug}`, pageRouter.url).href)
+    expect(response.ok, 'response for stored data status should not fail').toBe(true)
+
+    const data = await response.json()
+
+    expect(typeof data.start, 'timestamp of getStaticProps start should be a number').toEqual(
+      'number',
+    )
+    expect(typeof data.end, 'timestamp of getStaticProps end should be a number').toEqual('number')
+
+    // duration should be around 5s overall, due to 5s timeout, but this is not exact so let's be generous and allow 10 seconds
+    // which is still less than 15 seconds between requests
+    expect(
+      data.end - data.start,
+      'getStaticProps duration should not be longer than 10 seconds',
+    ).toBeLessThan(10_000)
+  })
 })
 
 test.describe('Page Router with basePath and i18n', () => {
