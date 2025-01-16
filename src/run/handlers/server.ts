@@ -113,33 +113,30 @@ export default async (request: Request) => {
     setVaryHeaders(response.headers, request, nextConfig)
     setCacheStatusHeader(response.headers)
 
-    // Temporary workaround for an issue where sending a response with an empty
-    // body causes an unhandled error. This doesn't catch everything, but redirects are the
-    // most common case of sending empty bodies. We can't check it directly because these are streams.
-    // The side effect is that responses which do contain data will not be streamed to the client,
-    // but that's fine for redirects.
-    // TODO: Remove once a fix has been rolled out.
-    if ((response.status > 300 && response.status < 400) || response.status >= 500) {
-      const body = await response.text()
-      return new Response(body || null, response)
+    async function waitForBackgroundWork() {
+      // it's important to keep the stream open until the next handler has finished
+      await nextHandlerPromise
+
+      // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
+      // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
+      // otherwise Next would never run the callback variant of `next/after`
+      res.emit('close')
+
+      // We have to keep response stream open until tracked background promises that are don't use `context.waitUntil`
+      // are resolved. If `context.waitUntil` is available, `requestContext.backgroundWorkPromise` will be empty
+      // resolved promised and so awaiting it is no-op
+      await requestContext.backgroundWorkPromise
     }
 
     const keepOpenUntilNextFullyRendered = new TransformStream({
       async flush() {
-        // it's important to keep the stream open until the next handler has finished
-        await nextHandlerPromise
-
-        // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
-        // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
-        // otherwise Next would never run the callback variant of `next/after`
-        res.emit('close')
-
-        // We have to keep response stream open until tracked background promises that are don't use `context.waitUntil`
-        // are resolved. If `context.waitUntil` is available, `requestContext.backgroundWorkPromise` will be empty
-        // resolved promised and so awaiting it is no-op
-        await requestContext.backgroundWorkPromise
+        await waitForBackgroundWork()
       },
     })
+
+    if (!response.body) {
+      await waitForBackgroundWork()
+    }
 
     return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
   })
