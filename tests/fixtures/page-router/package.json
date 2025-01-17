@@ -8,6 +8,7 @@
     "build": "next build"
   },
   "dependencies": {
+    "@netlify/blobs": "^8.1.0",
     "@netlify/functions": "^2.7.0",
     "next": "latest",
     "react": "18.2.0",
