@@ -3,7 +3,7 @@ import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
 import { encodeBlobKey } from '../shared/blobkey.js'
 
-import type { RequestContext } from './handlers/request-context.cjs'
+import { getLogger, RequestContext } from './handlers/request-context.cjs'
 import type { RuntimeTracer } from './handlers/tracer.cjs'
 import { getRegionalBlobStore } from './regional-blob-store.cjs'
 
@@ -216,6 +216,7 @@ export const setCacheControlHeaders = (
   { headers, status }: Response,
   request: Request,
   requestContext: RequestContext,
+  nextConfig: NextConfigComplete,
 ) => {
   if (
     typeof requestContext.routeHandlerRevalidate !== 'undefined' &&
@@ -232,6 +233,13 @@ export const setCacheControlHeaders = (
 
     headers.set('netlify-cdn-cache-control', cdnCacheControl)
     return
+  }
+
+  // temporary diagnostic to evaluate number of trailing slash redirects
+  if (status === 308 && request.url.endsWith('/') !== nextConfig.trailingSlash) {
+    getLogger()
+      .withFields({ trailingSlash: nextConfig.trailingSlash })
+      .log('NetlifyHeadersHandler.trailingSlashRedirect')
   }
 
   if (status === 404 && request.url.endsWith('.php')) {
