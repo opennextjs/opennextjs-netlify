@@ -238,7 +238,7 @@ export const setCacheControlHeaders = (
   // temporary diagnostic to evaluate number of trailing slash redirects
   if (status === 308 && request.url.endsWith('/') !== nextConfig.trailingSlash) {
     getLogger()
-      .withFields({ trailingSlash: nextConfig.trailingSlash })
+      .withFields({ trailingSlash: nextConfig.trailingSlash, location: headers.get('location') })
       .log('NetlifyHeadersHandler.trailingSlashRedirect')
   }
 
