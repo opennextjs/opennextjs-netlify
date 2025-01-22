@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.9.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.3...v5.9.4) (2025-01-22)
+
+
+### Bug Fixes
+
+* ensure background work is finished when response has 3xx or 5xx status code ([#2742](https://github.com/opennextjs/opennextjs-netlify/issues/2742)) ([ff2632f](https://github.com/opennextjs/opennextjs-netlify/commit/ff2632f2d5e391a1f087baaa484174fe27507dd2))
+* use uint8array for htmlrewriter wasm module instead of base64 ([25f6f30](https://github.com/opennextjs/opennextjs-netlify/commit/25f6f300f481483ab445cf6fb2b9d181d50d2637))
+* use uint8array for user's wasm modules used in middleware instead of base64 ([#2740](https://github.com/opennextjs/opennextjs-netlify/issues/2740)) ([aab8803](https://github.com/opennextjs/opennextjs-netlify/commit/aab8803a20b7f0894e2314e9b4ee51d63966e1d1))
+
 ## [5.9.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.2...v5.9.3) (2025-01-07)
 
 
