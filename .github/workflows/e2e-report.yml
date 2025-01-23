@@ -57,4 +57,5 @@ jobs:
       - name: Deploy e2e page
         if: success()
         run: |
-          npx netlify deploy --build --cwd e2e-report
+          npx netlify deploy --build --cwd .
+        working-directory: e2e-report
