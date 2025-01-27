@@ -11,6 +11,7 @@
     "@vercel/og": "latest",
     "next": "latest",
     "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react-dom": "18.2.0",
+    "package-that-does-not-exist": "^1.0.0"
   }
 }
