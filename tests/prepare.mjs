@@ -62,6 +62,13 @@ const promises = fixtures.map((fixture) =>
         this.push(chunk.toString().replace(/\n/gm, `\n[${fixture}] `))
         callback()
       },
+      flush(callback) {
+        // final transform might create non-terminated line with a prefix
+        // so this is just to make sure we end with a newline so further writes
+        // to same destination stream start on a new line for better readability
+        this.push('\n')
+        callback()
+      },
     })
     console.log(`[${fixture}] Running \`${cmd}\`...`)
     const output = execaCommand(cmd, {
@@ -80,6 +87,11 @@ const promises = fixtures.map((fixture) =>
           operation: 'revert',
         })
       }
+      if (output.exitCode !== 0) {
+        const errorMessage = `[${fixture}] 🚨 Failed to install dependencies or build a fixture`
+        console.error(errorMessage)
+        throw new Error(errorMessage)
+      }
       fixtureList.delete(fixture)
     })
   }).finally(() => {
@@ -91,5 +103,22 @@ const promises = fixtures.map((fixture) =>
     }
   }),
 )
-await Promise.allSettled(promises)
+const prepareFixturesResults = await Promise.allSettled(promises)
+const failedFixturesErrors = prepareFixturesResults
+  .map((promise) => {
+    if (promise.status === 'rejected') {
+      return promise.reason
+    }
+    return null
+  })
+  .filter(Boolean)
+
+if (failedFixturesErrors.length > 0) {
+  console.error('Some fixtures failed to prepare:')
+  for (const error of failedFixturesErrors) {
+    console.error(error.message)
+  }
+  process.exit(1)
+}
+
 console.log('🎉 All fixtures prepared')
