@@ -10,7 +10,7 @@ export default async function middleware(request) {
   const value = await increment(input)
   return new Response(null, { headers: { data: JSON.stringify({ input, value }) } })
 }
-blah blah - this should not build
+
 export const config = {
   matcher: '/wasm',
 }
