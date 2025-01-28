@@ -268,7 +268,7 @@ async function deploySite(
   console.log(`🚀 Building and deploying site...`)
 
   const outputFile = 'deploy-output.txt'
-  let cmd = `npx netlify deploy --build --site ${siteId}`
+  let cmd = `npx netlify deploy --build --site ${siteId} --alias next-e2e-tests`
 
   if (packagePath) {
     cmd += ` --filter ${packagePath}`
@@ -278,11 +278,19 @@ async function deploySite(
   await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
 
-  const [url] = new RegExp(/https:.+\.netlify\.app/gm).exec(output) || []
+  const [url] =
+    new RegExp(
+      /https:\/\/app\.netlify\.com\/sites\/next-runtime-testing\/deploys\/^[0-9a-f]+/gm,
+    ).exec(output) || []
   if (!url) {
     throw new Error('Could not extract the URL from the build logs')
   }
-  const [deployID] = new URL(url).host.split('--')
+
+  const deployID = url.split('/').pop()
+  if (!deployID) {
+    throw new Error('Could not extract DeployID from the build logs')
+  }
+
   return { url, deployID, logs: output }
 }
 
