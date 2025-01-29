@@ -279,10 +279,7 @@ async function deploySite(
   await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
 
-  const [url] =
-    new RegExp(
-      /https:\/\/app\.netlify\.com\/sites\/next-runtime-testing\/deploys\/^[0-9a-f]+/gm,
-    ).exec(output) || []
+  const [url] = new RegExp(/next-runtime-testing\/deploys\/[0-9a-f]+/gm).exec(output) || []
   if (!url) {
     throw new Error('Could not extract the URL from the build logs')
   }
