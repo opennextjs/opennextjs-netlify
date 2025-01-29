@@ -289,7 +289,11 @@ async function deploySite(
     throw new Error('Could not extract DeployID from the build logs')
   }
 
-  return { url, deployID, logs: output }
+  return {
+    url: `https://${deployID}--next-runtime-testing.netlify.app/`,
+    deployID,
+    logs: output,
+  }
 }
 
 export async function deleteDeploy(deployID?: string): Promise<void> {
