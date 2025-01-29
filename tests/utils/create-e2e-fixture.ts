@@ -15,6 +15,7 @@ import { setNextVersionInFixture } from './next-version-helpers.mjs'
 const DEFAULT_SITE_ID = 'ee859ce9-44a7-46be-830b-ead85e445e53'
 export const SITE_ID = process.env.NETLIFY_SITE_ID ?? DEFAULT_SITE_ID
 const NEXT_VERSION = process.env.NEXT_VERSION || 'latest'
+const NETLIFY_DEPLOY_ALIAS = 'next-e2e-tests'
 
 export interface DeployResult {
   deployID: string
@@ -268,7 +269,7 @@ async function deploySite(
   console.log(`🚀 Building and deploying site...`)
 
   const outputFile = 'deploy-output.txt'
-  let cmd = `npx netlify deploy --build --site ${siteId} --alias next-e2e-tests`
+  let cmd = `npx netlify deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
 
   if (packagePath) {
     cmd += ` --filter ${packagePath}`
