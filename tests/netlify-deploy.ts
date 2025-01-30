@@ -90,6 +90,10 @@ export class NextDeployInstance extends NextInstance {
           command = "npm run build"
           publish = ".next"
 
+          [build.environment]
+          # this allows to use "CanaryOnly" features with next@latest
+          NEXT_PRIVATE_TEST_MODE = "e2e"
+
           [[plugins]]
           package = "${runtimePackageName}"
           `

@@ -56,16 +56,16 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             VERSION_SELECTORS=[${{ github.event.inputs.versions }}]
-            echo "group=[1, 2, 3, 4]" >> $GITHUB_OUTPUT
-            echo "total=4" >> $GITHUB_OUTPUT
+            echo "group=[1, 2, 3, 4, 5, 6]" >> $GITHUB_OUTPUT
+            echo "total=6" >> $GITHUB_OUTPUT
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
             VERSION_SELECTORS=[\"latest\"]
-            echo "group=[1, 2, 3, 4]" >> $GITHUB_OUTPUT
-            echo "total=4" >> $GITHUB_OUTPUT
+            echo "group=[1, 2, 3, 4, 5, 6]" >> $GITHUB_OUTPUT
+            echo "total=6" >> $GITHUB_OUTPUT
           else
-            VERSION_SELECTORS=[\"latest\",\"canary\",\"14.2.15\",\"13.5.1\"]
-            echo "group=[1, 2, 3, 4]" >> $GITHUB_OUTPUT
-            echo "total=4" >> $GITHUB_OUTPUT
+            VERSION_SELECTORS=[\"latest\",\"canary\"]
+            echo "group=[1, 2, 3, 4, 5, 6]" >> $GITHUB_OUTPUT
+            echo "total=6" >> $GITHUB_OUTPUT
           fi
 
           VERSION_SPEC="["
