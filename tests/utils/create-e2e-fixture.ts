@@ -288,7 +288,7 @@ async function deploySite(
   }
 
   return {
-    url: `https://${deployID}--${siteName}.netlify.app/`,
+    url: `https://${deployID}--${siteName}.netlify.app`,
     deployID,
     logs: output,
   }

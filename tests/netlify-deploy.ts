@@ -157,7 +157,7 @@ export class NextDeployInstance extends NextInstance {
         throw new Error('Could not extract DeployID from the build logs')
       }
 
-      this._url = `https://${deployID}--${siteName}.netlify.app/`
+      this._url = `https://${deployID}--${siteName}.netlify.app`
       this._parsedUrl = new URL(this._url)
       this._deployId = deployID
       this._shouldDeleteDeploy = !process.env.NEXT_TEST_SKIP_CLEANUP
