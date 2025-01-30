@@ -1,5 +1,4 @@
 import { expect, type Locator } from '@playwright/test'
-import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 
 const expectImageWasLoaded = async (locator: Locator) => {
