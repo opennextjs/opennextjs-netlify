@@ -279,9 +279,10 @@ async function deploySite(
   await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
 
-  const { siteName, deployID } = new RegExp(
-    /app\.netlify\.com\/sites\/(?<siteName>.+)\/deploys\/(?<deployID>[0-9a-f]+)/gm
-  ).exec(output)?.groups || {}
+  const { siteName, deployID } =
+    new RegExp(/app\.netlify\.com\/sites\/(?<siteName>.+)\/deploys\/(?<deployID>[0-9a-f]+)/gm).exec(
+      output,
+    )?.groups || {}
 
   if (!deployID) {
     throw new Error('Could not extract DeployID from the build logs')
