@@ -1,4 +1,5 @@
 import { getLogger } from 'lambda-local'
+import { platform } from 'node:process'
 import { v4 } from 'uuid'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
@@ -52,11 +53,16 @@ describe.each([
     expect(og.headers['content-type']).toBe('image/png')
   })
 
-  test<FixtureTestContext>('should work in app route with node runtime', async (ctx) => {
-    const ogNode = await invokeFunction(ctx, { url: '/og-node' })
-    expect(ogNode.statusCode).toBe(200)
-    expect(ogNode.headers['content-type']).toBe('image/png')
-  })
+  // on Node 18.20.6 on Windows, there seems to be an issue with OG image generation in this scenario
+  // that is reproducible with `next start` even outside of Netlify context
+  test.skipIf(platform === 'win32')<FixtureTestContext>(
+    'should work in app route with node runtime',
+    async (ctx) => {
+      const ogNode = await invokeFunction(ctx, { url: '/og-node' })
+      expect(ogNode.statusCode).toBe(200)
+      expect(ogNode.headers['content-type']).toBe('image/png')
+    },
+  )
 
   test<FixtureTestContext>('should work in middleware', async (ctx) => {
     const origin = new LocalServer()

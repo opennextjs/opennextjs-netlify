@@ -15,6 +15,7 @@ import { setNextVersionInFixture } from './next-version-helpers.mjs'
 const DEFAULT_SITE_ID = 'ee859ce9-44a7-46be-830b-ead85e445e53'
 export const SITE_ID = process.env.NETLIFY_SITE_ID ?? DEFAULT_SITE_ID
 const NEXT_VERSION = process.env.NEXT_VERSION || 'latest'
+const NETLIFY_DEPLOY_ALIAS = 'next-e2e-tests'
 
 export interface DeployResult {
   deployID: string
@@ -268,7 +269,7 @@ async function deploySite(
   console.log(`🚀 Building and deploying site...`)
 
   const outputFile = 'deploy-output.txt'
-  let cmd = `npx netlify deploy --build --site ${siteId}`
+  let cmd = `npx netlify deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
 
   if (packagePath) {
     cmd += ` --filter ${packagePath}`
@@ -278,12 +279,20 @@ async function deploySite(
   await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
 
-  const [url] = new RegExp(/https:.+\.netlify\.app/gm).exec(output) || []
-  if (!url) {
-    throw new Error('Could not extract the URL from the build logs')
+  const { siteName, deployID } =
+    new RegExp(/app\.netlify\.com\/sites\/(?<siteName>.+)\/deploys\/(?<deployID>[0-9a-f]+)/gm).exec(
+      output,
+    )?.groups || {}
+
+  if (!deployID) {
+    throw new Error('Could not extract DeployID from the build logs')
   }
-  const [deployID] = new URL(url).host.split('--')
-  return { url, deployID, logs: output }
+
+  return {
+    url: `https://${deployID}--${siteName}.netlify.app`,
+    deployID,
+    logs: output,
+  }
 }
 
 export async function deleteDeploy(deployID?: string): Promise<void> {

@@ -129,10 +129,11 @@ export class NextDeployInstance extends NextInstance {
     const deployTitle = process.env.GITHUB_SHA
       ? `${testName} - ${process.env.GITHUB_SHA}`
       : testName
+    const deployAlias = 'vercel-next-e2e'
 
     const deployRes = await execa(
       'npx',
-      ['netlify', 'deploy', '--build', '--message', deployTitle ?? ''],
+      ['netlify', 'deploy', '--build', '--message', deployTitle ?? '', '--alias', deployAlias],
       {
         cwd: this.testDir,
         reject: false,
@@ -146,22 +147,23 @@ export class NextDeployInstance extends NextInstance {
     }
 
     try {
-      const [url] = new RegExp(/https:.+\.netlify\.app/gm).exec(deployRes.stdout) || []
-      if (!url) {
-        throw new Error('Could not extract the URL from the build logs')
+      const deployUrlRegex = new RegExp(
+        /https:\/\/app\.netlify\.com\/sites\/(?<siteName>.+)\/deploys\/(?<deployID>[0-9a-f]+)/gm,
+      ).exec(deployRes.stdout)
+      const [buildLogsUrl] = deployUrlRegex || []
+      const { deployID, siteName } = deployUrlRegex?.groups || {}
+
+      if (!deployID) {
+        throw new Error('Could not extract DeployID from the build logs')
       }
-      const [deployID] = new URL(url).host.split('--')
-      this._url = url
+
+      this._url = `https://${deployID}--${siteName}.netlify.app`
       this._parsedUrl = new URL(this._url)
       this._deployId = deployID
       this._shouldDeleteDeploy = !process.env.NEXT_TEST_SKIP_CLEANUP
       this._cliOutput = deployRes.stdout + deployRes.stderr
-      require('console').log(`Deployment URL: ${this._url}`)
 
-      const [buildLogsUrl] =
-        new RegExp(/https:\/\/app\.netlify\.com\/sites\/.+\/deploys\/[0-9a-f]+/gm).exec(
-          deployRes.stdout,
-        ) || []
+      require('console').log(`Deployment URL: ${this._url}`)
       if (buildLogsUrl) {
         require('console').log(`Logs: ${buildLogsUrl}`)
       }
