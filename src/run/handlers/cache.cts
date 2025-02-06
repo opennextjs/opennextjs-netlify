@@ -5,7 +5,6 @@ import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
-import { Store } from '@netlify/blobs'
 import { purgeCache } from '@netlify/functions'
 import { type Span } from '@opentelemetry/api'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
@@ -22,8 +21,8 @@ import {
   type NetlifyCacheHandlerValue,
   type NetlifyIncrementalCacheValue,
 } from '../../shared/cache-types.cjs'
-import { getRegionalBlobStore } from '../regional-blob-store.cjs'
 
+import { getFromProgrammableCache, setInProgrammableCache } from './pc-client.cjs'
 import { getLogger, getRequestContext } from './request-context.cjs'
 import { getTracer } from './tracer.cjs'
 
@@ -36,14 +35,12 @@ const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   options: CacheHandlerContext
   revalidatedTags: string[]
-  blobStore: Store
   tracer = getTracer()
   tagManifestsFetchedFromBlobStoreInCurrentRequest: TagManifestBlobCache
 
   constructor(options: CacheHandlerContext) {
     this.options = options
     this.revalidatedTags = options.revalidatedTags
-    this.blobStore = getRegionalBlobStore({ consistency: 'strong' })
     this.tagManifestsFetchedFromBlobStoreInCurrentRequest = {}
   }
 
@@ -206,12 +203,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       const blobKey = await this.encodeBlobKey(key)
       span.setAttributes({ key, blobKey })
 
-      const blob = (await this.tracer.withActiveSpan('blobStore.get', async (blobGetSpan) => {
-        blobGetSpan.setAttributes({ key, blobKey })
-        return await this.blobStore.get(blobKey, {
-          type: 'json',
-        })
-      })) as NetlifyCacheHandlerValue | null
+      const blob = (await getFromProgrammableCache(blobKey)) as NetlifyCacheHandlerValue | null
 
       // if blob is null then we don't have a cache entry
       if (!blob) {
@@ -338,10 +330,16 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       // and we didn't yet capture cache tags, we try to get cache tags from freshly produced cache value
       this.captureCacheTags(value, key)
 
-      await this.blobStore.setJSON(blobKey, {
+      const cacheEntry = {
         lastModified,
         value,
-      })
+      } satisfies NetlifyCacheHandlerValue
+
+      await setInProgrammableCache(
+        blobKey,
+        cacheEntry,
+        this.getCacheTagsFromCacheEntry(cacheEntry, context.tags),
+      )
 
       if (data?.kind === 'PAGE' || data?.kind === 'PAGES') {
         const requestContext = getRequestContext()
@@ -399,7 +397,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     await Promise.all(
       tags.map(async (tag) => {
         try {
-          await this.blobStore.setJSON(await this.encodeBlobKey(tag), data)
+          await setInProgrammableCache(await this.encodeBlobKey(tag), data)
         } catch (error) {
           getLogger().withError(error).log(`Failed to update tag manifest for ${tag}`)
         }
@@ -418,10 +416,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     this.tagManifestsFetchedFromBlobStoreInCurrentRequest = {}
   }
 
-  /**
-   * Checks if a cache entry is stale through on demand revalidated tags
-   */
-  private async checkCacheEntryStaleByTags(
+  private getCacheTagsFromCacheEntry(
     cacheEntry: NetlifyCacheHandlerValue,
     tags: string[] = [],
     softTags: string[] = [],
@@ -439,7 +434,21 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     ) {
       cacheTags =
         (cacheEntry.value.headers?.[NEXT_CACHE_TAGS_HEADER] as string)?.split(/,|%2c/gi) || []
-    } else {
+    }
+
+    return cacheTags
+  }
+
+  /**
+   * Checks if a cache entry is stale through on demand revalidated tags
+   */
+  private async checkCacheEntryStaleByTags(
+    cacheEntry: NetlifyCacheHandlerValue,
+    tags: string[] = [],
+    softTags: string[] = [],
+  ) {
+    const cacheTags = this.getCacheTagsFromCacheEntry(cacheEntry, tags, softTags)
+    if (cacheTags.length === 0) {
       return false
     }
 
@@ -474,7 +483,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           tagManifestPromise = this.encodeBlobKey(tag).then((blobKey) => {
             return this.tracer.withActiveSpan(`get tag manifest`, async (span) => {
               span.setAttributes({ tag, blobKey })
-              return this.blobStore.get(blobKey, { type: 'json' })
+              return getFromProgrammableCache(blobKey)
             })
           })
 

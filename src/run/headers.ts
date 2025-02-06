@@ -5,7 +5,7 @@ import { encodeBlobKey } from '../shared/blobkey.js'
 
 import { getLogger, RequestContext } from './handlers/request-context.cjs'
 import type { RuntimeTracer } from './handlers/tracer.cjs'
-import { getRegionalBlobStore } from './regional-blob-store.cjs'
+import { getFromProgrammableCache } from './handlers/pc-client.cjs'
 
 const ALL_VARIATIONS = Symbol.for('ALL_VARIATIONS')
 interface NetlifyVaryValues {
@@ -167,7 +167,6 @@ export const adjustDateHeader = async ({
       warning: true,
     })
 
-    const blobStore = getRegionalBlobStore({ consistency: 'strong' })
     const blobKey = await encodeBlobKey(key)
 
     // TODO: use metadata for this
@@ -178,7 +177,7 @@ export const adjustDateHeader = async ({
           key,
           blobKey,
         })
-        const blob = (await blobStore.get(blobKey, { type: 'json' })) ?? {}
+        const blob = (await getFromProgrammableCache(blobKey)) ?? {}
 
         getBlobForDateSpan.addEvent(blob ? 'Cache hit' : 'Cache miss')
         return blob.lastModified
