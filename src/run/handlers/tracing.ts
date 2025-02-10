@@ -1,4 +1,6 @@
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
+import { registerInstrumentations } from '@opentelemetry/instrumentation'
+import { HttpInstrumentation } from '@opentelemetry/instrumentation-http'
 import { Resource } from '@opentelemetry/resources'
 import { NodeSDK } from '@opentelemetry/sdk-node'
 import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-node'
@@ -23,6 +25,10 @@ const sdk = new NodeSDK({
       url: process.env.NETLIFY_OTLP_TRACE_EXPORTER_URL,
     }),
   ),
+})
+
+registerInstrumentations({
+  instrumentations: [new HttpInstrumentation()],
 })
 export default sdk
 
