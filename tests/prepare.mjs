@@ -70,6 +70,7 @@ const promises = fixtures.map((fixture) =>
         callback()
       },
     })
+
     console.log(`[${fixture}] Running \`${cmd}\`...`)
     const output = execaCommand(cmd, {
       cwd,
