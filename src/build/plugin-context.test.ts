@@ -206,7 +206,6 @@ test('should use deploy configuration blobs directory when @netlify/build versio
 
   const ctx = new PluginContext({
     constants: { NETLIFY_BUILD_VERSION: '29.41.5' },
-    featureFlags: { 'next-runtime-regional-blobs': true },
   } as unknown as NetlifyPluginOptions)
 
   expect(ctx.blobDir).toBe(join(cwd, '.netlify/deploy/v1/blobs/deploy'))
