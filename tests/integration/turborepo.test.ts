@@ -25,6 +25,8 @@ beforeEach<FixtureTestContext>(async (ctx) => {
 // monorepo test uses process.chdir which is not working inside vite workers
 // so I'm disabling that test for now will revisit later in a follow up PR.
 // we have at least a e2e test that tests the monorepo functionality
+// NOTE: turborepo-npm fixture is currently skipped in tests/prepare.mjs
+// be sure to unskip it there if you would be working on making this integration test work
 test.skip<FixtureTestContext>('should create the files in the correct directories', async (ctx) => {
   await createFixture('turborepo-npm', ctx)
   await runPlugin(ctx, { PACKAGE_PATH: 'apps/web' })

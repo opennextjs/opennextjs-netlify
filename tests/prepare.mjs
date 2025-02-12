@@ -18,12 +18,31 @@ const NEXT_VERSION = process.env.NEXT_VERSION ?? 'latest'
 const fixturesDir = fileURLToPath(new URL(`./fixtures`, import.meta.url))
 const fixtureFilter = argv[2] ?? ''
 
+// E2E tests run next builds, so we don't need to prepare those ahead of time for integration tests
+const e2eOnlyFixtures = new Set([
+  'after',
+  'cli-before-regional-blobs-support',
+  'dist-dir',
+  // There is also a bug on Windows on Node.js 18.20.6, that cause build failures on this fixture
+  // see https://github.com/opennextjs/opennextjs-netlify/actions/runs/13268839161/job/37043172448?pr=2749#step:12:78
+  'middleware-og',
+  'middleware-single-matcher',
+  'nx-integrated',
+  'turborepo',
+  // We do have a skipped test using this fixture (due to integration test setup not working for monorepos)
+  'turborepo-npm',
+  'unstable-cache',
+])
+
 const limit = pLimit(Math.max(2, cpus().length / 2))
 const fixtures = readdirSync(fixturesDir)
   // Ignoring things like `.DS_Store`.
   .filter((fixture) => !fixture.startsWith('.'))
   // Applying the filter, if one is set.
   .filter((fixture) => !fixtureFilter || fixture.startsWith(fixtureFilter))
+  // Filter out fixtures that are only needed for E2E tests
+  .filter((fixture) => !e2eOnlyFixtures.has(fixture))
+
 console.log(`🧪 Preparing fixtures: ${fixtures.join(', ')}`)
 const fixtureList = new Set(fixtures)
 const fixtureCount = fixtures.length
