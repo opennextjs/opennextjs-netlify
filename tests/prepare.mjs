@@ -29,7 +29,6 @@ const e2eOnlyFixtures = new Set([
   'middleware-single-matcher',
   'nx-integrated',
   'turborepo',
-  // We do have a skipped test using this fixture (due to integration test setup not working for monorepos)
   'turborepo-npm',
   'unstable-cache',
 ])
