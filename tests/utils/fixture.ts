@@ -284,8 +284,6 @@ export async function runPlugin(
     const result = await bundle([edgeSource], dist, [], {
       bootstrapURL,
       internalSrcFolder: edgeSource,
-      // Temporary until https://github.com/netlify/edge-bundler/pull/580 rolls out
-      featureFlags: { edge_bundler_pcre_regexp: true },
       importMapPaths: [],
       basePath: ctx.cwd,
       configPath: join(edgeSource, 'manifest.json'),
