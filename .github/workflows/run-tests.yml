@@ -61,7 +61,7 @@ jobs:
       - uses: oven-sh/setup-bun@v1
       - name: setup pnpm/yarn
         run: |
-          npm install -g corepack@latest
+          npm install -g corepack
           corepack enable
         shell: bash
       - name: Install Deno
@@ -138,6 +138,7 @@ jobs:
         shell: bash
       - name: setup pnpm/yarn
         run: |
+          # global corepack installation requires --force on Windows, otherwise EEXIST errors occur
           npm install -g corepack --force
           corepack enable
         shell: bash
