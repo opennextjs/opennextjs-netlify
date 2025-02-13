@@ -126,6 +126,10 @@ test<FixtureTestContext>('Should serve correct locale-aware custom 404 pages', a
     load(responseImplicitDefaultLocale.body)('[data-testid="locale"]').text(),
     'Served 404 page content should use default locale if locale is not explicitly used in pathname (after basePath)',
   ).toBe('en')
+  expect(
+    responseImplicitDefaultLocale.headers['netlify-cdn-cache-control'],
+    'Response for not existing route if locale is not explicitly used in pathname (after basePath) should have 404 status',
+  ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
 
   const responseExplicitDefaultLocale = await invokeFunction(ctx, {
     url: '/base/path/en/not-existing-page',
@@ -139,6 +143,10 @@ test<FixtureTestContext>('Should serve correct locale-aware custom 404 pages', a
     load(responseExplicitDefaultLocale.body)('[data-testid="locale"]').text(),
     'Served 404 page content should use default locale if default locale is explicitly used in pathname (after basePath)',
   ).toBe('en')
+  expect(
+    responseExplicitDefaultLocale.headers['netlify-cdn-cache-control'],
+    'Response for not existing route if locale is not explicitly used in pathname (after basePath) should have 404 status',
+  ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
 
   const responseNonDefaultLocale = await invokeFunction(ctx, {
     url: '/base/path/fr/not-existing-page',
@@ -152,4 +160,8 @@ test<FixtureTestContext>('Should serve correct locale-aware custom 404 pages', a
     load(responseNonDefaultLocale.body)('[data-testid="locale"]').text(),
     'Served 404 page content should use non-default locale if non-default locale is explicitly used in pathname (after basePath)',
   ).toBe('fr')
+  expect(
+    responseNonDefaultLocale.headers['netlify-cdn-cache-control'],
+    'Response for not existing route if locale is not explicitly used in pathname (after basePath) should have 404 status',
+  ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
 })
