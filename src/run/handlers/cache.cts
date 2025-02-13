@@ -260,6 +260,11 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
           const { revalidate, ...restOfPageValue } = blob.value
 
+          const requestContext = getRequestContext()
+          if (requestContext) {
+            requestContext.pageHandlerRevalidate = revalidate
+          }
+
           await this.injectEntryToPrerenderManifest(key, revalidate)
 
           return {
@@ -271,6 +276,11 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           span.addEvent(blob.value?.kind, { lastModified: blob.lastModified })
 
           const { revalidate, rscData, ...restOfPageValue } = blob.value
+
+          const requestContext = getRequestContext()
+          if (requestContext) {
+            requestContext.pageHandlerRevalidate = revalidate
+          }
 
           await this.injectEntryToPrerenderManifest(key, revalidate)
 
