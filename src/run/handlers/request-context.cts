@@ -13,6 +13,10 @@ export interface FutureContext extends Context {
 }
 
 export type RequestContext = {
+  /**
+   * Determine if this request is for CDN SWR background revalidation
+   */
+  isBackgroundRevalidation: boolean
   captureServerTiming: boolean
   responseCacheGetLastModified?: number
   responseCacheKey?: string
@@ -36,12 +40,27 @@ export type RequestContext = {
   logger: SystemLogger
 }
 
+// this is theoretical header that doesn't yet exist
+export const BACKGROUND_REVALIDATION_HEADER = 'x-background-revalidation'
+
 type RequestContextAsyncLocalStorage = AsyncLocalStorage<RequestContext>
 
 export function createRequestContext(request?: Request, context?: FutureContext): RequestContext {
   const backgroundWorkPromises: Promise<unknown>[] = []
 
+  const isDebugRequest =
+    request?.headers.has('x-nf-debug-logging') || request?.headers.has('x-next-debug-logging')
+
+  const logger = systemLogger.withLogLevel(isDebugRequest ? LogLevel.Debug : LogLevel.Log)
+
+  const isBackgroundRevalidation = request?.headers.has(BACKGROUND_REVALIDATION_HEADER) ?? false
+
+  if (isBackgroundRevalidation) {
+    logger.debug('[NetlifyNextRuntime] Background revalidation request')
+  }
+
   return {
+    isBackgroundRevalidation,
     captureServerTiming: request?.headers.has('x-next-debug-logging') ?? false,
     trackBackgroundWork: (promise) => {
       if (context?.waitUntil) {
@@ -53,11 +72,7 @@ export function createRequestContext(request?: Request, context?: FutureContext)
     get backgroundWorkPromise() {
       return Promise.allSettled(backgroundWorkPromises)
     },
-    logger: systemLogger.withLogLevel(
-      request?.headers.has('x-nf-debug-logging') || request?.headers.has('x-next-debug-logging')
-        ? LogLevel.Debug
-        : LogLevel.Log,
-    ),
+    logger,
   }
 }
 
