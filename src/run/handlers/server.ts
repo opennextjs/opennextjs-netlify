@@ -1,6 +1,8 @@
 import type { OutgoingHttpHeaders } from 'http'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
+import type { Context } from '@netlify/functions'
+import { Span } from '@opentelemetry/api'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
@@ -13,7 +15,7 @@ import {
 } from '../headers.js'
 import { nextResponseProxy } from '../revalidate.js'
 
-import { createRequestContext, getLogger, getRequestContext } from './request-context.cjs'
+import { getLogger, type RequestContext } from './request-context.cjs'
 import { getTracer } from './tracer.cjs'
 import { setupWaitUntil } from './wait-until.cjs'
 
@@ -46,7 +48,12 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
   }
 }
 
-export default async (request: Request) => {
+export default async (
+  request: Request,
+  _context: Context,
+  topLevelSpan: Span,
+  requestContext: RequestContext,
+) => {
   const tracer = getTracer()
 
   if (!nextHandler) {
@@ -85,8 +92,6 @@ export default async (request: Request) => {
 
     disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
 
-    const requestContext = getRequestContext() ?? createRequestContext()
-
     const resProxy = nextResponseProxy(res, requestContext)
 
     // We don't await this here, because it won't resolve until the response is finished.
@@ -103,15 +108,31 @@ export default async (request: Request) => {
     const response = await toComputeResponse(resProxy)
 
     if (requestContext.responseCacheKey) {
-      span.setAttribute('responseCacheKey', requestContext.responseCacheKey)
+      topLevelSpan.setAttribute('responseCacheKey', requestContext.responseCacheKey)
     }
 
-    await adjustDateHeader({ headers: response.headers, request, span, tracer, requestContext })
+    const nextCache = response.headers.get('x-nextjs-cache')
+    const isServedFromCache = nextCache === 'HIT' || nextCache === 'STALE'
+
+    topLevelSpan.setAttributes({
+      'x-nextjs-cache': nextCache ?? undefined,
+      isServedFromCache,
+    })
+
+    if (isServedFromCache) {
+      await adjustDateHeader({
+        headers: response.headers,
+        request,
+        span,
+        tracer,
+        requestContext,
+      })
+    }
 
     setCacheControlHeaders(response, request, requestContext, nextConfig)
     setCacheTagsHeaders(response.headers, requestContext)
     setVaryHeaders(response.headers, request, nextConfig)
-    setCacheStatusHeader(response.headers)
+    setCacheStatusHeader(response.headers, nextCache)
 
     async function waitForBackgroundWork() {
       // it's important to keep the stream open until the next handler has finished

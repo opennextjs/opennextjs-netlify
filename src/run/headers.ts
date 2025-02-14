@@ -137,17 +137,6 @@ export const adjustDateHeader = async ({
   tracer: RuntimeTracer
   requestContext: RequestContext
 }) => {
-  const cacheState = headers.get('x-nextjs-cache')
-  const isServedFromCache = cacheState === 'HIT' || cacheState === 'STALE'
-
-  span.setAttributes({
-    'x-nextjs-cache': cacheState ?? undefined,
-    isServedFromCache,
-  })
-
-  if (!isServedFromCache) {
-    return
-  }
   const key = new URL(request.url).pathname
 
   let lastModified: number | undefined
@@ -317,8 +306,7 @@ const NEXT_CACHE_TO_CACHE_STATUS: Record<string, string> = {
  * a Cache-Status header for Next cache so users inspect that together with CDN cache status
  * and not on its own.
  */
-export const setCacheStatusHeader = (headers: Headers) => {
-  const nextCache = headers.get('x-nextjs-cache')
+export const setCacheStatusHeader = (headers: Headers, nextCache: string | null) => {
   if (typeof nextCache === 'string') {
     if (nextCache in NEXT_CACHE_TO_CACHE_STATUS) {
       const cacheStatus = NEXT_CACHE_TO_CACHE_STATUS[nextCache]
