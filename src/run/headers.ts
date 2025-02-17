@@ -250,6 +250,7 @@ export const setCacheControlHeaders = (
       .log('NetlifyHeadersHandler.trailingSlashRedirect')
   }
 
+  const cacheControl = headers.get('cache-control')
   if (status === 404) {
     if (request.url.endsWith('.php')) {
       // temporary CDN Cache Control handling for bot probes on PHP files
@@ -260,6 +261,7 @@ export const setCacheControlHeaders = (
     }
 
     if (
+      (!cacheControl || cacheControl.includes('no-store')) &&
       typeof requestContext.pageHandlerRevalidate !== 'undefined' &&
       ['GET', 'HEAD'].includes(request.method) &&
       !headers.has('cdn-cache-control') &&
@@ -271,7 +273,6 @@ export const setCacheControlHeaders = (
     }
   }
 
-  const cacheControl = headers.get('cache-control')
   if (
     cacheControl !== null &&
     ['GET', 'HEAD'].includes(request.method) &&
