@@ -277,11 +277,6 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
           const { revalidate, rscData, ...restOfPageValue } = blob.value
 
-          const requestContext = getRequestContext()
-          if (requestContext) {
-            requestContext.pageHandlerRevalidate = revalidate
-          }
-
           await this.injectEntryToPrerenderManifest(key, revalidate)
 
           return {
