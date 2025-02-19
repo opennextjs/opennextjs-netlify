@@ -52,6 +52,27 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     return await encodeBlobKey(key)
   }
 
+  private getTTL(blob: NetlifyCacheHandlerValue) {
+    if (
+      blob.value?.kind === 'FETCH' ||
+      blob.value?.kind === 'ROUTE' ||
+      blob.value?.kind === 'APP_ROUTE' ||
+      blob.value?.kind === 'PAGE' ||
+      blob.value?.kind === 'PAGES' ||
+      blob.value?.kind === 'APP_PAGE'
+    ) {
+      const { revalidate } = blob.value
+
+      if (typeof revalidate === 'number') {
+        const revalidateAfter = revalidate * 1_000 + blob.lastModified
+        return (revalidateAfter - Date.now()) / 1_000
+      }
+      return revalidate === false ? 'PERMANENT' : 'NOT SET'
+    }
+
+    return 'NOT SET'
+  }
+
   private captureResponseCacheLastModified(
     cacheValue: NetlifyCacheHandlerValue,
     key: string,
@@ -219,10 +240,31 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         return null
       }
 
+      const ttl = this.getTTL(blob)
+
+      if (getRequestContext()?.isBackgroundRevalidation && typeof ttl === 'number' && ttl < 0) {
+        // background revalidation request should allow data that is not yet stale,
+        // but opt to discard STALE data, so that Next.js generate fresh response
+        span.addEvent('Discarding stale entry due to SWR background revalidation request', {
+          key,
+          blobKey,
+          ttl,
+        })
+        getLogger()
+          .withFields({
+            ttl,
+            key,
+          })
+          .debug(
+            `[NetlifyCacheHandler.get] Discarding stale entry due to SWR background revalidation request: ${key}`,
+          )
+        return null
+      }
+
       const staleByTags = await this.checkCacheEntryStaleByTags(blob, ctx.tags, ctx.softTags)
 
       if (staleByTags) {
-        span.addEvent('Stale', { staleByTags })
+        span.addEvent('Stale', { staleByTags, key, blobKey, ttl })
         return null
       }
 
@@ -231,7 +273,11 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       switch (blob.value?.kind) {
         case 'FETCH':
-          span.addEvent('FETCH', { lastModified: blob.lastModified, revalidate: ctx.revalidate })
+          span.addEvent('FETCH', {
+            lastModified: blob.lastModified,
+            revalidate: ctx.revalidate,
+            ttl,
+          })
           return {
             lastModified: blob.lastModified,
             value: blob.value,
@@ -242,6 +288,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           span.addEvent(blob.value?.kind, {
             lastModified: blob.lastModified,
             status: blob.value.status,
+            revalidate: blob.value.revalidate,
+            ttl,
           })
 
           const valueWithoutRevalidate = this.captureRouteRevalidateAndRemoveFromObject(blob.value)
@@ -256,9 +304,9 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         }
         case 'PAGE':
         case 'PAGES': {
-          span.addEvent(blob.value?.kind, { lastModified: blob.lastModified })
-
           const { revalidate, ...restOfPageValue } = blob.value
+
+          span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
           await this.injectEntryToPrerenderManifest(key, revalidate)
 
@@ -268,9 +316,9 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           }
         }
         case 'APP_PAGE': {
-          span.addEvent(blob.value?.kind, { lastModified: blob.lastModified })
-
           const { revalidate, rscData, ...restOfPageValue } = blob.value
+
+          span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
           await this.injectEntryToPrerenderManifest(key, revalidate)
 
