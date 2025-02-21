@@ -14,6 +14,7 @@ const makeE2EFixture = (
 
 export const test = base.extend<
   {
+    ensureStaticAssetsHaveImmutableCacheControl: void
     takeScreenshot: void
     pollUntilHeadersMatch: (
       url: string,
@@ -88,6 +89,21 @@ export const test = base.extend<
         })
         await page.screenshot({ path: screenshotPath, timeout: 5000 })
       }
+    },
+    { auto: true },
+  ],
+  ensureStaticAssetsHaveImmutableCacheControl: [
+    async ({ page }, use) => {
+      page.on('response', (response) => {
+        if (response.url().includes('/_next/static/')) {
+          expect(
+            response.headers()['cache-control'],
+            '_next/static assets should have immutable cache control',
+          ).toContain('public,max-age=31536000,immutable')
+        }
+      })
+
+      await use()
     },
     { auto: true },
   ],
