@@ -207,6 +207,7 @@ export async function runPluginStep(
       // INTERNAL_EDGE_FUNCTIONS_SRC: '.netlify/edge-functions',
     },
     netlifyConfig: {
+      headers: [],
       redirects: [],
     },
     utils: {

@@ -77,6 +77,20 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
   })
 }
 
+export const setHeadersConfig = async (ctx: PluginContext): Promise<void> => {
+  // https://nextjs.org/docs/app/api-reference/config/next-config-js/headers#cache-control
+  // Next.js sets the Cache-Control header of public, max-age=31536000, immutable for truly
+  // immutable assets. It cannot be overridden. These immutable files contain a SHA-hash in
+  // the file name, so they can be safely cached indefinitely.
+  const { basePath } = ctx.buildConfig
+  ctx.netlifyConfig.headers.push({
+    for: `${basePath}/_next/static/*`,
+    values: {
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  })
+}
+
 export const copyStaticExport = async (ctx: PluginContext): Promise<void> => {
   await tracer.withActiveSpan('copyStaticExport', async () => {
     if (!ctx.exportDetail?.outDirectory) {
