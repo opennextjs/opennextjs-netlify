@@ -69,3 +69,150 @@ test('json data rewrite works', async ({ middlewarePages }) => {
 
   expect(data.pageProps.message).toBeDefined()
 })
+
+// those tests use `fetch` instead of `page.goto` intentionally to avoid potential client rendering
+// hiding any potential edge/server issues
+test.describe('Middleware with i18n and excluded paths', () => {
+  const DEFAULT_LOCALE = 'en'
+
+  /** helper function to extract JSON data from page rendering data with `<pre>{JSON.stringify(data)}</pre>` */
+  function extractDataFromHtml(html: string): Record<string, any> {
+    const match = html.match(/<pre>(?<rawInput>[^<]+)<\/pre>/)
+    if (!match || !match.groups?.rawInput) {
+      console.error('<pre> not found in html input', {
+        html,
+      })
+      throw new Error('Failed to extract data from HTML')
+    }
+
+    const { rawInput } = match.groups
+    const unescapedInput = rawInput.replaceAll('&quot;', '"')
+    try {
+      return JSON.parse(unescapedInput)
+    } catch (originalError) {
+      console.error('Failed to parse JSON', {
+        originalError,
+        rawInput,
+        unescapedInput,
+      })
+    }
+    throw new Error('Failed to extract data from HTML')
+  }
+
+  // those tests hit paths ending with `/json` which has special handling in middleware
+  // to return JSON response from middleware itself
+  test.describe('Middleware response path', () => {
+    test('should match on non-localized not excluded page path', async ({
+      middlewareI18nExcludedPaths,
+    }) => {
+      const response = await fetch(`${middlewareI18nExcludedPaths.url}/json`)
+
+      expect(response.headers.get('x-test-used-middleware')).toBe('true')
+      expect(response.status).toBe(200)
+
+      const { nextUrlPathname, nextUrlLocale } = await response.json()
+
+      expect(nextUrlPathname).toBe('/json')
+      expect(nextUrlLocale).toBe(DEFAULT_LOCALE)
+    })
+
+    test('should match on localized not excluded page path', async ({
+      middlewareI18nExcludedPaths,
+    }) => {
+      const response = await fetch(`${middlewareI18nExcludedPaths.url}/fr/json`)
+
+      expect(response.headers.get('x-test-used-middleware')).toBe('true')
+      expect(response.status).toBe(200)
+
+      const { nextUrlPathname, nextUrlLocale } = await response.json()
+
+      expect(nextUrlPathname).toBe('/json')
+      expect(nextUrlLocale).toBe('fr')
+    })
+  })
+
+  // those tests hit paths that don't end with `/json` while still satisfying middleware matcher
+  // so middleware should pass them through to origin
+  test.describe('Middleware passthrough', () => {
+    test('should match on non-localized not excluded page path', async ({
+      middlewareI18nExcludedPaths,
+    }) => {
+      const response = await fetch(`${middlewareI18nExcludedPaths.url}/html`)
+
+      expect(response.headers.get('x-test-used-middleware')).toBe('true')
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toMatch(/text\/html/)
+
+      const html = await response.text()
+      const { locale, params } = extractDataFromHtml(html)
+
+      expect(params).toMatchObject({ catchall: ['html'] })
+      expect(locale).toBe(DEFAULT_LOCALE)
+    })
+
+    test('should match on localized not excluded page path', async ({
+      middlewareI18nExcludedPaths,
+    }) => {
+      const response = await fetch(`${middlewareI18nExcludedPaths.url}/fr/html`)
+
+      expect(response.headers.get('x-test-used-middleware')).toBe('true')
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toMatch(/text\/html/)
+
+      const html = await response.text()
+      const { locale, params } = extractDataFromHtml(html)
+
+      expect(params).toMatchObject({ catchall: ['html'] })
+      expect(locale).toBe('fr')
+    })
+  })
+
+  // those tests hit paths that don't satisfy middleware matcher, so should go directly to origin
+  // without going through middleware
+  test.describe('Middleware skipping (paths not satisfying middleware matcher)', () => {
+    test('should NOT match on non-localized excluded API path', async ({
+      middlewareI18nExcludedPaths,
+    }) => {
+      const response = await fetch(`${middlewareI18nExcludedPaths.url}/api/html`)
+
+      expect(response.headers.get('x-test-used-middleware')).not.toBe('true')
+      expect(response.status).toBe(200)
+
+      const { params } = await response.json()
+
+      expect(params).toMatchObject({ catchall: ['html'] })
+    })
+
+    test('should NOT match on non-localized excluded page path', async ({
+      middlewareI18nExcludedPaths,
+    }) => {
+      const response = await fetch(`${middlewareI18nExcludedPaths.url}/excluded`)
+
+      expect(response.headers.get('x-test-used-middleware')).not.toBe('true')
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toMatch(/text\/html/)
+
+      const html = await response.text()
+      const { locale, params } = extractDataFromHtml(html)
+
+      expect(params).toMatchObject({ catchall: ['excluded'] })
+      expect(locale).toBe(DEFAULT_LOCALE)
+    })
+
+    test('should NOT match on localized excluded page path', async ({
+      middlewareI18nExcludedPaths,
+    }) => {
+      const response = await fetch(`${middlewareI18nExcludedPaths.url}/fr/excluded`)
+
+      expect(response.headers.get('x-test-used-middleware')).not.toBe('true')
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toMatch(/text\/html/)
+
+      const html = await response.text()
+      const { locale, params } = extractDataFromHtml(html)
+
+      expect(params).toMatchObject({ catchall: ['excluded'] })
+      expect(locale).toBe('fr')
+    })
+  })
+})
