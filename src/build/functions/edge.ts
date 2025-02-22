@@ -36,13 +36,23 @@ const augmentMatchers = (
   matchers: NextDefinition['matchers'],
   ctx: PluginContext,
 ): NextDefinition['matchers'] => {
-  if (!ctx.buildConfig.i18n) {
+  const i18NConfig = ctx.buildConfig.i18n
+  if (!i18NConfig) {
     return matchers
   }
   return matchers.flatMap((matcher) => {
     if (matcher.originalSource && matcher.locale !== false) {
       return [
-        matcher,
+        matcher.regexp
+          ? {
+              ...matcher,
+              // https://github.com/vercel/next.js/blob/5e236c9909a768dc93856fdfad53d4f4adc2db99/packages/next/src/build/analysis/get-page-static-info.ts#L332-L336
+              // Next is producing pretty broad matcher for i18n locale. Presumably rest of their infrastructure protects this broad matcher
+              // from matching on non-locale paths. For us this becomes request entry point, so we need to narrow it down to just defined locales
+              // otherwise users might get unexpected matches on paths like `/api*`
+              regexp: matcher.regexp.replace(/\[\^\/\.]+/g, `(${i18NConfig.locales.join('|')})`),
+            }
+          : matcher,
         {
           ...matcher,
           regexp: pathToRegexp(matcher.originalSource).source,
