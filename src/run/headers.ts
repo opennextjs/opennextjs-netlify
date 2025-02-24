@@ -300,6 +300,7 @@ export const setCacheControlHeaders = (
 
   if (
     cacheControl === null &&
+    ['GET', 'HEAD'].includes(request.method) &&
     !headers.has('cdn-cache-control') &&
     !headers.has('netlify-cdn-cache-control') &&
     requestContext.usedFsReadForNonFallback
