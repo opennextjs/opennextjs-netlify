@@ -154,17 +154,38 @@ test<FixtureTestContext>('Should serve correct locale-aware custom 404 pages', a
   ).toBe('fr')
 })
 
-describe('404 caching', () => {
-  describe('default nextjs 404 (no custom 404)', () => {
-    test.todo<FixtureTestContext>('not matching dynamic paths')
-    test.todo<FixtureTestContext>('matching dynamic path without revalidate')
-    test.todo<FixtureTestContext>('matching dynamic path with revalidate')
-  })
-
+describe.only('404 caching', () => {
   describe('404 without getStaticProps', () => {
-    test.todo<FixtureTestContext>('not matching dynamic paths')
-    test.todo<FixtureTestContext>('matching dynamic path without revalidate')
-    test.todo<FixtureTestContext>('matching dynamic path with revalidate')
+    test<FixtureTestContext>('not matching dynamic paths should be cached permanently', async (ctx) => {
+      await createFixture('page-router', ctx)
+      await runPlugin(ctx)
+
+      const notExistingPage = await invokeFunction(ctx, {
+        url: '/not-existing-page',
+      })
+
+      expect(notExistingPage.statusCode).toBe(404)
+
+      expect(
+        notExistingPage.headers['netlify-cdn-cache-control'],
+        'should be cached permanently',
+      ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
+    })
+    test<FixtureTestContext>('matching dynamic path with revalidate should be cached permanently', async (ctx) => {
+      await createFixture('page-router', ctx)
+      await runPlugin(ctx)
+
+      const notExistingPage = await invokeFunction(ctx, {
+        url: '/products/not-found-with-revalidate',
+      })
+
+      expect(notExistingPage.statusCode).toBe(404)
+
+      expect(
+        notExistingPage.headers['netlify-cdn-cache-control'],
+        'should be cached permanently',
+      ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
+    })
   })
 
   describe('404 with getStaticProps without revalidate', () => {
@@ -178,27 +199,14 @@ describe('404 caching', () => {
         url: '/base/path/not-existing-page',
       })
 
-      expect(
-        notExistingPage.headers['netlify-cdn-cache-control'],
-        'should be cached permanently',
-      ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
-    })
-    test<FixtureTestContext>('matching dynamic path without revalidate should be cached permanently', async (ctx) => {
-      console.log('[test] matching dynamic path without revalidate')
-
-      await createFixture('page-router-base-path-i18n', ctx)
-      await runPlugin(ctx)
-
-      const notExistingPage = await invokeFunction(ctx, {
-        url: '/base/path/products/not-found-no-revalidate',
-      })
+      expect(notExistingPage.statusCode).toBe(404)
 
       expect(
         notExistingPage.headers['netlify-cdn-cache-control'],
         'should be cached permanently',
       ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
     })
-    test<FixtureTestContext>('matching dynamic path with revalidate should be cached for revalidate time', async (ctx) => {
+    test<FixtureTestContext>('matching dynamic path with revalidate should be cached permanently', async (ctx) => {
       console.log('[test] matching dynamic path with revalidate')
 
       await createFixture('page-router-base-path-i18n', ctx)
@@ -209,18 +217,16 @@ describe('404 caching', () => {
       })
 
       expect(notExistingPage.statusCode).toBe(404)
-      // this page was not prerendered, so no STALE case here
+
       expect(
         notExistingPage.headers['netlify-cdn-cache-control'],
-        'should be cached for 600 seconds',
-      ).toBe('s-maxage=600, stale-while-revalidate=31536000, durable')
+        'should be cached permanently',
+      ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
     })
   })
 
   describe('404 with getStaticProps with revalidate', () => {
     test<FixtureTestContext>('not matching dynamic paths should be cached for 404 page revalidate', async (ctx) => {
-      console.log('[test] not matching dynamic paths')
-
       await createFixture('page-router-404-get-static-props-with-revalidate', ctx)
       await runPlugin(ctx)
 
@@ -228,61 +234,43 @@ describe('404 caching', () => {
       await invokeFunction(ctx, {
         url: 'not-existing-page',
       })
+
       await new Promise((res) => setTimeout(res, 100))
 
       const notExistingPage = await invokeFunction(ctx, {
         url: 'not-existing-page',
       })
 
+      expect(notExistingPage.statusCode).toBe(404)
+
       expect(
         notExistingPage.headers['netlify-cdn-cache-control'],
-        'should be cached permanently',
+        'should be cached for 404 page revalidate',
       ).toBe('s-maxage=300, stale-while-revalidate=31536000, durable')
     })
-    test.only<FixtureTestContext>('matching dynamic path without revalidate should be cached permanently', async (ctx) => {
-      console.log('[test] matching dynamic path without revalidate')
 
-      await createFixture('page-router-404-get-static-props-with-revalidate', ctx)
-      await runPlugin(ctx)
-
-      // // ignoring initial stale case
-      // await invokeFunction(ctx, {
-      //   url: 'products/not-found-no-revalidate',
-      // })
-      // await new Promise((res) => setTimeout(res, 100))
-
-      const notExistingPage = await invokeFunction(ctx, {
-        url: 'products/not-found-no-revalidate',
-      })
-
-      expect(
-        notExistingPage.headers['netlify-cdn-cache-control'],
-        'should be cached permanently',
-      ).toBe('s-maxage=31536000, durable')
-    })
-
-    test.only<FixtureTestContext>('matching dynamic path with revalidate should be cached for revalidate time', async (ctx) => {
+    test<FixtureTestContext>('matching dynamic path with revalidate should be cached for 404 page revalidate', async (ctx) => {
       console.log('[test] matching dynamic path with revalidate')
 
       await createFixture('page-router-404-get-static-props-with-revalidate', ctx)
       await runPlugin(ctx)
 
-      // // ignoring initial stale case
-      // await invokeFunction(ctx, {
-      //   url: 'products/not-found-with-revalidate',
-      // })
-      // await new Promise((res) => setTimeout(res, 100))
+      // ignoring initial stale case
+      await invokeFunction(ctx, {
+        url: 'products/not-found-with-revalidate',
+      })
+      await new Promise((res) => setTimeout(res, 100))
 
       const notExistingPage = await invokeFunction(ctx, {
         url: 'products/not-found-with-revalidate',
       })
 
       expect(notExistingPage.statusCode).toBe(404)
-      // this page was not prerendered, so no STALE case here
+
       expect(
         notExistingPage.headers['netlify-cdn-cache-control'],
-        'should be cached for 600 seconds',
-      ).toBe('s-maxage=600, stale-while-revalidate=31535400, durable')
+        'should be cached for 404 page revalidate',
+      ).toBe('s-maxage=300, stale-while-revalidate=31536000, durable')
     })
   })
 })
