@@ -217,7 +217,7 @@ function setCacheControlFromRequestContext(
     // if we are serving already stale response, instruct edge to not attempt to cache that response
     headers.get('x-nextjs-cache') === 'STALE'
       ? 'public, max-age=0, must-revalidate, durable'
-      : `s-maxage=${revalidate === false ? 31536000 : revalidate}, stale-while-revalidate=31536000, durable`
+      : `s-maxage=${revalidate || 31536000}, stale-while-revalidate=31536000, durable`
 
   headers.set('netlify-cdn-cache-control', cdnCacheControl)
 }
@@ -261,8 +261,6 @@ export const setCacheControlHeaders = (
     }
 
     if (
-      (!cacheControl || cacheControl.includes('no-store')) &&
-      typeof requestContext.pageHandlerRevalidate !== 'undefined' &&
       ['GET', 'HEAD'].includes(request.method) &&
       !headers.has('cdn-cache-control') &&
       !headers.has('netlify-cdn-cache-control')
