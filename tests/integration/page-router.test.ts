@@ -19,7 +19,6 @@ beforeAll(() => {
   // and passthrough everything else
   server = setupServer(
     http.post('https://api.netlify.com/api/v1/purge', () => {
-      console.log('intercepted purge api call')
       return HttpResponse.json({})
     }),
     http.all(/.*/, () => passthrough()),
@@ -91,7 +90,6 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
   expect(staticPageRevalidated.headers?.['cache-status']).toMatch(/"Next.js"; hit/)
   const dateCacheRevalidated = load(staticPageRevalidated.body)('[data-testid="date-now"]').text()
 
-  console.log({ dateCacheInitial, dateCacheRevalidated })
   expect(dateCacheInitial).not.toBe(dateCacheRevalidated)
 })
 
@@ -154,7 +152,7 @@ test<FixtureTestContext>('Should serve correct locale-aware custom 404 pages', a
   ).toBe('fr')
 })
 
-describe.only('404 caching', () => {
+describe('404 caching', () => {
   beforeAll(() => {
     process.env.ENABLE_404_CACHING = 'true'
   })
@@ -198,8 +196,6 @@ describe.only('404 caching', () => {
 
   describe('404 with getStaticProps without revalidate', () => {
     test<FixtureTestContext>('not matching dynamic paths should be cached permanently', async (ctx) => {
-      console.log('[test] not matching dynamic paths')
-
       await createFixture('page-router-base-path-i18n', ctx)
       await runPlugin(ctx)
 
@@ -215,8 +211,6 @@ describe.only('404 caching', () => {
       ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
     })
     test<FixtureTestContext>('matching dynamic path with revalidate should be cached permanently', async (ctx) => {
-      console.log('[test] matching dynamic path with revalidate')
-
       await createFixture('page-router-base-path-i18n', ctx)
       await runPlugin(ctx)
 
@@ -258,8 +252,6 @@ describe.only('404 caching', () => {
     })
 
     test<FixtureTestContext>('matching dynamic path with revalidate should be cached for 404 page revalidate', async (ctx) => {
-      console.log('[test] matching dynamic path with revalidate')
-
       await createFixture('page-router-404-get-static-props-with-revalidate', ctx)
       await runPlugin(ctx)
 
