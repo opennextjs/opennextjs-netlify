@@ -1,0 +1,20 @@
+{
+  "name": "middleware-i18n-excluded-paths",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "next build",
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^17.0.12",
+    "@types/react": "18.2.47",
+    "typescript": "^5.2.2"
+  }
+}
