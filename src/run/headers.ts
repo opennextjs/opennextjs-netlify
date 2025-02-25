@@ -261,6 +261,7 @@ export const setCacheControlHeaders = (
     }
 
     if (
+      process.env.ENABLE_404_CACHING &&
       ['GET', 'HEAD'].includes(request.method) &&
       !headers.has('cdn-cache-control') &&
       !headers.has('netlify-cdn-cache-control')

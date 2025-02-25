@@ -154,7 +154,15 @@ test<FixtureTestContext>('Should serve correct locale-aware custom 404 pages', a
   ).toBe('fr')
 })
 
-describe('404 caching', () => {
+describe.only('404 caching', () => {
+  beforeAll(() => {
+    process.env.ENABLE_404_CACHING = 'true'
+  })
+
+  afterAll(() => {
+    delete process.env.ENABLE_404_CACHING
+  })
+
   describe('404 without getStaticProps', () => {
     test<FixtureTestContext>('not matching dynamic paths should be cached permanently', async (ctx) => {
       await createFixture('page-router', ctx)
