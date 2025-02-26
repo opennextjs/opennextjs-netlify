@@ -161,7 +161,9 @@ export const buildResponse = async ({
 
       // Remove Netlify internal headers
       const headers = new Headers(
-        [...request.headers.entries()].filter(([key]) => !key.startsWith('x-nf-')),
+        [...request.headers.entries()].filter(
+          ([key]) => !key.startsWith('x-nf-') && !key.startsWith('debug-x-nf-'),
+        ),
       )
       if (request.body && !request.bodyUsed) {
         // This is not ideal, but streaming to an external URL doesn't work
