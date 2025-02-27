@@ -54,7 +54,7 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
   // test that it should request the 404.html file
   const call1 = await invokeFunction(ctx, { url: 'static/revalidate-not-existing' })
   expect(call1.statusCode).toBe(404)
-  expect(load(call1.body)('h1').text()).toBe('404')
+  expect(load(call1.body)('p').text()).toBe('Custom 404 page')
 
   // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
   // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that it
