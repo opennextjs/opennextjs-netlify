@@ -25,10 +25,11 @@ export default async function handler(req, context) {
         'site.id': context.site.id,
         'http.method': req.method,
         'http.target': req.url,
+        isBackgroundRevalidation: requestContext.isBackgroundRevalidation,
         monorepo: false,
         cwd: process.cwd(),
       })
-      const response = await serverHandler(req, context)
+      const response = await serverHandler(req, context, span, requestContext)
       span.setAttributes({
         'http.status_code': response.status,
       })
