@@ -261,10 +261,9 @@ export const setCacheControlHeaders = (
     }
 
     if (
-      process.env.ENABLE_404_CACHING &&
-      ['GET', 'HEAD'].includes(request.method) &&
-      !headers.has('cdn-cache-control') &&
-      !headers.has('netlify-cdn-cache-control')
+      process.env.CACHE_404_PAGE &&
+      request.url.endsWith('/404') &&
+      ['GET', 'HEAD'].includes(request.method)
     ) {
       // handle CDN Cache Control on 404 Page responses
       setCacheControlFromRequestContext(headers, requestContext.pageHandlerRevalidate)
