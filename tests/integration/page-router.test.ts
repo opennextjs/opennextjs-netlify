@@ -273,7 +273,7 @@ describe.skip('404 caching', () => {
 // This is a temporary fix to ensure that the 404 page itself is cached correctly when requested
 // directly. This is a workaround for a specific customer and should be removed once the 404 caching
 // is fixed in the next major version.
-describe.only('404 page caching', () => {
+describe('404 page caching', () => {
   beforeAll(() => {
     process.env.CACHE_404_PAGE = 'true'
   })
