@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
-import { test } from '../utils/playwright-helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
+import { test } from '../utils/playwright-helpers.js'
 
 export function waitFor(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis))
@@ -405,7 +405,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('h1')).toBe('404')
+    expect(await page.textContent('p')).toBe('Custom 404 page')
 
     // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
     // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that
@@ -429,7 +429,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('h1')).toBe('404')
+    expect(await page.textContent('p')).toBe('Custom 404 page')
 
     expect(headers['netlify-cdn-cache-control']).toBe(
       nextVersionSatisfies('>=15.0.0-canary.187')
@@ -1269,7 +1269,7 @@ test.describe('Page Router with basePath and i18n', () => {
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('h1')).toBe('404')
+    expect(await page.textContent('p')).toBe('Custom 404 page')
 
     // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
     // after that 404 pages would have `private` directive, before that it would not
@@ -1292,7 +1292,7 @@ test.describe('Page Router with basePath and i18n', () => {
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('h1')).toBe('404')
+    expect(await page.textContent('p')).toBe('Custom 404 page')
 
     expect(headers['netlify-cdn-cache-control']).toBe(
       nextVersionSatisfies('>=15.0.0-canary.187')
