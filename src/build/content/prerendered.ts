@@ -57,6 +57,7 @@ const routeToFilePath = (path: string) => {
 
 const buildPagesCacheValue = async (
   path: string,
+  initialRevalidateSeconds: number | false | undefined,
   shouldUseEnumKind: boolean,
   shouldSkipJson = false,
 ): Promise<NetlifyCachedPageValue> => ({
@@ -65,6 +66,7 @@ const buildPagesCacheValue = async (
   pageData: shouldSkipJson ? {} : JSON.parse(await readFile(`${path}.json`, 'utf-8')),
   headers: undefined,
   status: undefined,
+  revalidate: initialRevalidateSeconds,
 })
 
 const buildAppCacheValue = async (
@@ -178,6 +180,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
                   }
                   value = await buildPagesCacheValue(
                     join(ctx.publishDir, 'server/pages', key),
+                    meta.initialRevalidateSeconds,
                     shouldUseEnumKind,
                   )
                   break
@@ -210,6 +213,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
           const key = routeToFilePath(route)
           const value = await buildPagesCacheValue(
             join(ctx.publishDir, 'server/pages', key),
+            undefined,
             shouldUseEnumKind,
             true, // there is no corresponding json file for fallback, so we are skipping it for this entry
           )
