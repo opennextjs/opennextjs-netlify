@@ -25,6 +25,16 @@ setupWaitUntil()
 
 let nextHandler: WorkerRequestHandler, nextConfig: NextConfigComplete
 
+function expandHeaders(prefix: string, headers: Headers) {
+  return [...headers.entries()].reduce(
+    (acc, [key, value]) => {
+      acc[`${prefix}.${key}`] = value
+      return acc
+    },
+    {} as Record<string, string>,
+  )
+}
+
 /**
  * When Next.js proxies requests externally, it writes the response back as-is.
  * In some cases, this includes Transfer-Encoding: chunked.
@@ -112,14 +122,14 @@ export default async (
     }
 
     const nextCache = response.headers.get('x-nextjs-cache')
-    const isServedFromCache = nextCache === 'HIT' || nextCache === 'STALE'
+    const isServedFromNextCache = nextCache === 'HIT' || nextCache === 'STALE'
 
     topLevelSpan.setAttributes({
       'x-nextjs-cache': nextCache ?? undefined,
-      isServedFromCache,
+      isServedFromNextCache,
     })
 
-    if (isServedFromCache) {
+    if (isServedFromNextCache) {
       await adjustDateHeader({
         headers: response.headers,
         request,
@@ -158,6 +168,20 @@ export default async (
     if (!response.body) {
       await waitForBackgroundWork()
     }
+
+    topLevelSpan.setAttributes({
+      isBackgroundRevalidation: requestContext.isBackgroundRevalidation,
+      ...expandHeaders('request.headers', request.headers),
+      ...expandHeaders('response.headers', response.headers),
+    })
+
+    // requestContext.logger
+    //   .withFields({
+    //     isBackgroundRevalidation: requestContext.isBackgroundRevalidation,
+    //     ...expandHeaders('request.headers', request.headers),
+    //     ...expandHeaders('response.headers', response.headers),
+    //   })
+    //   .debug('[NetlifyNextRuntime] Response cache headers')
 
     return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
   })
