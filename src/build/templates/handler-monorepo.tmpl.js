@@ -28,6 +28,7 @@ export default async function (req, context) {
         'site.id': context.site.id,
         'http.method': req.method,
         'http.target': req.url,
+        isBackgroundRevalidation: requestContext.isBackgroundRevalidation,
         monorepo: true,
         cwd: '{{cwd}}',
       })
@@ -35,7 +36,7 @@ export default async function (req, context) {
         const { default: handler } = await import('{{nextServerHandler}}')
         cachedHandler = handler
       }
-      const response = await cachedHandler(req, context)
+      const response = await cachedHandler(req, context, span, requestContext)
       span.setAttributes({
         'http.status_code': response.status,
       })

@@ -390,6 +390,63 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     expect(beforeFetch.localeCompare(date2)).toBeLessThan(0)
   })
 
+  test('Background SWR invocations can store fresh responses in CDN cache', async ({
+    page,
+    pageRouter,
+  }) => {
+    const slug = Date.now()
+    const pathname = `/revalidate-60/${slug}`
+
+    const beforeFirstFetch = new Date().toISOString()
+
+    const response1 = await page.goto(new URL(pathname, pageRouter.url).href)
+    expect(response1?.status()).toBe(200)
+    expect(response1?.headers()['cache-status']).toMatch(
+      /"Netlify (Edge|Durable)"; fwd=(uri-miss(; stored)?|miss)/m,
+    )
+    expect(response1?.headers()['netlify-cdn-cache-control']).toMatch(
+      /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
+    )
+
+    // ensure response was NOT produced before invocation
+    const date1 = (await page.textContent('[data-testid="date-now"]')) ?? ''
+    expect(date1.localeCompare(beforeFirstFetch)).toBeGreaterThan(0)
+
+    // allow page to get stale
+    await page.waitForTimeout(60_000)
+
+    const response2 = await page.goto(new URL(pathname, pageRouter.url).href)
+    expect(response2?.status()).toBe(200)
+    expect(response2?.headers()['cache-status']).toMatch(
+      /"Netlify (Edge|Durable)"; hit; fwd=stale/m,
+    )
+    expect(response2?.headers()['netlify-cdn-cache-control']).toMatch(
+      /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
+    )
+
+    const date2 = (await page.textContent('[data-testid="date-now"]')) ?? ''
+    expect(date2).toBe(date1)
+
+    // wait a bit to ensure background work has a chance to finish
+    // (it should take at least 5 seconds to regenerate, so we should wait at least that much to get fresh response)
+    await page.waitForTimeout(10_000)
+
+    // subsequent request should be served with fresh response from cdn cache, as previous request
+    // should result in background SWR invocation that serves fresh response that was stored in CDN cache
+    const response3 = await page.goto(new URL(pathname, pageRouter.url).href)
+    expect(response3?.status()).toBe(200)
+    expect(response3?.headers()['cache-status']).toMatch(
+      // hit, without being followed by ';fwd=stale'
+      /"Netlify (Edge|Durable)"; hit(?!; fwd=stale)/m,
+    )
+    expect(response3?.headers()['netlify-cdn-cache-control']).toMatch(
+      /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
+    )
+
+    const date3 = (await page.textContent('[data-testid="date-now"]')) ?? ''
+    expect(date3.localeCompare(date2)).toBeGreaterThan(0)
+  })
+
   test('should serve 404 page when requesting non existing page (no matching route)', async ({
     page,
     pageRouter,
