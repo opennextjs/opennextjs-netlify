@@ -67,7 +67,9 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         const revalidateAfter = revalidate * 1_000 + blob.lastModified
         return (revalidateAfter - Date.now()) / 1_000
       }
-      return revalidate === false ? 'PERMANENT' : 'NOT SET'
+      if (revalidate === false) {
+        return 'PERMANENT'
+      }
     }
 
     return 'NOT SET'

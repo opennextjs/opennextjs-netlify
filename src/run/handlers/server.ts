@@ -112,14 +112,14 @@ export default async (
     }
 
     const nextCache = response.headers.get('x-nextjs-cache')
-    const isServedFromCache = nextCache === 'HIT' || nextCache === 'STALE'
+    const isServedFromNextCache = nextCache === 'HIT' || nextCache === 'STALE'
 
     topLevelSpan.setAttributes({
       'x-nextjs-cache': nextCache ?? undefined,
-      isServedFromCache,
+      isServedFromNextCache,
     })
 
-    if (isServedFromCache) {
+    if (isServedFromNextCache) {
       await adjustDateHeader({
         headers: response.headers,
         request,
