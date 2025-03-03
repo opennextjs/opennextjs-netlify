@@ -9,6 +9,13 @@ const Product = ({ time, slug }) => (
 )
 
 export async function getStaticProps({ params }) {
+  if (params.slug === 'not-found-with-revalidate') {
+    return {
+      notFound: true,
+      revalidate: 600,
+    }
+  }
+
   return {
     props: {
       time: new Date().toISOString(),

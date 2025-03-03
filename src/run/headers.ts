@@ -2,6 +2,7 @@ import type { Span } from '@opentelemetry/api'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
 import { encodeBlobKey } from '../shared/blobkey.js'
+import type { NetlifyCachedRouteValue } from '../shared/cache-types.cjs'
 
 import { getLogger, RequestContext } from './handlers/request-context.cjs'
 import type { RuntimeTracer } from './handlers/tracer.cjs'
@@ -197,6 +198,19 @@ export const adjustDateHeader = async ({
   headers.set('date', lastModifiedDate.toUTCString())
 }
 
+function setCacheControlFromRequestContext(
+  headers: Headers,
+  revalidate: NetlifyCachedRouteValue['revalidate'],
+) {
+  const cdnCacheControl =
+    // if we are serving already stale response, instruct edge to not attempt to cache that response
+    headers.get('x-nextjs-cache') === 'STALE'
+      ? 'public, max-age=0, must-revalidate, durable'
+      : `s-maxage=${revalidate || 31536000}, stale-while-revalidate=31536000, durable`
+
+  headers.set('netlify-cdn-cache-control', cdnCacheControl)
+}
+
 /**
  * Ensure stale-while-revalidate and s-maxage don't leak to the client, but
  * assume the user knows what they are doing if CDN cache controls are set
@@ -214,13 +228,7 @@ export const setCacheControlHeaders = (
     !headers.has('netlify-cdn-cache-control')
   ) {
     // handle CDN Cache Control on Route Handler responses
-    const cdnCacheControl =
-      // if we are serving already stale response, instruct edge to not attempt to cache that response
-      headers.get('x-nextjs-cache') === 'STALE'
-        ? 'public, max-age=0, must-revalidate, durable'
-        : `s-maxage=${requestContext.routeHandlerRevalidate === false ? 31536000 : requestContext.routeHandlerRevalidate}, stale-while-revalidate=31536000, durable`
-
-    headers.set('netlify-cdn-cache-control', cdnCacheControl)
+    setCacheControlFromRequestContext(headers, requestContext.routeHandlerRevalidate)
     return
   }
 
@@ -231,14 +239,27 @@ export const setCacheControlHeaders = (
       .log('NetlifyHeadersHandler.trailingSlashRedirect')
   }
 
-  if (status === 404 && request.url.endsWith('.php')) {
-    // temporary CDN Cache Control handling for bot probes on PHP files
-    // https://linear.app/netlify/issue/FRB-1344/prevent-excessive-ssr-invocations-due-to-404-routes
-    headers.set('cache-control', 'public, max-age=0, must-revalidate')
-    headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
+  const cacheControl = headers.get('cache-control')
+  if (status === 404) {
+    if (request.url.endsWith('.php')) {
+      // temporary CDN Cache Control handling for bot probes on PHP files
+      // https://linear.app/netlify/issue/FRB-1344/prevent-excessive-ssr-invocations-due-to-404-routes
+      headers.set('cache-control', 'public, max-age=0, must-revalidate')
+      headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
+      return
+    }
+
+    if (
+      process.env.CACHE_404_PAGE &&
+      request.url.endsWith('/404') &&
+      ['GET', 'HEAD'].includes(request.method)
+    ) {
+      // handle CDN Cache Control on 404 Page responses
+      setCacheControlFromRequestContext(headers, requestContext.pageHandlerRevalidate)
+      return
+    }
   }
 
-  const cacheControl = headers.get('cache-control')
   if (
     cacheControl !== null &&
     ['GET', 'HEAD'].includes(request.method) &&
