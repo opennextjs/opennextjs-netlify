@@ -78,7 +78,9 @@ type CachedRouteValueToNetlify<T> = T extends CachedRouteValue
       ? NetlifyCachedAppPageValue
       : T
 
-type MapCachedRouteValueToNetlify<T> = { [K in keyof T]: CachedRouteValueToNetlify<T[K]> }
+type MapCachedRouteValueToNetlify<T> = { [K in keyof T]: CachedRouteValueToNetlify<T[K]> } & {
+  lastModified: number
+}
 
 /**
  * Used for storing in blobs and reading from blobs
