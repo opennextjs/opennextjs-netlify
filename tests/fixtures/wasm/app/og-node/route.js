@@ -6,3 +6,5 @@ export async function GET() {
     height: 630,
   })
 }
+
+export const dynamic = 'force-dynamic'
