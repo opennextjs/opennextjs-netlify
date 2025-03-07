@@ -197,7 +197,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           join(this.options.serverDistDir, '..', 'prerender-manifest.json'),
         ) as PrerenderManifest
 
-        if (typeof cacheControl !== undefined) {
+        if (typeof cacheControl !== 'undefined') {
           // instead of `revalidate` property, we might get `cacheControls` ( https://github.com/vercel/next.js/pull/76207 )
           // then we need to keep track of revalidate values via SharedCacheControls
           const { SharedCacheControls } = await import(
