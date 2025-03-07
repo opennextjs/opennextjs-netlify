@@ -413,12 +413,12 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     expect(date1.localeCompare(beforeFirstFetch)).toBeGreaterThan(0)
 
     // allow page to get stale
-    await page.waitForTimeout(60_000)
+    await page.waitForTimeout(61_000)
 
     const response2 = await page.goto(new URL(pathname, pageRouter.url).href)
     expect(response2?.status()).toBe(200)
     expect(response2?.headers()['cache-status']).toMatch(
-      /"Netlify (Edge|Durable)"; hit; fwd=stale/m,
+      /("Netlify Edge"; hit; fwd=stale|"Netlify Durable"; hit; ttl=-[0-9]+)/m,
     )
     expect(response2?.headers()['netlify-cdn-cache-control']).toMatch(
       /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
@@ -436,8 +436,8 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const response3 = await page.goto(new URL(pathname, pageRouter.url).href)
     expect(response3?.status()).toBe(200)
     expect(response3?.headers()['cache-status']).toMatch(
-      // hit, without being followed by ';fwd=stale'
-      /"Netlify (Edge|Durable)"; hit(?!; fwd=stale)/m,
+      // hit, without being followed by ';fwd=stale' for edge or negative TTL for durable, optionally with fwd=stale
+      /("Netlify Edge"; hit(?!; fwd=stale)|"Netlify Durable"; hit(?!; ttl=-[0-9]+))/m,
     )
     expect(response3?.headers()['netlify-cdn-cache-control']).toMatch(
       /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
