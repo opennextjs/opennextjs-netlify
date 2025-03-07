@@ -183,37 +183,56 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
   private async injectEntryToPrerenderManifest(
     key: string,
-    revalidate: NetlifyCachedPageValue['revalidate'],
+    { revalidate, cacheControl }: Pick<NetlifyCachedPageValue, 'revalidate' | 'cacheControl'>,
   ) {
-    if (this.options.serverDistDir && (typeof revalidate === 'number' || revalidate === false)) {
+    if (
+      this.options.serverDistDir &&
+      (typeof revalidate === 'number' ||
+        revalidate === false ||
+        typeof cacheControl !== 'undefined')
+    ) {
       try {
         const { loadManifest } = await import('next/dist/server/load-manifest.js')
         const prerenderManifest = loadManifest(
           join(this.options.serverDistDir, '..', 'prerender-manifest.json'),
         ) as PrerenderManifest
 
-        try {
-          const { normalizePagePath } = await import(
-            'next/dist/shared/lib/page-path/normalize-page-path.js'
+        if (typeof cacheControl !== undefined) {
+          // instead of `revalidate` property, we might get `cacheControls` ( https://github.com/vercel/next.js/pull/76207 )
+          // then we need to keep track of revalidate values via SharedCacheControls
+          const { SharedCacheControls } = await import(
+            // @ts-expect-error supporting multiple next version, this module is not resolvable with currently used dev dependency
+            // eslint-disable-next-line import/no-unresolved, n/no-missing-import
+            'next/dist/server/lib/incremental-cache/shared-cache-controls.js'
           )
+          const sharedCacheControls = new SharedCacheControls(prerenderManifest)
+          sharedCacheControls.set(key, cacheControl)
+        } else if (typeof revalidate === 'number' || revalidate === false) {
+          // if we don't get cacheControls, but we still get revalidate, it should mean we are before
+          // https://github.com/vercel/next.js/pull/76207
+          try {
+            const { normalizePagePath } = await import(
+              'next/dist/shared/lib/page-path/normalize-page-path.js'
+            )
 
-          prerenderManifest.routes[key] = {
-            experimentalPPR: undefined,
-            dataRoute: posixJoin('/_next/data', `${normalizePagePath(key)}.json`),
-            srcRoute: null, // FIXME: provide actual source route, however, when dynamically appending it doesn't really matter
-            initialRevalidateSeconds: revalidate,
-            // Pages routes do not have a prefetch data route.
-            prefetchDataRoute: undefined,
+            prerenderManifest.routes[key] = {
+              experimentalPPR: undefined,
+              dataRoute: posixJoin('/_next/data', `${normalizePagePath(key)}.json`),
+              srcRoute: null, // FIXME: provide actual source route, however, when dynamically appending it doesn't really matter
+              initialRevalidateSeconds: revalidate,
+              // Pages routes do not have a prefetch data route.
+              prefetchDataRoute: undefined,
+            }
+          } catch {
+            // depending on Next.js version - prerender manifest might not be mutable
+            // https://github.com/vercel/next.js/pull/64313
+            // if it's not mutable we will try to use SharedRevalidateTimings ( https://github.com/vercel/next.js/pull/64370) instead
+            const { SharedRevalidateTimings } = await import(
+              'next/dist/server/lib/incremental-cache/shared-revalidate-timings.js'
+            )
+            const sharedRevalidateTimings = new SharedRevalidateTimings(prerenderManifest)
+            sharedRevalidateTimings.set(key, revalidate)
           }
-        } catch {
-          // depending on Next.js version - prerender manifest might not be mutable
-          // https://github.com/vercel/next.js/pull/64313
-          // if it's not mutable we will try to use SharedRevalidateTimings ( https://github.com/vercel/next.js/pull/64370) instead
-          const { SharedRevalidateTimings } = await import(
-            'next/dist/server/lib/incremental-cache/shared-revalidate-timings.js'
-          )
-          const sharedRevalidateTimings = new SharedRevalidateTimings(prerenderManifest)
-          sharedRevalidateTimings.set(key, revalidate)
         }
       } catch {}
     }
@@ -315,7 +334,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
           span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
-          await this.injectEntryToPrerenderManifest(key, revalidate)
+          await this.injectEntryToPrerenderManifest(key, blob.value)
 
           return {
             lastModified: blob.lastModified,
@@ -327,7 +346,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
           span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
-          await this.injectEntryToPrerenderManifest(key, revalidate)
+          await this.injectEntryToPrerenderManifest(key, blob.value)
 
           return {
             lastModified: blob.lastModified,
@@ -355,7 +374,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     if (isCachedRouteValue(data)) {
       return {
         ...data,
-        revalidate: context.revalidate,
+        revalidate: context.revalidate ?? context.cacheControl?.revalidate,
+        cacheControl: context.cacheControl,
         body: data.body.toString('base64'),
       }
     }
@@ -363,14 +383,16 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     if (isCachedPageValue(data)) {
       return {
         ...data,
-        revalidate: context.revalidate,
+        revalidate: context.revalidate ?? context.cacheControl?.revalidate,
+        cacheControl: context.cacheControl,
       }
     }
 
     if (data?.kind === 'APP_PAGE') {
       return {
         ...data,
-        revalidate: context.revalidate,
+        revalidate: context.revalidate ?? context.cacheControl?.revalidate,
+        cacheControl: context.cacheControl,
         rscData: data.rscData?.toString('base64'),
       }
     }

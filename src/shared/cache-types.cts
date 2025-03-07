@@ -12,6 +12,11 @@ import type {
 
 export type { CacheHandlerContext } from 'next/dist/server/lib/incremental-cache/index.js'
 
+type CacheControl = {
+  revalidate: Parameters<CacheHandler['set']>[2]['revalidate']
+  expire: number | undefined
+}
+
 /**
  * Shape of the cache value that is returned from CacheHandler.get or passed to CacheHandler.set
  */
@@ -28,6 +33,7 @@ export type NetlifyCachedRouteValue = Omit<CachedRouteValueForMultipleVersions, 
   // Next.js doesn't produce cache-control tag we use to generate cdn cache control
   // so store needed values as part of cached response data
   revalidate?: Parameters<CacheHandler['set']>[2]['revalidate']
+  cacheControl?: CacheControl
 }
 
 /**
@@ -50,6 +56,7 @@ export type NetlifyCachedAppPageValue = Omit<
   // Next.js stores rscData as buffer, while we store it as base64 encoded string
   rscData: string | undefined
   revalidate?: Parameters<CacheHandler['set']>[2]['revalidate']
+  cacheControl?: CacheControl
 }
 
 /**
@@ -64,6 +71,7 @@ type IncrementalCachedPageValueForMultipleVersions = Omit<IncrementalCachedPageV
  */
 export type NetlifyCachedPageValue = IncrementalCachedPageValueForMultipleVersions & {
   revalidate?: Parameters<CacheHandler['set']>[2]['revalidate']
+  cacheControl?: CacheControl
 }
 
 export type CachedFetchValueForMultipleVersions = Omit<CachedFetchValue, 'kind'> & {
@@ -131,4 +139,18 @@ type MapCacheHandlerClassMethod<T> = T extends (...args: infer Args) => infer Re
 
 type MapCacheHandlerClass<T> = { [K in keyof T]: MapCacheHandlerClassMethod<T[K]> }
 
-export type CacheHandlerForMultipleVersions = MapCacheHandlerClass<CacheHandler>
+type BaseCacheHandlerForMultipleVersions = MapCacheHandlerClass<CacheHandler>
+
+type CacheHandlerSetContext = Parameters<CacheHandler['set']>[2]
+
+type CacheHandlerSetContextForMultipleVersions = CacheHandlerSetContext & {
+  cacheControl?: CacheControl
+}
+
+export type CacheHandlerForMultipleVersions = BaseCacheHandlerForMultipleVersions & {
+  set: (
+    key: Parameters<BaseCacheHandlerForMultipleVersions['set']>[0],
+    value: Parameters<BaseCacheHandlerForMultipleVersions['set']>[1],
+    context: CacheHandlerSetContextForMultipleVersions,
+  ) => ReturnType<BaseCacheHandlerForMultipleVersions['set']>
+}
