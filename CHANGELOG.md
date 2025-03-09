@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.10.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.4...v5.10.0) (2025-03-07)
+
+
+### Features
+
+* make CDN SWR background revalidation discard stale cache content in order to produce fresh responses ([#2765](https://github.com/opennextjs/opennextjs-netlify/issues/2765)) ([f8004d7](https://github.com/opennextjs/opennextjs-netlify/commit/f8004d76ba7bb669ffc17c744a0df8e132473979))
+
+
+### Bug Fixes
+
+* apply caching headers to pages router 404 with getStaticProps ([#2764](https://github.com/opennextjs/opennextjs-netlify/issues/2764)) ([3301077](https://github.com/opennextjs/opennextjs-netlify/commit/3301077e8dd902241f79bb983ea7b73509e8d982))
+* don't cache POST when serving embedded static html ([#2766](https://github.com/opennextjs/opennextjs-netlify/issues/2766)) ([28217d4](https://github.com/opennextjs/opennextjs-netlify/commit/28217d47b3fd7b3ec639f860fb03fd9137ab5128))
+* dynamic not-prerendered routes revalidate tracking for next@&gt;=v15.2.1-canary.4 ([b242927](https://github.com/opennextjs/opennextjs-netlify/commit/b242927cdc3a1f0df227889b333f3be7e921c73b))
+* narrow down middleware i18n locale matcher to concrete locales ([#2768](https://github.com/opennextjs/opennextjs-netlify/issues/2768)) ([f3e24b1](https://github.com/opennextjs/opennextjs-netlify/commit/f3e24b1d2e4674574eef4c628d58b2d2a41e0be9))
+* set immutable cache-control for _next/static ([#2767](https://github.com/opennextjs/opennextjs-netlify/issues/2767)) ([5bd68dd](https://github.com/opennextjs/opennextjs-netlify/commit/5bd68ddb13109cb838056bbfcc8eca1113b69099))
+
 ## [5.9.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.3...v5.9.4) (2025-01-22)
 
 
