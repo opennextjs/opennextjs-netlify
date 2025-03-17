@@ -147,7 +147,7 @@ async function ensureNoRegionalBlobsModuleDuplicates() {
   }
   if (!foundInExpectedModule) {
     throw new Error(
-      'Expected to find "fetchBeforeNextPatchedIt" variable in "run/regional-blob-store.cjs", but it was not found. This might indicate setup change that require bundling validation in "tools/build.js" to be adjusted.',
+      'Expected to find "fetchBeforeNextPatchedIt" variable in "run/regional-blob-store.cjs", but it was not found. This might indicate a setup change that requires the bundling validation in "tools/build.js" to be adjusted.',
     )
   }
   if (unexpectedModulesContainingFetchBeforeNextPatchedIt.length !== 0) {
