@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs'
-import { cp, rm } from 'node:fs/promises'
+import { cp, readFile, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { Readable } from 'stream'
 import { finished } from 'stream/promises'
@@ -126,8 +126,38 @@ await Promise.all([
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
 ])
 
+async function ensureNoRegionalBlobsModuleDuplicates() {
+  const REGIONAL_BLOB_STORE_CONTENT_TO_FIND = 'fetchBeforeNextPatchedIt'
+
+  const filesToTest = await glob(`${OUT_DIR}/**/*.{js,cjs}`)
+  const unexpectedModulesContainingFetchBeforeNextPatchedIt = []
+  let foundInExpectedModule = false
+  for (const fileToTest of filesToTest) {
+    const content = await readFile(fileToTest, 'utf-8')
+    if (content.includes(REGIONAL_BLOB_STORE_CONTENT_TO_FIND)) {
+      if (fileToTest.endsWith('run/regional-blob-store.cjs')) {
+        foundInExpectedModule = true
+      } else {
+        unexpectedModulesContainingFetchBeforeNextPatchedIt.push(fileToTest)
+      }
+    }
+  }
+  if (!foundInExpectedModule) {
+    throw new Error(
+      'Expected to find "fetchBeforeNextPatchedIt" variable in "run/regional-blob-store.cjs", but it was not found. This might indicate setup change that require bundling validation in "tools/build.js" to be adjusted.',
+    )
+  }
+  if (unexpectedModulesContainingFetchBeforeNextPatchedIt.length !== 0) {
+    throw new Error(
+      `Bundling produced unexpected duplicates of "regional-blob-store" module in following built modules:\n${unexpectedModulesContainingFetchBeforeNextPatchedIt.map((filePath) => ` - ${filePath}`).join('\n')}`,
+    )
+  }
+}
+
 if (watch) {
   console.log('Starting compilation in watch mode...')
 } else {
+  await ensureNoRegionalBlobsModuleDuplicates()
+
   console.log('Finished building 🎉')
 }
