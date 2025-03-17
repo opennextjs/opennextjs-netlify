@@ -13,11 +13,14 @@ import {
   setCacheTagsHeaders,
   setVaryHeaders,
 } from '../headers.js'
+import { setFetchBeforeNextPatchedIt } from '../regional-blob-store.cjs'
 import { nextResponseProxy } from '../revalidate.js'
 
 import { getLogger, type RequestContext } from './request-context.cjs'
 import { getTracer } from './tracer.cjs'
 import { setupWaitUntil } from './wait-until.cjs'
+
+setFetchBeforeNextPatchedIt(globalThis.fetch)
 
 const nextImportPromise = import('../next.cjs')
 
