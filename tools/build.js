@@ -1,6 +1,7 @@
 import { createWriteStream } from 'node:fs'
 import { cp, readFile, rm } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Readable } from 'stream'
 import { finished } from 'stream/promises'
 
@@ -10,6 +11,8 @@ import glob from 'fast-glob'
 
 const OUT_DIR = 'dist'
 await rm(OUT_DIR, { force: true, recursive: true })
+
+const repoDirectory = dirname(resolve(fileURLToPath(import.meta.url), '..'))
 
 const entryPointsESM = await glob('src/**/*.ts', { ignore: ['**/*.test.ts'] })
 const entryPointsCJS = await glob('src/**/*.cts')
@@ -39,7 +42,7 @@ async function bundle(entryPoints, format, watch) {
         name: 'mark-runtime-modules-as-external',
         setup(pluginBuild) {
           pluginBuild.onResolve({ filter: /^\..*\.c?js$/ }, (args) => {
-            if (args.importer.includes(join('opennextjs-netlify', 'src'))) {
+            if (args.importer.includes(join(repoDirectory, 'src'))) {
               return { path: args.path, external: true }
             }
           })
