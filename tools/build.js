@@ -1,6 +1,7 @@
 import { createWriteStream } from 'node:fs'
-import { cp, rm } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { cp, readFile, rm } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Readable } from 'stream'
 import { finished } from 'stream/promises'
 
@@ -10,6 +11,8 @@ import glob from 'fast-glob'
 
 const OUT_DIR = 'dist'
 await rm(OUT_DIR, { force: true, recursive: true })
+
+const repoDirectory = dirname(resolve(fileURLToPath(import.meta.url), '..'))
 
 const entryPointsESM = await glob('src/**/*.ts', { ignore: ['**/*.test.ts'] })
 const entryPointsCJS = await glob('src/**/*.cts')
@@ -39,7 +42,7 @@ async function bundle(entryPoints, format, watch) {
         name: 'mark-runtime-modules-as-external',
         setup(pluginBuild) {
           pluginBuild.onResolve({ filter: /^\..*\.c?js$/ }, (args) => {
-            if (args.importer.includes(join('opennextjs-netlify', 'src'))) {
+            if (args.importer.includes(join(repoDirectory, 'src'))) {
               return { path: args.path, external: true }
             }
           })
@@ -126,8 +129,38 @@ await Promise.all([
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
 ])
 
+async function ensureNoRegionalBlobsModuleDuplicates() {
+  const REGIONAL_BLOB_STORE_CONTENT_TO_FIND = 'fetchBeforeNextPatchedIt'
+
+  const filesToTest = await glob(`${OUT_DIR}/**/*.{js,cjs}`)
+  const unexpectedModulesContainingFetchBeforeNextPatchedIt = []
+  let foundInExpectedModule = false
+  for (const fileToTest of filesToTest) {
+    const content = await readFile(fileToTest, 'utf-8')
+    if (content.includes(REGIONAL_BLOB_STORE_CONTENT_TO_FIND)) {
+      if (fileToTest.endsWith('run/regional-blob-store.cjs')) {
+        foundInExpectedModule = true
+      } else {
+        unexpectedModulesContainingFetchBeforeNextPatchedIt.push(fileToTest)
+      }
+    }
+  }
+  if (!foundInExpectedModule) {
+    throw new Error(
+      'Expected to find "fetchBeforeNextPatchedIt" variable in "run/regional-blob-store.cjs", but it was not found. This might indicate a setup change that requires the bundling validation in "tools/build.js" to be adjusted.',
+    )
+  }
+  if (unexpectedModulesContainingFetchBeforeNextPatchedIt.length !== 0) {
+    throw new Error(
+      `Bundling produced unexpected duplicates of "regional-blob-store" module in following built modules:\n${unexpectedModulesContainingFetchBeforeNextPatchedIt.map((filePath) => ` - ${filePath}`).join('\n')}`,
+    )
+  }
+}
+
 if (watch) {
   console.log('Starting compilation in watch mode...')
 } else {
+  await ensureNoRegionalBlobsModuleDuplicates()
+
   console.log('Finished building 🎉')
 }
