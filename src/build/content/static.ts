@@ -6,8 +6,8 @@ import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
 
-import type { HtmlBlob } from '../../run/next.cjs'
 import { encodeBlobKey } from '../../shared/blobkey.js'
+import type { HtmlBlob } from '../../shared/cache-types.cjs'
 import { PluginContext } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 

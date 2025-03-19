@@ -154,3 +154,12 @@ export type CacheHandlerForMultipleVersions = BaseCacheHandlerForMultipleVersion
     context: CacheHandlerSetContextForMultipleVersions,
   ) => ReturnType<BaseCacheHandlerForMultipleVersions['set']>
 }
+
+export type TagManifest = { revalidatedAt: number }
+
+export type HtmlBlob = {
+  html: string
+  isFallback: boolean
+}
+
+export type BlobType = NetlifyCacheHandlerValue | TagManifest | HtmlBlob

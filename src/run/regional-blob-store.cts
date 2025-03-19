@@ -1,5 +1,9 @@
 import { getDeployStore, GetWithMetadataOptions, Store } from '@netlify/blobs'
 
+import type { BlobType } from '../shared/cache-types.cjs'
+
+import { getTracer } from './handlers/tracer.cjs'
+
 const FETCH_BEFORE_NEXT_PATCHED_IT = Symbol.for('nf-not-patched-fetch')
 const extendedGlobalThis = globalThis as typeof globalThis & {
   [FETCH_BEFORE_NEXT_PATCHED_IT]?: typeof globalThis.fetch
@@ -53,10 +57,52 @@ const fetchBeforeNextPatchedItFallback = forceOptOutOfUsingDataCache(
 const getFetchBeforeNextPatchedIt = () =>
   extendedGlobalThis[FETCH_BEFORE_NEXT_PATCHED_IT] ?? fetchBeforeNextPatchedItFallback
 
-export const getRegionalBlobStore = (args: GetWithMetadataOptions = {}): Store => {
+const getRegionalBlobStore = (args: GetWithMetadataOptions = {}): Store => {
   return getDeployStore({
     ...args,
     fetch: getFetchBeforeNextPatchedIt(),
     region: process.env.USE_REGIONAL_BLOBS?.toUpperCase() === 'TRUE' ? undefined : 'us-east-2',
   })
 }
+
+const encodeBlobKey = async (key: string) => {
+  const { encodeBlobKey: encodeBlobKeyImpl } = await import('../shared/blobkey.js')
+  return await encodeBlobKeyImpl(key)
+}
+
+export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
+  args: GetWithMetadataOptions = {},
+) => {
+  const store = getRegionalBlobStore(args)
+  const tracer = getTracer()
+
+  return {
+    async get<T extends BlobType>(key: string, otelSpanTitle: string): Promise<T | null> {
+      const blobKey = await encodeBlobKey(key)
+
+      return tracer.withActiveSpan(otelSpanTitle, async (span) => {
+        span.setAttributes({ key, blobKey })
+        const blob = (await store.get(blobKey, { type: 'json' })) as T | null
+        span.addEvent(blob ? 'Hit' : 'Miss')
+        return blob
+      })
+    },
+    async set(key: string, value: BlobType, otelSpanTitle: string) {
+      const blobKey = await encodeBlobKey(key)
+
+      return tracer.withActiveSpan(otelSpanTitle, async (span) => {
+        span.setAttributes({ key, blobKey })
+        return await store.setJSON(blobKey, value)
+      })
+    },
+  }
+}
+
+/**
+ * Wrapper around Blobs Store that memoizes the cache entries within context of a request
+ * to avoid duplicate requests to the same key and also allowing to read its own writes from
+ * memory.
+ */
+export type MemoizedKeyValueStoreBackedByRegionalBlobStore = ReturnType<
+  typeof getMemoizedKeyValueStoreBackedByRegionalBlobStore
+>

@@ -127,7 +127,6 @@ export default async (
         headers: response.headers,
         request,
         span,
-        tracer,
         requestContext,
       })
     }

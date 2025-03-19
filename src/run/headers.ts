@@ -1,12 +1,10 @@
 import type { Span } from '@opentelemetry/api'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
-import { encodeBlobKey } from '../shared/blobkey.js'
-import type { NetlifyCachedRouteValue } from '../shared/cache-types.cjs'
+import type { NetlifyCachedRouteValue, NetlifyCacheHandlerValue } from '../shared/cache-types.cjs'
 
 import { getLogger, RequestContext } from './handlers/request-context.cjs'
-import type { RuntimeTracer } from './handlers/tracer.cjs'
-import { getRegionalBlobStore } from './regional-blob-store.cjs'
+import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './regional-blob-store.cjs'
 
 const ALL_VARIATIONS = Symbol.for('ALL_VARIATIONS')
 interface NetlifyVaryValues {
@@ -129,13 +127,11 @@ export const adjustDateHeader = async ({
   headers,
   request,
   span,
-  tracer,
   requestContext,
 }: {
   headers: Headers
   request: Request
   span: Span
-  tracer: RuntimeTracer
   requestContext: RequestContext
 }) => {
   const key = new URL(request.url).pathname
@@ -157,23 +153,12 @@ export const adjustDateHeader = async ({
       warning: true,
     })
 
-    const blobStore = getRegionalBlobStore({ consistency: 'strong' })
-    const blobKey = await encodeBlobKey(key)
-
-    // TODO: use metadata for this
-    lastModified = await tracer.withActiveSpan(
+    const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+    const cacheEntry = await cacheStore.get<NetlifyCacheHandlerValue>(
+      key,
       'get cache to calculate date header',
-      async (getBlobForDateSpan) => {
-        getBlobForDateSpan.setAttributes({
-          key,
-          blobKey,
-        })
-        const blob = (await blobStore.get(blobKey, { type: 'json' })) ?? {}
-
-        getBlobForDateSpan.addEvent(blob ? 'Cache hit' : 'Cache miss')
-        return blob.lastModified
-      },
     )
+    lastModified = cacheEntry?.lastModified
   }
 
   if (!lastModified) {
