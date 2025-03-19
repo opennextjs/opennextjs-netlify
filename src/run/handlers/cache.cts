@@ -30,8 +30,6 @@ import {
 import { getLogger, getRequestContext } from './request-context.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'
 
-type TagManifestBlobCache = Record<string, Promise<TagManifest | null>>
-
 const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
@@ -39,13 +37,11 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   revalidatedTags: string[]
   cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore
   tracer = getTracer()
-  tagManifestsFetchedFromBlobStoreInCurrentRequest: TagManifestBlobCache
 
   constructor(options: CacheHandlerContext) {
     this.options = options
     this.revalidatedTags = options.revalidatedTags
     this.cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
-    this.tagManifestsFetchedFromBlobStoreInCurrentRequest = {}
   }
 
   private getTTL(blob: NetlifyCacheHandlerValue) {
@@ -469,7 +465,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   resetRequestCache() {
-    this.tagManifestsFetchedFromBlobStoreInCurrentRequest = {}
+    // no-op because in-memory cache is scoped to requests and not global
+    // see getRequestSpecificInMemoryCache
   }
 
   /**
@@ -508,10 +505,9 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     }
 
     // 2. If any in-memory tags don't indicate that any of tags was invalidated
-    //    we will check blob store, but memoize results for duration of current request
-    //    so that we only check blob store once per tag within a single request
-    //    full-route cache and fetch caches share a lot of tags so this might save
-    //    some roundtrips to the blob store.
+    //    we will check blob store. Full-route cache and fetch caches share a lot of tags
+    //    but we will only do actual blob read once withing a single request due to cacheStore
+    //    memoization.
     //    Additionally, we will resolve the promise as soon as we find first
     //    stale tag, so that we don't wait for all of them to resolve (but keep all
     //    running in case future `CacheHandler.get` calls would be able to use results).
@@ -521,14 +517,10 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       const tagManifestPromises: Promise<boolean>[] = []
 
       for (const tag of cacheTags) {
-        let tagManifestPromise: Promise<TagManifest | null> =
-          this.tagManifestsFetchedFromBlobStoreInCurrentRequest[tag]
-
-        if (!tagManifestPromise) {
-          tagManifestPromise = this.cacheStore.get<TagManifest>(tag, 'tagManifest.get')
-
-          this.tagManifestsFetchedFromBlobStoreInCurrentRequest[tag] = tagManifestPromise
-        }
+        const tagManifestPromise: Promise<TagManifest | null> = this.cacheStore.get<TagManifest>(
+          tag,
+          'tagManifest.get',
+        )
 
         tagManifestPromises.push(
           tagManifestPromise.then((tagManifest) => {

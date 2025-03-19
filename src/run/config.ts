@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
 import { PLUGIN_DIR, RUN_CONFIG } from './constants.js'
+import { setInMemoryCacheMaxSizeFromNextConfig } from './regional-blob-store.cjs'
 
 /**
  * Get Next.js config from the build output
@@ -13,10 +14,27 @@ export const getRunConfig = async () => {
   return JSON.parse(await readFile(resolve(PLUGIN_DIR, RUN_CONFIG), 'utf-8'))
 }
 
+type NextConfigForMultipleVersions = NextConfigComplete & {
+  experimental: NextConfigComplete['experimental'] & {
+    // those are pre 14.1.0 options that were moved out of experimental in // https://github.com/vercel/next.js/pull/57953/files#diff-c49c4767e6ed8627e6e1b8f96b141ee13246153f5e9142e1da03450c8e81e96fL311
+
+    // https://github.com/vercel/next.js/blob/v14.0.4/packages/next/src/server/config-shared.ts#L182-L183
+    // custom path to a cache handler to use
+    incrementalCacheHandlerPath?: string
+    // https://github.com/vercel/next.js/blob/v14.0.4/packages/next/src/server/config-shared.ts#L207-L212
+    /**
+     * In-memory cache size in bytes.
+     *
+     * If `isrMemoryCacheSize: 0` disables in-memory caching.
+     */
+    isrMemoryCacheSize?: number
+  }
+}
+
 /**
  * Configure the custom cache handler at request time
  */
-export const setRunConfig = (config: NextConfigComplete) => {
+export const setRunConfig = (config: NextConfigForMultipleVersions) => {
   const cacheHandler = join(PLUGIN_DIR, '.netlify/dist/run/handlers/cache.cjs')
   if (!existsSync(cacheHandler)) {
     throw new Error(`Cache handler not found at ${cacheHandler}`)
@@ -25,15 +43,17 @@ export const setRunConfig = (config: NextConfigComplete) => {
   // set the path to the cache handler
   config.experimental = {
     ...config.experimental,
-    // @ts-expect-error incrementalCacheHandlerPath was removed from config type
-    // but we still need to set it for older Next.js versions
+    // Before Next.js 14.1.0 path to the cache handler was in experimental section, see NextConfigForMultipleVersions type
     incrementalCacheHandlerPath: cacheHandler,
   }
 
-  // Next.js 14.1.0 moved the cache handler from experimental to stable
-  // https://github.com/vercel/next.js/pull/57953/files#diff-c49c4767e6ed8627e6e1b8f96b141ee13246153f5e9142e1da03450c8e81e96fL311
+  // Next.js 14.1.0 moved the cache handler from experimental to stable, see NextConfigForMultipleVersions type
   config.cacheHandler = cacheHandler
-  config.cacheMaxMemorySize = 0
+
+  // honor the in-memory cache size from next.config (either one set by user or Next.js default)
+  setInMemoryCacheMaxSizeFromNextConfig(
+    config.cacheMaxMemorySize ?? config.experimental?.isrMemoryCacheSize,
+  )
 
   // set config
   process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(config)

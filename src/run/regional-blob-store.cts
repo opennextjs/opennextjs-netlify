@@ -1,12 +1,23 @@
 import { getDeployStore, GetWithMetadataOptions, Store } from '@netlify/blobs'
+import { LRUCache } from 'lru-cache'
 
-import type { BlobType } from '../shared/cache-types.cjs'
+import { type BlobType, estimateBlobSize } from '../shared/cache-types.cjs'
 
+import { getRequestContext } from './handlers/request-context.cjs'
 import { getTracer } from './handlers/tracer.cjs'
 
+// lru-cache types don't like using `null` for values, so we use a symbol to represent it and do conversion
+// so it doesn't leak outside
+const NullValue = Symbol.for('null-value')
+type BlobLRUCache = LRUCache<string, BlobType | typeof NullValue | Promise<BlobType | null>>
+
 const FETCH_BEFORE_NEXT_PATCHED_IT = Symbol.for('nf-not-patched-fetch')
+const IN_MEMORY_CACHE_MAX_SIZE = Symbol.for('nf-in-memory-cache-max-size')
+const IN_MEMORY_LRU_CACHE = Symbol.for('nf-in-memory-lru-cache')
 const extendedGlobalThis = globalThis as typeof globalThis & {
   [FETCH_BEFORE_NEXT_PATCHED_IT]?: typeof globalThis.fetch
+  [IN_MEMORY_CACHE_MAX_SIZE]?: number
+  [IN_MEMORY_LRU_CACHE]?: BlobLRUCache | null
 }
 
 /**
@@ -64,6 +75,73 @@ const getRegionalBlobStore = (args: GetWithMetadataOptions = {}): Store => {
     region: process.env.USE_REGIONAL_BLOBS?.toUpperCase() === 'TRUE' ? undefined : 'us-east-2',
   })
 }
+const DEFAULT_FALLBACK_MAX_SIZE = 50 * 1024 * 1024 // 50MB, same as default Next.js config
+export function setInMemoryCacheMaxSizeFromNextConfig(size: unknown) {
+  if (typeof size === 'number') {
+    extendedGlobalThis[IN_MEMORY_CACHE_MAX_SIZE] = size
+  }
+}
+
+function getInMemoryLRUCache() {
+  if (typeof extendedGlobalThis[IN_MEMORY_LRU_CACHE] === 'undefined') {
+    const maxSize =
+      typeof extendedGlobalThis[IN_MEMORY_CACHE_MAX_SIZE] === 'number'
+        ? extendedGlobalThis[IN_MEMORY_CACHE_MAX_SIZE]
+        : DEFAULT_FALLBACK_MAX_SIZE
+
+    extendedGlobalThis[IN_MEMORY_LRU_CACHE] =
+      maxSize === 0
+        ? null // if user sets 0 in their config, we should honor that and not use in-memory cache
+        : new LRUCache<string, BlobType | typeof NullValue | Promise<BlobType | null>>({
+            max: 1000,
+            maxSize,
+            sizeCalculation: (valueToStore) => {
+              return estimateBlobSize(valueToStore === NullValue ? null : valueToStore)
+            },
+          })
+  }
+  return extendedGlobalThis[IN_MEMORY_LRU_CACHE]
+}
+
+interface RequestSpecificInMemoryCache {
+  get(key: string): BlobType | null | Promise<BlobType | null> | undefined
+  set(key: string, value: BlobType | null | Promise<BlobType | null>): void
+}
+
+const noOpInMemoryCache: RequestSpecificInMemoryCache = {
+  get(): undefined {
+    // no-op
+  },
+  set() {
+    // no-op
+  },
+}
+
+const getRequestSpecificInMemoryCache = (): RequestSpecificInMemoryCache => {
+  const requestContext = getRequestContext()
+  if (!requestContext) {
+    // Fallback to a no-op store if we can't find request context
+    return noOpInMemoryCache
+  }
+
+  const inMemoryLRUCache = getInMemoryLRUCache()
+  if (inMemoryLRUCache === null) {
+    return noOpInMemoryCache
+  }
+
+  return {
+    get(key) {
+      const inMemoryValue = inMemoryLRUCache.get(`${requestContext.requestID}:${key}`)
+      if (inMemoryValue === NullValue) {
+        return null
+      }
+      return inMemoryValue
+    },
+    set(key, value) {
+      inMemoryLRUCache.set(`${requestContext.requestID}:${key}`, value ?? NullValue)
+    },
+  }
+}
 
 const encodeBlobKey = async (key: string) => {
   const { encodeBlobKey: encodeBlobKeyImpl } = await import('../shared/blobkey.js')
@@ -78,18 +156,30 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
 
   return {
     async get<T extends BlobType>(key: string, otelSpanTitle: string): Promise<T | null> {
-      const blobKey = await encodeBlobKey(key)
+      const inMemoryCache = getRequestSpecificInMemoryCache()
 
-      return tracer.withActiveSpan(otelSpanTitle, async (span) => {
+      const memoizedValue = inMemoryCache.get(key)
+      if (typeof memoizedValue !== 'undefined') {
+        return memoizedValue as T | null | Promise<T | null>
+      }
+
+      const blobKey = await encodeBlobKey(key)
+      const getPromise = tracer.withActiveSpan(otelSpanTitle, async (span) => {
         span.setAttributes({ key, blobKey })
         const blob = (await store.get(blobKey, { type: 'json' })) as T | null
+        inMemoryCache.set(key, blob)
         span.addEvent(blob ? 'Hit' : 'Miss')
         return blob
       })
+      inMemoryCache.set(key, getPromise)
+      return getPromise
     },
     async set(key: string, value: BlobType, otelSpanTitle: string) {
-      const blobKey = await encodeBlobKey(key)
+      const inMemoryCache = getRequestSpecificInMemoryCache()
 
+      inMemoryCache.set(key, value)
+
+      const blobKey = await encodeBlobKey(key)
       return tracer.withActiveSpan(otelSpanTitle, async (span) => {
         span.setAttributes({ key, blobKey })
         return await store.setJSON(blobKey, value)
