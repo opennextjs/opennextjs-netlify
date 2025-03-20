@@ -28,7 +28,7 @@ import {
 } from '../regional-blob-store.cjs'
 
 import { getLogger, getRequestContext } from './request-context.cjs'
-import { getTracer } from './tracer.cjs'
+import { getTracer, recordWarning } from './tracer.cjs'
 
 type TagManifestBlobCache = Record<string, Promise<TagManifest | null>>
 
@@ -85,13 +85,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     if (!requestContext) {
       // we will not be able to use request context for date header calculation
       // we will fallback to using blobs
-      getCacheKeySpan.recordException(
-        new Error('CacheHandler was called without a request context'),
-      )
-      getCacheKeySpan.setAttributes({
-        severity: 'alert',
-        warning: true,
-      })
+      recordWarning(new Error('CacheHandler was called without a request context'), getCacheKeySpan)
       return
     }
 
@@ -100,15 +94,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       // so as a safety measure we will not use any of them and let blobs be used
       // to calculate the date header
       requestContext.responseCacheGetLastModified = undefined
-      getCacheKeySpan.recordException(
+      recordWarning(
         new Error(
           `Multiple response cache keys used in single request: ["${requestContext.responseCacheKey}, "${key}"]`,
         ),
+        getCacheKeySpan,
       )
-      getCacheKeySpan.setAttributes({
-        severity: 'alert',
-        warning: true,
-      })
+
       return
     }
 

@@ -4,6 +4,7 @@ import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import type { NetlifyCachedRouteValue, NetlifyCacheHandlerValue } from '../shared/cache-types.cjs'
 
 import { getLogger, RequestContext } from './handlers/request-context.cjs'
+import { recordWarning } from './handlers/tracer.cjs'
 import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './regional-blob-store.cjs'
 
 const ALL_VARIATIONS = Symbol.for('ALL_VARIATIONS')
@@ -145,13 +146,10 @@ export const adjustDateHeader = async ({
     // request context would contain lastModified value
     // this is not fatal as we have fallback,
     // but we want to know about it happening
-    span.recordException(
+    recordWarning(
       new Error('lastModified not found in requestContext, falling back to trying blobs'),
+      span,
     )
-    span.setAttributes({
-      severity: 'alert',
-      warning: true,
-    })
 
     const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
     const cacheEntry = await cacheStore.get<NetlifyCacheHandlerValue>(
@@ -164,15 +162,13 @@ export const adjustDateHeader = async ({
   if (!lastModified) {
     // this should never happen as we only execute this code path for cached responses
     // and those should always have lastModified value
-    span.recordException(
+    recordWarning(
       new Error(
         'lastModified not found in either requestContext or blobs, date header for cached response is not set',
       ),
+      span,
     )
-    span.setAttributes({
-      severity: 'alert',
-      warning: true,
-    })
+
     return
   }
 
