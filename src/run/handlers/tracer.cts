@@ -89,3 +89,16 @@ export function getTracer(): RuntimeTracer {
 
   return tracer
 }
+
+export function recordWarning(warning: Error, span?: Span) {
+  const spanToRecordWarningOn = span ?? trace.getActiveSpan()
+  if (!spanToRecordWarningOn) {
+    return
+  }
+
+  spanToRecordWarningOn.recordException(warning)
+  spanToRecordWarningOn.setAttributes({
+    severity: 'alert',
+    warning: true,
+  })
+}
