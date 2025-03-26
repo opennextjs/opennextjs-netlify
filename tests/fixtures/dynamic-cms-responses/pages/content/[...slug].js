@@ -11,7 +11,7 @@ const Content = ({ value }) => (
 export async function getStaticProps() {
   const store = getDeployStore({ name: 'cms-content', consistency: 'strong' })
   const BLOB_KEY = 'key'
-  
+
   const value = await store.get(BLOB_KEY, { type: 'json' })
 
   if (!value) {
@@ -22,7 +22,7 @@ export async function getStaticProps() {
 
   return {
     props: {
-      value: value
+      value: value,
     },
   }
 }

@@ -11,7 +11,7 @@ export default async function handler(_request: Request, context: Context) {
   if (operation === 'publish') {
     await store.setJSON(BLOB_KEY, { content: true })
   }
-  
+
   if (operation === 'unpublish') {
     await store.delete(BLOB_KEY)
   }
