@@ -239,7 +239,6 @@ export const setCacheControlHeaders = (
       .log('NetlifyHeadersHandler.trailingSlashRedirect')
   }
 
-  const cacheControl = headers.get('cache-control')
   if (status === 404) {
     if (request.url.endsWith('.php')) {
       // temporary CDN Cache Control handling for bot probes on PHP files
@@ -259,6 +258,8 @@ export const setCacheControlHeaders = (
       return
     }
   }
+
+  const cacheControl = headers.get('cache-control')
 
   if (
     cacheControl !== null &&
@@ -300,13 +301,20 @@ export const setCacheControlHeaders = (
   }
 }
 
-export const setCacheTagsHeaders = (headers: Headers, requestContext: RequestContext) => {
-  if (
-    requestContext.responseCacheTags &&
-    (headers.has('cache-control') || headers.has('netlify-cdn-cache-control'))
-  ) {
-    headers.set('netlify-cache-tag', requestContext.responseCacheTags.join(','))
+export const setCacheTagsHeaders = (headers: Headers, request: Request, requestContext: RequestContext) => {
+  if (!headers.has('cache-control') && !headers.has('netlify-cdn-cache-control')) {
+    return
   }
+
+  if (requestContext.responseCacheTags) {
+    headers.set('netlify-cache-tag', requestContext.responseCacheTags.join(','))
+    return
+  }
+
+  const key = new URL(request.url).pathname
+  const cacheTag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
+  console.log('setCacheTagsHeaders', 'netlify-cache-tag', key)
+  headers.set('netlify-cache-tag', cacheTag)
 }
 
 /**

@@ -106,7 +106,8 @@ export async function getMockedRequestHandler(...args: Parameters<typeof getRequ
             if (!file.isFallback) {
               const requestContext = getRequestContext()
               if (requestContext) {
-                requestContext.usedFsReadForNonFallback = true
+                // Causing caching for too many requests (e.g. api routes)
+                // requestContext.usedFsReadForNonFallback = true
               }
             }
 
