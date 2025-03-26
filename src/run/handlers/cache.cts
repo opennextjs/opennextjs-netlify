@@ -137,11 +137,19 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   private captureCacheTags(cacheValue: NetlifyIncrementalCacheValue | null, key: string) {
+    const requestContext = getRequestContext()
+
     if (!cacheValue) {
+      if (requestContext?.responseCacheTags) {
+        const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeURI(key)}`]
+        requestContext.responseCacheTags = cacheTags
+
+        console.log('cache tags set:', cacheTags)
+      }
+
       return
     }
 
-    const requestContext = getRequestContext()
     // Bail if we can't get request context
     if (!requestContext) {
       return
@@ -420,7 +428,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         value,
       })
 
-      if (data?.kind === 'PAGE' || data?.kind === 'PAGES') {
+      // if (data?.kind === 'PAGE' || data?.kind === 'PAGES') {
         const requestContext = getRequestContext()
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
@@ -441,7 +449,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
             }),
           )
         }
-      }
+      // }
     })
   }
 
