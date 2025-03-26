@@ -23,14 +23,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
       - run: npm ci
-      - name: Prettify code
-        uses: creyD/prettier_action@v4.3
-        with:
-          prettier_options: --write .
-          only_changed: true
-          commit_message: 'chore: format with prettier'
-          clean_node_folder: false
-
+      - name: Check Format
+        run: npm run format:check
       - name: Lint
         # github adds inline annotation for compact or stylish format
         # which is different than our default for local usage
