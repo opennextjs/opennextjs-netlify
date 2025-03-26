@@ -124,9 +124,7 @@
     {
       "file": "test/e2e/app-dir/app-static/app-static.test.ts",
       "reason": "Uses CLI output",
-      "tests": [
-        "app-dir static/dynamic handling should warn for too many cache tags"
-      ]
+      "tests": ["app-dir static/dynamic handling should warn for too many cache tags"]
     },
     {
       "file": "test/e2e/app-dir/parallel-routes-and-interception/parallel-routes-and-interception.test.ts",
