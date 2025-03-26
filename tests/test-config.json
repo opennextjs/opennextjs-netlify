@@ -370,6 +370,13 @@
         "app-root-params - generateStaticParams should be a cache hit for fully prerendered pages",
         "app-root-params - generateStaticParams should be a cache miss for pages that aren't prerendered"
       ]
+    },
+    {
+      "file": "test/e2e/app-dir/router-autoscroll/router-autoscroll.test.ts",
+      "reason": "Test is very flaky, and seems to test mostly browser behavior",
+      "tests": [
+        "router autoscrolling on navigation bugs Should apply scroll when loading.js is used"
+      ]
     }
   ],
   "failures": [
