@@ -362,6 +362,21 @@
     {
       "file": "test/e2e/next-config-warnings/esm-externals-false/esm-externals-false.test.ts",
       "reason": "Uses CLI output"
+    },
+    {
+      "file": "test/e2e/app-dir/app-root-params/generate-static-params.test.ts",
+      "reason": "Checking Vercel specific x-vercel-cache header",
+      "tests": [
+        "app-root-params - generateStaticParams should be a cache hit for fully prerendered pages",
+        "app-root-params - generateStaticParams should be a cache miss for pages that aren't prerendered"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/router-autoscroll/router-autoscroll.test.ts",
+      "reason": "Test is very flaky, and seems to test mostly browser behavior",
+      "tests": [
+        "router autoscrolling on navigation bugs Should apply scroll when loading.js is used"
+      ]
     }
   ],
   "failures": [
