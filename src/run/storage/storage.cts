@@ -6,8 +6,8 @@
 import { type BlobType } from '../../shared/cache-types.cjs'
 import { getTracer } from '../handlers/tracer.cjs'
 
-import { getRequestSpecificInMemoryCache } from './request-scoped-in-memory-cache.cjs'
 import { getRegionalBlobStore } from './regional-blob-store.cjs'
+import { getRequestSpecificInMemoryCache } from './request-scoped-in-memory-cache.cjs'
 
 const encodeBlobKey = async (key: string) => {
   const { encodeBlobKey: encodeBlobKeyImpl } = await import('../../shared/blobkey.js')
