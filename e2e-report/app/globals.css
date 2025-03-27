@@ -6,8 +6,9 @@
   @font-face {
     font-family: Mulish;
     src: url(/MulishVar-latin.woff2) format('woff2');
-    unicode-range: U+5, U+20, U+21, U+24, U+25, U+26, U+27, U+2B-2E, U+30-3A, U+3F, U+41-5A, U+61-7A,
-      U+D7, U+2019, U+201C, U+201D;
+    unicode-range:
+      U+5, U+20, U+21, U+24, U+25, U+26, U+27, U+2B-2E, U+30-3A, U+3F, U+41-5A, U+61-7A, U+D7,
+      U+2019, U+201C, U+201D;
     font-weight: 200 900;
     font-display: swap;
   }
