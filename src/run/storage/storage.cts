@@ -7,7 +7,7 @@ import { type BlobType } from '../../shared/blob-types.cjs'
 import { getTracer } from '../handlers/tracer.cjs'
 
 import { getRegionalBlobStore } from './regional-blob-store.cjs'
-import { getRequestSpecificInMemoryCache } from './request-scoped-in-memory-cache.cjs'
+import { getRequestScopedInMemoryCache } from './request-scoped-in-memory-cache.cjs'
 
 const encodeBlobKey = async (key: string) => {
   const { encodeBlobKey: encodeBlobKeyImpl } = await import('../../shared/blobkey.js')
@@ -22,7 +22,7 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
 
   return {
     async get<T extends BlobType>(key: string, otelSpanTitle: string): Promise<T | null> {
-      const inMemoryCache = getRequestSpecificInMemoryCache()
+      const inMemoryCache = getRequestScopedInMemoryCache()
 
       const memoizedValue = inMemoryCache.get(key)
       if (typeof memoizedValue !== 'undefined') {
@@ -41,7 +41,7 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
       return getPromise
     },
     async set(key: string, value: BlobType, otelSpanTitle: string) {
-      const inMemoryCache = getRequestSpecificInMemoryCache()
+      const inMemoryCache = getRequestScopedInMemoryCache()
 
       inMemoryCache.set(key, value)
 

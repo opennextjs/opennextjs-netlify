@@ -91,37 +91,19 @@ interface RequestScopedInMemoryCache {
   set(key: string, value: BlobType | null | Promise<BlobType | null>): void
 }
 
-const noOpInMemoryCache: RequestScopedInMemoryCache = {
-  get(): undefined {
-    // no-op
-  },
-  set() {
-    // no-op
-  },
-}
-
-export const getRequestSpecificInMemoryCache = (): RequestScopedInMemoryCache => {
+export const getRequestScopedInMemoryCache = (): RequestScopedInMemoryCache => {
   const requestContext = getRequestContext()
-  if (!requestContext) {
-    // Fallback to a no-op store if we can't find request context
-    return noOpInMemoryCache
-  }
-
   const inMemoryLRUCache = getInMemoryLRUCache()
-  if (inMemoryLRUCache === null) {
-    return noOpInMemoryCache
-  }
 
   return {
     get(key) {
-      const inMemoryValue = inMemoryLRUCache.get(`${requestContext.requestID}:${key}`)
-      if (inMemoryValue === NullValue) {
-        return null
-      }
-      return inMemoryValue
+      if (!requestContext) return
+      const value = inMemoryLRUCache?.get(`${requestContext.requestID}:${key}`)
+      return value === NullValue ? null : value
     },
     set(key, value) {
-      inMemoryLRUCache.set(`${requestContext.requestID}:${key}`, value ?? NullValue)
+      if (!requestContext) return
+      inMemoryLRUCache?.set(`${requestContext?.requestID}:${key}`, value ?? NullValue)
     },
   }
 }
