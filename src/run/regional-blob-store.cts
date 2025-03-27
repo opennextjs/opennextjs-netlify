@@ -103,12 +103,12 @@ function getInMemoryLRUCache() {
   return extendedGlobalThis[IN_MEMORY_LRU_CACHE]
 }
 
-interface RequestSpecificInMemoryCache {
+interface RequestScopedInMemoryCache {
   get(key: string): BlobType | null | Promise<BlobType | null> | undefined
   set(key: string, value: BlobType | null | Promise<BlobType | null>): void
 }
 
-const noOpInMemoryCache: RequestSpecificInMemoryCache = {
+const noOpInMemoryCache: RequestScopedInMemoryCache = {
   get(): undefined {
     // no-op
   },
@@ -117,7 +117,7 @@ const noOpInMemoryCache: RequestSpecificInMemoryCache = {
   },
 }
 
-const getRequestSpecificInMemoryCache = (): RequestSpecificInMemoryCache => {
+const getRequestSpecificInMemoryCache = (): RequestScopedInMemoryCache => {
   const requestContext = getRequestContext()
   if (!requestContext) {
     // Fallback to a no-op store if we can't find request context
