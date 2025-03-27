@@ -3,7 +3,7 @@
 // and should not be used directly outside of this directory.
 // There is eslint `no-restricted-imports` rule to enforce this.
 
-import { type BlobType } from '../../shared/cache-types.cjs'
+import { type BlobType } from '../../shared/blob-types.cjs'
 import { getTracer } from '../handlers/tracer.cjs'
 
 import { getRegionalBlobStore } from './regional-blob-store.cjs'

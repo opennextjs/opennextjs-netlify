@@ -1,7 +1,10 @@
+import { isPromise } from 'node:util/types'
+
 import { LRUCache } from 'lru-cache'
 
-import { type BlobType, estimateBlobSize } from '../../shared/cache-types.cjs'
+import { type BlobType, isHtmlBlob, isTagManifest } from '../../shared/blob-types.cjs'
 import { getRequestContext } from '../handlers/request-context.cjs'
+import { recordWarning } from '../handlers/tracer.cjs'
 
 // lru-cache types don't like using `null` for values, so we use a symbol to represent it and do conversion
 // so it doesn't leak outside
@@ -20,6 +23,46 @@ export function setInMemoryCacheMaxSizeFromNextConfig(size: unknown) {
   if (typeof size === 'number') {
     extendedGlobalThis[IN_MEMORY_CACHE_MAX_SIZE] = size
   }
+}
+
+const estimateBlobSize = (valueToStore: BlobType | null | Promise<unknown>): number => {
+  // very approximate size calculation to avoid expensive exact size calculation
+  // inspired by https://github.com/vercel/next.js/blob/ed10f7ed0246fcc763194197eb9beebcbd063162/packages/next/src/server/lib/incremental-cache/file-system-cache.ts#L60-L79
+  if (valueToStore === null || isPromise(valueToStore) || isTagManifest(valueToStore)) {
+    return 25
+  }
+  if (isHtmlBlob(valueToStore)) {
+    return valueToStore.html.length
+  }
+  let knownKindFailed = false
+  try {
+    if (valueToStore.value?.kind === 'FETCH') {
+      return valueToStore.value.data.body.length
+    }
+    if (valueToStore.value?.kind === 'APP_PAGE') {
+      return valueToStore.value.html.length + (valueToStore.value.rscData?.length ?? 0)
+    }
+    if (valueToStore.value?.kind === 'PAGE' || valueToStore.value?.kind === 'PAGES') {
+      return valueToStore.value.html.length + JSON.stringify(valueToStore.value.pageData).length
+    }
+    if (valueToStore.value?.kind === 'ROUTE' || valueToStore.value?.kind === 'APP_ROUTE') {
+      return valueToStore.value.body.length
+    }
+  } catch {
+    // size calculation rely on the shape of the value, so if it's not what we expect, we fallback to JSON.stringify
+    knownKindFailed = true
+  }
+
+  // fallback for not known kinds or known kinds that did fail to calculate size
+  // we should also monitor cases when fallback is used because it's not the most efficient way to calculate/estimate size
+  // and might indicate need to make adjustments or additions to the size calculation
+  recordWarning(
+    new Error(
+      `Blob size calculation did fallback to JSON.stringify. Kind: KnownKindFailed: ${knownKindFailed}, ${valueToStore.value?.kind ?? 'undefined'}`,
+    ),
+  )
+
+  return JSON.stringify(valueToStore).length
 }
 
 function getInMemoryLRUCache() {

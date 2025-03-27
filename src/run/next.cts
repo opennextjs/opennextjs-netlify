@@ -4,7 +4,7 @@ import { relative, resolve } from 'path'
 // @ts-expect-error no types installed
 import { patchFs } from 'fs-monkey'
 
-import { HtmlBlob } from '../shared/cache-types.cjs'
+import { HtmlBlob } from '../shared/blob-types.cjs'
 
 import { getRequestContext } from './handlers/request-context.cjs'
 import { getTracer } from './handlers/tracer.cjs'

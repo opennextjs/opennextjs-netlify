@@ -11,6 +11,7 @@ import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 
 import { name as nextRuntimePkgName, version as nextRuntimePkgVersion } from '../../../package.json'
+import { type TagManifest } from '../../shared/blob-types.cjs'
 import {
   type CacheHandlerContext,
   type CacheHandlerForMultipleVersions,
@@ -20,7 +21,6 @@ import {
   type NetlifyCachedRouteValue,
   type NetlifyCacheHandlerValue,
   type NetlifyIncrementalCacheValue,
-  type TagManifest,
 } from '../../shared/cache-types.cjs'
 import {
   getMemoizedKeyValueStoreBackedByRegionalBlobStore,
