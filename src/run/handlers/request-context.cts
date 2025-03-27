@@ -7,11 +7,6 @@ import type { NetlifyCachedRouteValue } from '../../shared/cache-types.cjs'
 
 type SystemLogger = typeof systemLogger
 
-// TODO: remove once public types are updated
-export interface FutureContext extends Context {
-  waitUntil?: (promise: Promise<unknown>) => void
-}
-
 export type RequestContext = {
   /**
    * Determine if this request is for CDN SWR background revalidation
@@ -43,7 +38,7 @@ export type RequestContext = {
 
 type RequestContextAsyncLocalStorage = AsyncLocalStorage<RequestContext>
 
-export function createRequestContext(request?: Request, context?: FutureContext): RequestContext {
+export function createRequestContext(request?: Request, context?: Context): RequestContext {
   const backgroundWorkPromises: Promise<unknown>[] = []
 
   const isDebugRequest =
