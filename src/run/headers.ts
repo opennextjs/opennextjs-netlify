@@ -5,7 +5,7 @@ import type { NetlifyCachedRouteValue, NetlifyCacheHandlerValue } from '../share
 
 import { getLogger, RequestContext } from './handlers/request-context.cjs'
 import { recordWarning } from './handlers/tracer.cjs'
-import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './regional-blob-store.cjs'
+import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
 const ALL_VARIATIONS = Symbol.for('ALL_VARIATIONS')
 interface NetlifyVaryValues {

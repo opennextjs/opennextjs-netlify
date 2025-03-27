@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
 import { PLUGIN_DIR, RUN_CONFIG } from './constants.js'
-import { setInMemoryCacheMaxSizeFromNextConfig } from './regional-blob-store.cjs'
+import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
 
 /**
  * Get Next.js config from the build output

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { decodeBlobKey } from '../../tests/utils/helpers.ts'
-import { BlobType } from '../shared/cache-types.cts'
+import { decodeBlobKey } from '../../../tests/utils/helpers.ts'
+import { BlobType } from '../../shared/cache-types.cts'
+import { createRequestContext, runWithRequestContext } from '../handlers/request-context.cts'
 
-import { createRequestContext, runWithRequestContext } from './handlers/request-context.cts'
-import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './regional-blob-store.cts'
+import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage.cts'
 
 let mockBlobValues: Record<string, unknown> = {}
 const mockedStore = {

@@ -25,7 +25,7 @@ import {
 import {
   getMemoizedKeyValueStoreBackedByRegionalBlobStore,
   MemoizedKeyValueStoreBackedByRegionalBlobStore,
-} from '../regional-blob-store.cjs'
+} from '../storage/storage.cjs'
 
 import { getLogger, getRequestContext } from './request-context.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'

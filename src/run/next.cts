@@ -8,7 +8,7 @@ import { HtmlBlob } from '../shared/cache-types.cjs'
 
 import { getRequestContext } from './handlers/request-context.cjs'
 import { getTracer } from './handlers/tracer.cjs'
-import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './regional-blob-store.cjs'
+import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
 // https://github.com/vercel/next.js/pull/68193/files#diff-37243d614f1f5d3f7ea50bbf2af263f6b1a9a4f70e84427977781e07b02f57f1R49
 // This import resulted in importing unbundled React which depending if NODE_ENV is `production` or not would use
