@@ -34,5 +34,6 @@
   "test/e2e/module-layer/index.test.ts",
   "test/e2e/prerender.test.ts",
   "test/e2e/react-compiler/react-compiler.test.ts",
-  "test/e2e/skip-trailing-slash-redirect/index.test.ts"
+  "test/e2e/skip-trailing-slash-redirect/index.test.ts",
+  "test/e2e/app-dir/router-autoscroll/router-autoscroll.test.ts"
 ]
