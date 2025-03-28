@@ -7,11 +7,6 @@ import type { NetlifyCachedRouteValue } from '../../shared/cache-types.cjs'
 
 type SystemLogger = typeof systemLogger
 
-// TODO: remove once public types are updated
-export interface FutureContext extends Context {
-  waitUntil?: (promise: Promise<unknown>) => void
-}
-
 export type RequestContext = {
   /**
    * Determine if this request is for CDN SWR background revalidation
@@ -39,11 +34,24 @@ export type RequestContext = {
    */
   backgroundWorkPromise: Promise<unknown>
   logger: SystemLogger
+  requestID: string
 }
 
 type RequestContextAsyncLocalStorage = AsyncLocalStorage<RequestContext>
+const REQUEST_CONTEXT_GLOBAL_KEY = Symbol.for('nf-request-context-async-local-storage')
+const REQUEST_COUNTER_KEY = Symbol.for('nf-request-counter')
+const extendedGlobalThis = globalThis as typeof globalThis & {
+  [REQUEST_CONTEXT_GLOBAL_KEY]?: RequestContextAsyncLocalStorage
+  [REQUEST_COUNTER_KEY]?: number
+}
 
-export function createRequestContext(request?: Request, context?: FutureContext): RequestContext {
+function getFallbackRequestID() {
+  const requestNumber = extendedGlobalThis[REQUEST_COUNTER_KEY] ?? 0
+  extendedGlobalThis[REQUEST_COUNTER_KEY] = requestNumber + 1
+  return `#${requestNumber}`
+}
+
+export function createRequestContext(request?: Request, context?: Context): RequestContext {
   const backgroundWorkPromises: Promise<unknown>[] = []
 
   const isDebugRequest =
@@ -72,10 +80,10 @@ export function createRequestContext(request?: Request, context?: FutureContext)
       return Promise.allSettled(backgroundWorkPromises)
     },
     logger,
+    requestID: request?.headers.get('x-nf-request-id') ?? getFallbackRequestID(),
   }
 }
 
-const REQUEST_CONTEXT_GLOBAL_KEY = Symbol.for('nf-request-context-async-local-storage')
 let requestContextAsyncLocalStorage: RequestContextAsyncLocalStorage | undefined
 function getRequestContextAsyncLocalStorage() {
   if (requestContextAsyncLocalStorage) {
@@ -85,9 +93,6 @@ function getRequestContextAsyncLocalStorage() {
   // AsyncLocalStorage in the module scope, because it will be different for each
   // copy - so first time an instance of this module is used, we store AsyncLocalStorage
   // in global scope and reuse it for all subsequent calls
-  const extendedGlobalThis = globalThis as typeof globalThis & {
-    [REQUEST_CONTEXT_GLOBAL_KEY]?: RequestContextAsyncLocalStorage
-  }
   if (extendedGlobalThis[REQUEST_CONTEXT_GLOBAL_KEY]) {
     return extendedGlobalThis[REQUEST_CONTEXT_GLOBAL_KEY]
   }

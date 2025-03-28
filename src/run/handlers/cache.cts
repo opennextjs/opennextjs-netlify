@@ -5,13 +5,13 @@ import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
-import { Store } from '@netlify/blobs'
 import { purgeCache } from '@netlify/functions'
 import { type Span } from '@opentelemetry/api'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 
 import { name as nextRuntimePkgName, version as nextRuntimePkgVersion } from '../../../package.json'
+import { type TagManifest } from '../../shared/blob-types.cjs'
 import {
   type CacheHandlerContext,
   type CacheHandlerForMultipleVersions,
@@ -22,34 +22,26 @@ import {
   type NetlifyCacheHandlerValue,
   type NetlifyIncrementalCacheValue,
 } from '../../shared/cache-types.cjs'
-import { getRegionalBlobStore } from '../regional-blob-store.cjs'
+import {
+  getMemoizedKeyValueStoreBackedByRegionalBlobStore,
+  MemoizedKeyValueStoreBackedByRegionalBlobStore,
+} from '../storage/storage.cjs'
 
 import { getLogger, getRequestContext } from './request-context.cjs'
-import { getTracer } from './tracer.cjs'
-
-type TagManifest = { revalidatedAt: number }
-
-type TagManifestBlobCache = Record<string, Promise<TagManifest>>
+import { getTracer, recordWarning } from './tracer.cjs'
 
 const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   options: CacheHandlerContext
   revalidatedTags: string[]
-  blobStore: Store
+  cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore
   tracer = getTracer()
-  tagManifestsFetchedFromBlobStoreInCurrentRequest: TagManifestBlobCache
 
   constructor(options: CacheHandlerContext) {
     this.options = options
     this.revalidatedTags = options.revalidatedTags
-    this.blobStore = getRegionalBlobStore({ consistency: 'strong' })
-    this.tagManifestsFetchedFromBlobStoreInCurrentRequest = {}
-  }
-
-  private async encodeBlobKey(key: string) {
-    const { encodeBlobKey } = await import('../../shared/blobkey.js')
-    return await encodeBlobKey(key)
+    this.cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
   }
 
   private getTTL(blob: NetlifyCacheHandlerValue) {
@@ -89,13 +81,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     if (!requestContext) {
       // we will not be able to use request context for date header calculation
       // we will fallback to using blobs
-      getCacheKeySpan.recordException(
-        new Error('CacheHandler was called without a request context'),
-      )
-      getCacheKeySpan.setAttributes({
-        severity: 'alert',
-        warning: true,
-      })
+      recordWarning(new Error('CacheHandler was called without a request context'), getCacheKeySpan)
       return
     }
 
@@ -104,15 +90,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       // so as a safety measure we will not use any of them and let blobs be used
       // to calculate the date header
       requestContext.responseCacheGetLastModified = undefined
-      getCacheKeySpan.recordException(
+      recordWarning(
         new Error(
           `Multiple response cache keys used in single request: ["${requestContext.responseCacheKey}, "${key}"]`,
         ),
+        getCacheKeySpan,
       )
-      getCacheKeySpan.setAttributes({
-        severity: 'alert',
-        warning: true,
-      })
+
       return
     }
 
@@ -245,19 +229,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       const [key, ctx = {}] = args
       getLogger().debug(`[NetlifyCacheHandler.get]: ${key}`)
 
-      const blobKey = await this.encodeBlobKey(key)
-      span.setAttributes({ key, blobKey })
+      span.setAttributes({ key })
 
-      const blob = (await this.tracer.withActiveSpan('blobStore.get', async (blobGetSpan) => {
-        blobGetSpan.setAttributes({ key, blobKey })
-        return await this.blobStore.get(blobKey, {
-          type: 'json',
-        })
-      })) as NetlifyCacheHandlerValue | null
+      const blob = await this.cacheStore.get<NetlifyCacheHandlerValue>(key, 'blobStore.get')
 
       // if blob is null then we don't have a cache entry
       if (!blob) {
-        span.addEvent('Cache miss', { key, blobKey })
+        span.addEvent('Cache miss', { key })
         return null
       }
 
@@ -268,7 +246,6 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         // but opt to discard STALE data, so that Next.js generate fresh response
         span.addEvent('Discarding stale entry due to SWR background revalidation request', {
           key,
-          blobKey,
           ttl,
         })
         getLogger()
@@ -285,7 +262,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       const staleByTags = await this.checkCacheEntryStaleByTags(blob, ctx.tags, ctx.softTags)
 
       if (staleByTags) {
-        span.addEvent('Stale', { staleByTags, key, blobKey, ttl })
+        span.addEvent('Stale', { staleByTags, key, ttl })
         return null
       }
 
@@ -403,9 +380,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   async set(...args: Parameters<CacheHandlerForMultipleVersions['set']>) {
     return this.tracer.withActiveSpan('set cache key', async (span) => {
       const [key, data, context] = args
-      const blobKey = await this.encodeBlobKey(key)
       const lastModified = Date.now()
-      span.setAttributes({ key, lastModified, blobKey })
+      span.setAttributes({ key, lastModified })
 
       getLogger().debug(`[NetlifyCacheHandler.set]: ${key}`)
 
@@ -415,10 +391,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       // and we didn't yet capture cache tags, we try to get cache tags from freshly produced cache value
       this.captureCacheTags(value, key)
 
-      await this.blobStore.setJSON(blobKey, {
-        lastModified,
-        value,
-      })
+      await this.cacheStore.set(key, { lastModified, value }, 'blobStore.set')
 
       if (data?.kind === 'PAGE' || data?.kind === 'PAGES') {
         const requestContext = getRequestContext()
@@ -476,7 +449,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     await Promise.all(
       tags.map(async (tag) => {
         try {
-          await this.blobStore.setJSON(await this.encodeBlobKey(tag), data)
+          await this.cacheStore.set(tag, data, 'tagManifest.set')
         } catch (error) {
           getLogger().withError(error).log(`Failed to update tag manifest for ${tag}`)
         }
@@ -492,7 +465,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   resetRequestCache() {
-    this.tagManifestsFetchedFromBlobStoreInCurrentRequest = {}
+    // no-op because in-memory cache is scoped to requests and not global
+    // see getRequestSpecificInMemoryCache
   }
 
   /**
@@ -531,10 +505,9 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     }
 
     // 2. If any in-memory tags don't indicate that any of tags was invalidated
-    //    we will check blob store, but memoize results for duration of current request
-    //    so that we only check blob store once per tag within a single request
-    //    full-route cache and fetch caches share a lot of tags so this might save
-    //    some roundtrips to the blob store.
+    //    we will check blob store. Full-route cache and fetch caches share a lot of tags
+    //    but we will only do actual blob read once withing a single request due to cacheStore
+    //    memoization.
     //    Additionally, we will resolve the promise as soon as we find first
     //    stale tag, so that we don't wait for all of them to resolve (but keep all
     //    running in case future `CacheHandler.get` calls would be able to use results).
@@ -544,23 +517,17 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       const tagManifestPromises: Promise<boolean>[] = []
 
       for (const tag of cacheTags) {
-        let tagManifestPromise: Promise<TagManifest> =
-          this.tagManifestsFetchedFromBlobStoreInCurrentRequest[tag]
-
-        if (!tagManifestPromise) {
-          tagManifestPromise = this.encodeBlobKey(tag).then((blobKey) => {
-            return this.tracer.withActiveSpan(`get tag manifest`, async (span) => {
-              span.setAttributes({ tag, blobKey })
-              return this.blobStore.get(blobKey, { type: 'json' })
-            })
-          })
-
-          this.tagManifestsFetchedFromBlobStoreInCurrentRequest[tag] = tagManifestPromise
-        }
+        const tagManifestPromise: Promise<TagManifest | null> = this.cacheStore.get<TagManifest>(
+          tag,
+          'tagManifest.get',
+        )
 
         tagManifestPromises.push(
           tagManifestPromise.then((tagManifest) => {
-            const isStale = tagManifest?.revalidatedAt >= (cacheEntry.lastModified || Date.now())
+            if (!tagManifest) {
+              return false
+            }
+            const isStale = tagManifest.revalidatedAt >= (cacheEntry.lastModified || Date.now())
             if (isStale) {
               resolve(true)
               return true
