@@ -131,14 +131,17 @@ await Promise.all([
 
 async function ensureNoRegionalBlobsModuleDuplicates() {
   const REGIONAL_BLOB_STORE_CONTENT_TO_FIND = 'fetchBeforeNextPatchedIt'
+  const EXPECTED_MODULE_TO_CONTAIN_FETCH_BEFORE_NEXT_PATCHED_IT =
+    'run/storage/regional-blob-store.cjs'
 
   const filesToTest = await glob(`${OUT_DIR}/**/*.{js,cjs}`)
   const unexpectedModulesContainingFetchBeforeNextPatchedIt = []
   let foundInExpectedModule = false
+
   for (const fileToTest of filesToTest) {
     const content = await readFile(fileToTest, 'utf-8')
     if (content.includes(REGIONAL_BLOB_STORE_CONTENT_TO_FIND)) {
-      if (fileToTest.endsWith('run/regional-blob-store.cjs')) {
+      if (fileToTest.endsWith(EXPECTED_MODULE_TO_CONTAIN_FETCH_BEFORE_NEXT_PATCHED_IT)) {
         foundInExpectedModule = true
       } else {
         unexpectedModulesContainingFetchBeforeNextPatchedIt.push(fileToTest)
@@ -147,7 +150,7 @@ async function ensureNoRegionalBlobsModuleDuplicates() {
   }
   if (!foundInExpectedModule) {
     throw new Error(
-      'Expected to find "fetchBeforeNextPatchedIt" variable in "run/regional-blob-store.cjs", but it was not found. This might indicate a setup change that requires the bundling validation in "tools/build.js" to be adjusted.',
+      `Expected to find "fetchBeforeNextPatchedIt" variable in "${EXPECTED_MODULE_TO_CONTAIN_FETCH_BEFORE_NEXT_PATCHED_IT}", but it was not found. This might indicate a setup change that requires the bundling validation in "tools/build.js" to be adjusted.`,
     )
   }
   if (unexpectedModulesContainingFetchBeforeNextPatchedIt.length !== 0) {

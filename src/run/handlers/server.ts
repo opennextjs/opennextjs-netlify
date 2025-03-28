@@ -13,8 +13,8 @@ import {
   setCacheTagsHeaders,
   setVaryHeaders,
 } from '../headers.js'
-import { setFetchBeforeNextPatchedIt } from '../regional-blob-store.cjs'
 import { nextResponseProxy } from '../revalidate.js'
+import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
 import { getLogger, type RequestContext } from './request-context.cjs'
 import { getTracer } from './tracer.cjs'
@@ -127,7 +127,6 @@ export default async (
         headers: response.headers,
         request,
         span,
-        tracer,
         requestContext,
       })
     }
