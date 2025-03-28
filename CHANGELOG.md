@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.10.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.0...v5.10.1) (2025-03-17)
+
+
+### Bug Fixes
+
+* add more measures to prevent using data-cache for blob operations ([#2775](https://github.com/opennextjs/opennextjs-netlify/issues/2775)) ([58cafc1](https://github.com/opennextjs/opennextjs-netlify/commit/58cafc152ec70539122b87e46578abd75dc9daa8))
+
 ## [5.10.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.9.4...v5.10.0) (2025-03-07)
 
 

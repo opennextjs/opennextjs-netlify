@@ -14,10 +14,13 @@ import {
   setVaryHeaders,
 } from '../headers.js'
 import { nextResponseProxy } from '../revalidate.js'
+import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
 import { getLogger, type RequestContext } from './request-context.cjs'
 import { getTracer } from './tracer.cjs'
 import { setupWaitUntil } from './wait-until.cjs'
+
+setFetchBeforeNextPatchedIt(globalThis.fetch)
 
 const nextImportPromise = import('../next.cjs')
 
@@ -124,7 +127,6 @@ export default async (
         headers: response.headers,
         request,
         span,
-        tracer,
         requestContext,
       })
     }

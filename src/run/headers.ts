@@ -1,12 +1,11 @@
 import type { Span } from '@opentelemetry/api'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
-import { encodeBlobKey } from '../shared/blobkey.js'
-import type { NetlifyCachedRouteValue } from '../shared/cache-types.cjs'
+import type { NetlifyCachedRouteValue, NetlifyCacheHandlerValue } from '../shared/cache-types.cjs'
 
 import { getLogger, RequestContext } from './handlers/request-context.cjs'
-import type { RuntimeTracer } from './handlers/tracer.cjs'
-import { getRegionalBlobStore } from './regional-blob-store.cjs'
+import { recordWarning } from './handlers/tracer.cjs'
+import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
 const ALL_VARIATIONS = Symbol.for('ALL_VARIATIONS')
 interface NetlifyVaryValues {
@@ -129,13 +128,11 @@ export const adjustDateHeader = async ({
   headers,
   request,
   span,
-  tracer,
   requestContext,
 }: {
   headers: Headers
   request: Request
   span: Span
-  tracer: RuntimeTracer
   requestContext: RequestContext
 }) => {
   const key = new URL(request.url).pathname
@@ -149,45 +146,29 @@ export const adjustDateHeader = async ({
     // request context would contain lastModified value
     // this is not fatal as we have fallback,
     // but we want to know about it happening
-    span.recordException(
+    recordWarning(
       new Error('lastModified not found in requestContext, falling back to trying blobs'),
+      span,
     )
-    span.setAttributes({
-      severity: 'alert',
-      warning: true,
-    })
 
-    const blobStore = getRegionalBlobStore({ consistency: 'strong' })
-    const blobKey = await encodeBlobKey(key)
-
-    // TODO: use metadata for this
-    lastModified = await tracer.withActiveSpan(
+    const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+    const cacheEntry = await cacheStore.get<NetlifyCacheHandlerValue>(
+      key,
       'get cache to calculate date header',
-      async (getBlobForDateSpan) => {
-        getBlobForDateSpan.setAttributes({
-          key,
-          blobKey,
-        })
-        const blob = (await blobStore.get(blobKey, { type: 'json' })) ?? {}
-
-        getBlobForDateSpan.addEvent(blob ? 'Cache hit' : 'Cache miss')
-        return blob.lastModified
-      },
     )
+    lastModified = cacheEntry?.lastModified
   }
 
   if (!lastModified) {
     // this should never happen as we only execute this code path for cached responses
     // and those should always have lastModified value
-    span.recordException(
+    recordWarning(
       new Error(
         'lastModified not found in either requestContext or blobs, date header for cached response is not set',
       ),
+      span,
     )
-    span.setAttributes({
-      severity: 'alert',
-      warning: true,
-    })
+
     return
   }
 

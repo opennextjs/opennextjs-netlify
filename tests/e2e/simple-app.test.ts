@@ -12,8 +12,8 @@ test('Renders the Home page correctly', async ({ page, simple }) => {
 
   await expect(page).toHaveTitle('Simple Next App')
 
-  expect(headers['cache-status']).toMatch(/^"Next.js"; hit$/m)
-  expect(headers['cache-status']).toMatch(/^"Netlify Edge"; fwd=miss$/m)
+  expect(headers['cache-status'].replaceAll(', ', '\n')).toMatch(/^"Next.js"; hit$/m)
+  expect(headers['cache-status'].replaceAll(', ', '\n')).toMatch(/^"Netlify Edge"; fwd=miss$/m)
   // "Netlify Durable" assertion is skipped because we are asserting index page and there are possible that something else is making similar request to it
   // and as a result we can see many possible statuses for it: `fwd=miss`, `fwd=miss; stored`, `hit; ttl=<ttl>` so there is no point in asserting on that
   // "Netlify Edge" status suffers from similar issue, but is less likely to manifest (only if those requests would be handled by same CDN node) and retries

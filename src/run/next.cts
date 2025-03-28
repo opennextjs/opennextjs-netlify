@@ -4,9 +4,11 @@ import { relative, resolve } from 'path'
 // @ts-expect-error no types installed
 import { patchFs } from 'fs-monkey'
 
+import { HtmlBlob } from '../shared/blob-types.cjs'
+
 import { getRequestContext } from './handlers/request-context.cjs'
 import { getTracer } from './handlers/tracer.cjs'
-import { getRegionalBlobStore } from './regional-blob-store.cjs'
+import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
 // https://github.com/vercel/next.js/pull/68193/files#diff-37243d614f1f5d3f7ea50bbf2af263f6b1a9a4f70e84427977781e07b02f57f1R49
 // This import resulted in importing unbundled React which depending if NODE_ENV is `production` or not would use
@@ -76,17 +78,10 @@ ResponseCache.prototype.get = function get(...getArgs: unknown[]) {
 
 type FS = typeof import('fs')
 
-export type HtmlBlob = {
-  html: string
-  isFallback: boolean
-}
-
 export async function getMockedRequestHandler(...args: Parameters<typeof getRequestHandlers>) {
   const tracer = getTracer()
   return tracer.withActiveSpan('mocked request handler', async () => {
     const ofs = { ...fs }
-
-    const { encodeBlobKey } = await import('../shared/blobkey.js')
 
     async function readFileFallbackBlobStore(...fsargs: Parameters<FS['promises']['readFile']>) {
       const [path, options] = fsargs
@@ -97,11 +92,9 @@ export async function getMockedRequestHandler(...args: Parameters<typeof getRequ
       } catch (error) {
         // only try to get .html files from the blob store
         if (typeof path === 'string' && path.endsWith('.html')) {
-          const store = getRegionalBlobStore()
+          const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
           const relPath = relative(resolve('.next/server/pages'), path)
-          const file = (await store.get(await encodeBlobKey(relPath), {
-            type: 'json',
-          })) as HtmlBlob | null
+          const file = await cacheStore.get<HtmlBlob>(relPath, 'staticHtml.get')
           if (file !== null) {
             if (!file.isFallback) {
               const requestContext = getRequestContext()
