@@ -72,6 +72,14 @@ module.exports = {
                 message: 'Please use `getTracer()` from `./handlers/tracer.cjs` instead',
               },
             ],
+            patterns: [
+              {
+                // only */storage/storage.cjs is allowed to be imported
+                // rest are implementation details that should not be used directly
+                group: ['*/storage/*', '!*/storage/storage.cjs'],
+                message: 'Import public `[...]/storage/storage.cjs` module instead.',
+              },
+            ],
           },
         ],
       },
