@@ -473,17 +473,17 @@ export async function invokeEdgeFunction(
 
     // Checkout the stargate headers: https://github.com/netlify/stargate/blob/dc8adfb6e91fa0a2fb00c0cba06e4e2f9e5d4e4d/proxy/deno/edge.go#L1142-L1170
     headers: {
-      'x-nf-edge-functions': functionsToInvoke.join(','),
-      'x-nf-deploy-id': ctx.deployID,
-      'x-nf-site-info': Buffer.from(
+      'debug-x-nf-edge-functions': functionsToInvoke.join(','),
+      'debug-x-nf-deploy-id': ctx.deployID,
+      'debug-x-nf-site-info': Buffer.from(
         JSON.stringify({ id: ctx.siteID, name: 'Test Site', url: 'https://example.com' }),
       ).toString('base64'),
-      'x-nf-blobs-info': Buffer.from(
+      'debug-x-nf-blobs-info': Buffer.from(
         JSON.stringify({ url: `http://${ctx.blobStoreHost}`, token: BLOB_TOKEN }),
       ).toString('base64'),
-      'x-nf-passthrough': 'passthrough',
-      'x-nf-passthrough-host': passthroughHost,
-      'x-nf-passthrough-proto': 'http:',
+      'debug-x-nf-passthrough': 'passthrough',
+      'debug-x-nf-passthrough-host': passthroughHost,
+      'debug-x-nf-passthrough-proto': 'http:',
       'x-nf-request-id': v4(),
       ...options.headers,
     },
