@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.10.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.1...v5.10.2) (2025-03-31)
+
+
+### Performance Improvements
+
+* memoize blobs requests in the request scope ([#2777](https://github.com/opennextjs/opennextjs-netlify/issues/2777)) ([a2881bf](https://github.com/opennextjs/opennextjs-netlify/commit/a2881bff4d0ebac18126924ce2fadbe36832983a))
+
 ## [5.10.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.0...v5.10.1) (2025-03-17)
 
 
