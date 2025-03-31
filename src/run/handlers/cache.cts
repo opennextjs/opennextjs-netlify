@@ -121,11 +121,12 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   private captureCacheTags(cacheValue: NetlifyIncrementalCacheValue | null, key: string) {
+    const requestContext = getRequestContext()
+
     if (!cacheValue) {
       return
     }
 
-    const requestContext = getRequestContext()
     // Bail if we can't get request context
     if (!requestContext) {
       return
@@ -393,7 +394,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       await this.cacheStore.set(key, { lastModified, value }, 'blobStore.set')
 
-      if (data?.kind === 'PAGE' || data?.kind === 'PAGES') {
+      if (!data || data?.kind === 'PAGE' || data?.kind === 'PAGES') {
         const requestContext = getRequestContext()
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
