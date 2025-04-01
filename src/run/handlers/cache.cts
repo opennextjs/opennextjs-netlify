@@ -271,7 +271,12 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       }
 
       this.captureResponseCacheLastModified(blob, key, span)
-      this.captureCacheTags(blob.value, key)
+
+      // Next sets a kind/kindHint and fetchUrl for data requests, however fetchUrl was found to be most reliable across versions
+      const isDataRequest = Boolean(context.fetchUrl)
+      if (!isDataRequest) {
+        this.captureCacheTags(blob.value, key)
+      }
 
       switch (blob.value?.kind) {
         case 'FETCH':
@@ -391,13 +396,17 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       const value = this.transformToStorableObject(data, context)
 
-      // if previous CacheHandler.get call returned null (page was either never rendered or was on-demand revalidated)
-      // and we didn't yet capture cache tags, we try to get cache tags from freshly produced cache value
-      this.captureCacheTags(value, key)
+      // Next sets a fetchCache and fetchUrl for data requests, however fetchUrl was found to be most reliable across versions
+      const isDataReq = Boolean(context.fetchUrl)
+      if (!isDataReq) {
+        // if previous CacheHandler.get call returned null (page was either never rendered or was on-demand revalidated)
+        // and we didn't yet capture cache tags, we try to get cache tags from freshly produced cache value
+        this.captureCacheTags(value, key)
+      }
 
       await this.cacheStore.set(key, { lastModified, value }, 'blobStore.set')
 
-      if (!data || data?.kind === 'PAGE' || data?.kind === 'PAGES') {
+      if ((!data && !isDataReq) || data?.kind === 'PAGE' || data?.kind === 'PAGES') {
         const requestContext = getRequestContext()
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
