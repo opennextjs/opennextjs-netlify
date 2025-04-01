@@ -266,7 +266,6 @@ export const setCacheControlHeaders = (
     ['GET', 'HEAD'].includes(request.method) &&
     !headers.has('cdn-cache-control') &&
     !headers.has('netlify-cdn-cache-control') &&
-    !new URL(request.url).pathname.startsWith('/api/') &&
     requestContext.usedFsReadForNonFallback
   ) {
     // handle CDN Cache Control on static files
