@@ -13,7 +13,9 @@ test.describe('Dynamic CMS', () => {
       '"Next.js"; fwd=miss, "Netlify Durable"; fwd=uri-miss; stored, "Netlify Edge"; fwd=miss',
     )
     expect(headers1['netlify-cache-tag']).toEqual('_n_t_/content/blog')
-    expect(headers1['netlify-cdn-cache-control']).toEqual('s-maxage=31536000, durable')
+    expect(headers1['netlify-cdn-cache-control']).toMatch(
+      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/
+    )
 
     // 2. Publish the blob, revalidate the dynamic page, and wait to regenerate
     await page.goto(new URL('/cms/publish', dynamicCms.url).href)
@@ -30,7 +32,9 @@ test.describe('Dynamic CMS', () => {
       /"Next.js"; hit, "Netlify Durable"; fwd=stale; ttl=[0-9]+; stored, "Netlify Edge"; fwd=stale/,
     )
     expect(headers2['netlify-cache-tag']).toEqual('_n_t_/content/blog')
-    expect(headers2['netlify-cdn-cache-control']).toEqual('s-maxage=31536000, durable')
+    expect(headers2['netlify-cdn-cache-control']).toMatch(
+      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/
+    )
 
     // 4. Unpublish the blob, revalidate the dynamic page, and wait to regenerate
     await page.goto(new URL('/cms/unpublish', dynamicCms.url).href)
@@ -47,6 +51,8 @@ test.describe('Dynamic CMS', () => {
       /"Next.js"; fwd=miss, "Netlify Durable"; fwd=stale; ttl=[0-9]+; stored, "Netlify Edge"; fwd=stale/,
     )
     expect(headers3['netlify-cache-tag']).toEqual('_n_t_/content/blog')
-    expect(headers3['netlify-cdn-cache-control']).toEqual('s-maxage=31536000, durable')
+    expect(headers3['netlify-cdn-cache-control']).toMatch(
+      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/
+    )
   })
 })
