@@ -230,7 +230,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     ...args: Parameters<CacheHandlerForMultipleVersions['get']>
   ): ReturnType<CacheHandlerForMultipleVersions['get']> {
     return this.tracer.withActiveSpan('get cache key', async (span) => {
-      const [key, ctx = {}] = args
+      const [key, context = {}] = args
       getLogger().debug(`[NetlifyCacheHandler.get]: ${key}`)
 
       span.setAttributes({ key })
@@ -263,7 +263,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         return null
       }
 
-      const staleByTags = await this.checkCacheEntryStaleByTags(blob, ctx.tags, ctx.softTags)
+      const staleByTags = await this.checkCacheEntryStaleByTags(blob, context.tags, context.softTags)
 
       if (staleByTags) {
         span.addEvent('Stale', { staleByTags, key, ttl })
@@ -277,7 +277,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         case 'FETCH':
           span.addEvent('FETCH', {
             lastModified: blob.lastModified,
-            revalidate: ctx.revalidate,
+            revalidate: context.revalidate,
             ttl,
           })
           return {
