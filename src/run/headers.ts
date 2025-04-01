@@ -274,10 +274,7 @@ export const setCacheControlHeaders = (
   }
 }
 
-export const setCacheTagsHeaders = (
-  headers: Headers,
-  requestContext: RequestContext,
-) => {
+export const setCacheTagsHeaders = (headers: Headers, requestContext: RequestContext) => {
   if (!headers.has('cache-control') && !headers.has('netlify-cdn-cache-control')) {
     return
   }

@@ -14,7 +14,7 @@ test.describe('Dynamic CMS', () => {
     )
     expect(headers1['netlify-cache-tag']).toEqual('_n_t_/content/blog')
     expect(headers1['netlify-cdn-cache-control']).toMatch(
-      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/
+      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/,
     )
 
     // 2. Publish the blob, revalidate the dynamic page, and wait to regenerate
@@ -33,7 +33,7 @@ test.describe('Dynamic CMS', () => {
     )
     expect(headers2['netlify-cache-tag']).toEqual('_n_t_/content/blog')
     expect(headers2['netlify-cdn-cache-control']).toMatch(
-      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/
+      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/,
     )
 
     // 4. Unpublish the blob, revalidate the dynamic page, and wait to regenerate
@@ -52,7 +52,7 @@ test.describe('Dynamic CMS', () => {
     )
     expect(headers3['netlify-cache-tag']).toEqual('_n_t_/content/blog')
     expect(headers3['netlify-cdn-cache-control']).toMatch(
-      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/
+      /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/,
     )
   })
 })

@@ -263,7 +263,11 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         return null
       }
 
-      const staleByTags = await this.checkCacheEntryStaleByTags(blob, context.tags, context.softTags)
+      const staleByTags = await this.checkCacheEntryStaleByTags(
+        blob,
+        context.tags,
+        context.softTags,
+      )
 
       if (staleByTags) {
         span.addEvent('Stale', { staleByTags, key, ttl })
