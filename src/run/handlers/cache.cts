@@ -123,10 +123,6 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   private captureCacheTags(cacheValue: NetlifyIncrementalCacheValue | null, key: string) {
     const requestContext = getRequestContext()
 
-    if (!cacheValue) {
-      return
-    }
-
     // Bail if we can't get request context
     if (!requestContext) {
       return
@@ -139,6 +135,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     // first `CacheHandler.get` and not from following `CacheHandler.set` as this is pattern for Stale-while-revalidate behavior
     // and stale response is served while new one is generated.
     if (requestContext.responseCacheTags) {
+      return
+    }
+
+    // Set cache tags for 404 pages as well so that the content can later be purged
+    if (!cacheValue) {
+      const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeURI(key)}`]
+      requestContext.responseCacheTags = cacheTags
       return
     }
 
