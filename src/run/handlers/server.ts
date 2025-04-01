@@ -131,7 +131,7 @@ export default async (
       })
     }
 
-    setCacheControlHeaders(response, request, requestContext, nextConfig)
+    setCacheControlHeaders(response, request, requestContext)
     setCacheTagsHeaders(response.headers, requestContext)
     setVaryHeaders(response.headers, request, nextConfig)
     setCacheStatusHeader(response.headers, nextCache)
