@@ -3,7 +3,7 @@ import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
 import type { NetlifyCachedRouteValue, NetlifyCacheHandlerValue } from '../shared/cache-types.cjs'
 
-import { getLogger, RequestContext } from './handlers/request-context.cjs'
+import { RequestContext } from './handlers/request-context.cjs'
 import { recordWarning } from './handlers/tracer.cjs'
 import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
@@ -200,7 +200,6 @@ export const setCacheControlHeaders = (
   { headers, status }: Response,
   request: Request,
   requestContext: RequestContext,
-  nextConfig: NextConfigComplete,
 ) => {
   if (
     typeof requestContext.routeHandlerRevalidate !== 'undefined' &&
@@ -211,13 +210,6 @@ export const setCacheControlHeaders = (
     // handle CDN Cache Control on Route Handler responses
     setCacheControlFromRequestContext(headers, requestContext.routeHandlerRevalidate)
     return
-  }
-
-  // temporary diagnostic to evaluate number of trailing slash redirects
-  if (status === 308 && request.url.endsWith('/') !== nextConfig.trailingSlash) {
-    getLogger()
-      .withFields({ trailingSlash: nextConfig.trailingSlash, location: headers.get('location') })
-      .log('NetlifyHeadersHandler.trailingSlashRedirect')
   }
 
   if (status === 404) {
