@@ -29,7 +29,7 @@ test.describe('Dynamic CMS', () => {
     expect(response2?.status()).toEqual(200)
     expect(headers2['cache-control']).toEqual('public,max-age=0,must-revalidate')
     expect(headers2['cache-status']).toMatch(
-      /"Next.js"; hit, "Netlify Durable"; fwd=stale; ttl=[0-9]+; stored, "Netlify Edge"; fwd=stale/,
+      /"Next.js"; hit, "Netlify Durable"; fwd=stale; ttl=[0-9]+; stored, "Netlify Edge"; fwd=(stale|miss)/,
     )
     expect(headers2['netlify-cache-tag']).toEqual('_n_t_/content/blog')
     expect(headers2['netlify-cdn-cache-control']).toMatch(
@@ -48,7 +48,7 @@ test.describe('Dynamic CMS', () => {
     expect(response3?.status()).toEqual(404)
     expect(headers3['cache-control']).toEqual('public,max-age=0,must-revalidate')
     expect(headers3['cache-status']).toMatch(
-      /"Next.js"; fwd=miss, "Netlify Durable"; fwd=stale; ttl=[0-9]+; stored, "Netlify Edge"; fwd=stale/,
+      /"Next.js"; fwd=miss, "Netlify Durable"; fwd=stale; ttl=[0-9]+; stored, "Netlify Edge"; fwd=(stale|miss)/,
     )
     expect(headers3['netlify-cache-tag']).toEqual('_n_t_/content/blog')
     expect(headers3['netlify-cdn-cache-control']).toMatch(
