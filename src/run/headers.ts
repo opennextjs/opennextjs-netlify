@@ -285,7 +285,6 @@ export const setCacheControlHeaders = (
 
 export const setCacheTagsHeaders = (
   headers: Headers,
-  request: Request,
   requestContext: RequestContext,
 ) => {
   if (!headers.has('cache-control') && !headers.has('netlify-cdn-cache-control')) {
@@ -294,13 +293,7 @@ export const setCacheTagsHeaders = (
 
   if (requestContext.responseCacheTags) {
     headers.set('netlify-cache-tag', requestContext.responseCacheTags.join(','))
-    return
   }
-
-  const key = new URL(request.url).pathname
-  const cacheTag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
-  console.log('setCacheTagsHeaders', 'netlify-cache-tag', key)
-  headers.set('netlify-cache-tag', cacheTag)
 }
 
 /**
