@@ -8,11 +8,12 @@ const Content = ({ value }) => (
   </div>
 )
 
-export async function getStaticProps() {
-  const store = getDeployStore({ name: 'cms-content', consistency: 'strong' })
-  const BLOB_KEY = 'key'
+export async function getStaticProps({ params }) {
+  const contentKey = params.slug.join('/')
 
-  const value = await store.get(BLOB_KEY, { type: 'json' })
+  const store = getDeployStore({ name: 'cms-content', consistency: 'strong' })
+
+  const value = await store.get(contentKey, { type: 'json' })
 
   if (!value) {
     return {
@@ -22,7 +23,7 @@ export async function getStaticProps() {
 
   return {
     props: {
-      value: value,
+      value,
     },
   }
 }
