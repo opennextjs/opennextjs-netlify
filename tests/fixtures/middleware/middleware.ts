@@ -80,6 +80,16 @@ const getResponse = (request: NextRequest) => {
     })
   }
 
+  if (request.nextUrl.pathname === '/test/rewrite-and-redirect') {
+    return NextResponse.redirect(new URL('/other', request.url), {
+      status: 302,
+      statusText: 'Found',
+      headers: {
+        'x-middleware-rewrite': new URL('/test/should-not-be-rewritten', request.url).toString(),
+      },
+    })
+  }
+
   return NextResponse.json({ error: 'Error' }, { status: 500 })
 }
 
