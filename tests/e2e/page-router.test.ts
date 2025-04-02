@@ -590,6 +590,15 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
       'getStaticProps duration should not be longer than 10 seconds',
     ).toBeLessThan(10_000)
   })
+
+  test('API route calling res.revalidate() is not cacheable', async ({ page, pageRouter }) => {
+    const response = await page.goto(
+      new URL('/api/revalidate?path=/static/not-found', pageRouter.url).href,
+    )
+
+    expect(response?.status()).toEqual(200)
+    expect(response?.headers()['netlify-cdn-cache-control']).not.toMatch(/(s-maxage|max-age)/)
+  })
 })
 
 test.describe('Page Router with basePath and i18n', () => {
