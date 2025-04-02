@@ -440,5 +440,6 @@ export const fixtureFactories = {
       publishDirectory: 'apps/site/.next',
       smoke: true,
     }),
+  dynamicCms: () => createE2EFixture('dynamic-cms'),
   after: () => createE2EFixture('after'),
 }

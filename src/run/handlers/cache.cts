@@ -121,11 +121,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   private captureCacheTags(cacheValue: NetlifyIncrementalCacheValue | null, key: string) {
-    if (!cacheValue) {
-      return
-    }
-
     const requestContext = getRequestContext()
+
     // Bail if we can't get request context
     if (!requestContext) {
       return
@@ -138,6 +135,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     // first `CacheHandler.get` and not from following `CacheHandler.set` as this is pattern for Stale-while-revalidate behavior
     // and stale response is served while new one is generated.
     if (requestContext.responseCacheTags) {
+      return
+    }
+
+    // Set cache tags for 404 pages as well so that the content can later be purged
+    if (!cacheValue) {
+      const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeURI(key)}`]
+      requestContext.responseCacheTags = cacheTags
       return
     }
 
@@ -226,7 +230,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     ...args: Parameters<CacheHandlerForMultipleVersions['get']>
   ): ReturnType<CacheHandlerForMultipleVersions['get']> {
     return this.tracer.withActiveSpan('get cache key', async (span) => {
-      const [key, ctx = {}] = args
+      const [key, context = {}] = args
       getLogger().debug(`[NetlifyCacheHandler.get]: ${key}`)
 
       span.setAttributes({ key })
@@ -259,7 +263,11 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         return null
       }
 
-      const staleByTags = await this.checkCacheEntryStaleByTags(blob, ctx.tags, ctx.softTags)
+      const staleByTags = await this.checkCacheEntryStaleByTags(
+        blob,
+        context.tags,
+        context.softTags,
+      )
 
       if (staleByTags) {
         span.addEvent('Stale', { staleByTags, key, ttl })
@@ -267,13 +275,18 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       }
 
       this.captureResponseCacheLastModified(blob, key, span)
-      this.captureCacheTags(blob.value, key)
+
+      // Next sets a kind/kindHint and fetchUrl for data requests, however fetchUrl was found to be most reliable across versions
+      const isDataRequest = Boolean(context.fetchUrl)
+      if (!isDataRequest) {
+        this.captureCacheTags(blob.value, key)
+      }
 
       switch (blob.value?.kind) {
         case 'FETCH':
           span.addEvent('FETCH', {
             lastModified: blob.lastModified,
-            revalidate: ctx.revalidate,
+            revalidate: context.revalidate,
             ttl,
           })
           return {
@@ -387,13 +400,17 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       const value = this.transformToStorableObject(data, context)
 
-      // if previous CacheHandler.get call returned null (page was either never rendered or was on-demand revalidated)
-      // and we didn't yet capture cache tags, we try to get cache tags from freshly produced cache value
-      this.captureCacheTags(value, key)
+      // Next sets a fetchCache and fetchUrl for data requests, however fetchUrl was found to be most reliable across versions
+      const isDataReq = Boolean(context.fetchUrl)
+      if (!isDataReq) {
+        // if previous CacheHandler.get call returned null (page was either never rendered or was on-demand revalidated)
+        // and we didn't yet capture cache tags, we try to get cache tags from freshly produced cache value
+        this.captureCacheTags(value, key)
+      }
 
       await this.cacheStore.set(key, { lastModified, value }, 'blobStore.set')
 
-      if (data?.kind === 'PAGE' || data?.kind === 'PAGES') {
+      if ((!data && !isDataReq) || data?.kind === 'PAGE' || data?.kind === 'PAGES') {
         const requestContext = getRequestContext()
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key

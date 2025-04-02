@@ -15,8 +15,8 @@ function isRevalidateMethod(
 }
 
 // Needing to proxy the response object to intercept the revalidate call for on-demand revalidation on page routes
-export const nextResponseProxy = (res: ServerResponse, requestContext: RequestContext) => {
-  return new Proxy(res, {
+export const nextResponseProxy = (response: ServerResponse, requestContext: RequestContext) => {
+  return new Proxy(response, {
     get(target: ServerResponse, key: string) {
       const originalValue = Reflect.get(target, key)
       if (isRevalidateMethod(key, originalValue)) {
