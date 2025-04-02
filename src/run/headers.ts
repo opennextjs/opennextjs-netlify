@@ -266,7 +266,8 @@ export const setCacheControlHeaders = (
     ['GET', 'HEAD'].includes(request.method) &&
     !headers.has('cdn-cache-control') &&
     !headers.has('netlify-cdn-cache-control') &&
-    requestContext.usedFsReadForNonFallback
+    requestContext.usedFsReadForNonFallback &&
+    !requestContext.didPagesRouterOnDemandRevalidate
   ) {
     // handle CDN Cache Control on static files
     headers.set('cache-control', 'public, max-age=0, must-revalidate')
