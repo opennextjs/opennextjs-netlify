@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.10.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.2...v5.10.3) (2025-04-03)
+
+
+### Bug Fixes
+
+* don't set permanent caching header when res.revalidate() was used ([#2810](https://github.com/opennextjs/opennextjs-netlify/issues/2810)) ([0e7e3a2](https://github.com/opennextjs/opennextjs-netlify/commit/0e7e3a265d253cc5ab7d03855e39bee6ebf21d47))
+* improved cdn cache hooks for dynamic 404 pages ([#2786](https://github.com/opennextjs/opennextjs-netlify/issues/2786)) ([b4f04e3](https://github.com/opennextjs/opennextjs-netlify/commit/b4f04e3c5a9c83c916f69c3e3c64e0d946ec3692))
+
 ## [5.10.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.1...v5.10.2) (2025-03-31)
 
 
