@@ -4,6 +4,10 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  i18n: {
+    locales: ['en', 'fr'],
+    defaultLocale: 'en',
+  },
   generateBuildId: () => 'build-id',
 }
 
