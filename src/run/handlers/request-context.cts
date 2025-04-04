@@ -35,6 +35,7 @@ export type RequestContext = {
   backgroundWorkPromise: Promise<unknown>
   logger: SystemLogger
   requestID: string
+  isCacheableAppPage?: boolean
 }
 
 type RequestContextAsyncLocalStorage = AsyncLocalStorage<RequestContext>

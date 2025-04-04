@@ -17,7 +17,7 @@ import { nextResponseProxy } from '../revalidate.js'
 import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
 import { getLogger, type RequestContext } from './request-context.cjs'
-import { getTracer } from './tracer.cjs'
+import { getTracer, recordWarning } from './tracer.cjs'
 import { setupWaitUntil } from './wait-until.cjs'
 
 setFetchBeforeNextPatchedIt(globalThis.fetch)
@@ -117,11 +117,6 @@ export default async (
     const nextCache = response.headers.get('x-nextjs-cache')
     const isServedFromNextCache = nextCache === 'HIT' || nextCache === 'STALE'
 
-    topLevelSpan.setAttributes({
-      'x-nextjs-cache': nextCache ?? undefined,
-      isServedFromNextCache,
-    })
-
     if (isServedFromNextCache) {
       await adjustDateHeader({
         headers: response.headers,
@@ -135,6 +130,41 @@ export default async (
     setCacheTagsHeaders(response.headers, requestContext)
     setVaryHeaders(response.headers, request, nextConfig)
     setCacheStatusHeader(response.headers, nextCache)
+
+    const netlifyVary = response.headers.get('netlify-vary') ?? undefined
+    const netlifyCdnCacheControl = response.headers.get('netlify-cdn-cache-control') ?? undefined
+    topLevelSpan.setAttributes({
+      'x-nextjs-cache': nextCache ?? undefined,
+      isServedFromNextCache,
+      netlifyVary,
+      netlifyCdnCacheControl,
+    })
+
+    if (requestContext.isCacheableAppPage) {
+      const isRSCRequest = request.headers.get('rsc') === '1'
+      const contentType = response.headers.get('content-type') ?? undefined
+
+      const isExpectedContentType =
+        ((isRSCRequest && contentType?.includes('text/x-component')) ||
+          (!isRSCRequest && contentType?.includes('text/html'))) ??
+        false
+
+      topLevelSpan.setAttributes({
+        isRSCRequest,
+        isCacheableAppPage: true,
+        contentType,
+        isExpectedContentType,
+      })
+
+      if (!isExpectedContentType) {
+        recordWarning(
+          new Error(
+            `Unexpected content type was produced for App Router page response (isRSCRequest: ${isRSCRequest}, contentType: ${contentType})`,
+          ),
+          topLevelSpan,
+        )
+      }
+    }
 
     async function waitForBackgroundWork() {
       // it's important to keep the stream open until the next handler has finished
