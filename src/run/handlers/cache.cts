@@ -332,6 +332,11 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           }
         }
         case 'APP_PAGE': {
+          const requestContext = getRequestContext()
+          if (requestContext && blob.value?.kind === 'APP_PAGE') {
+            requestContext.isCacheableAppPage = true
+          }
+
           const { revalidate, rscData, ...restOfPageValue } = blob.value
 
           span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
@@ -409,6 +414,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       }
 
       await this.cacheStore.set(key, { lastModified, value }, 'blobStore.set')
+
+      if (data?.kind === 'APP_PAGE') {
+        const requestContext = getRequestContext()
+        if (requestContext) {
+          requestContext.isCacheableAppPage = true
+        }
+      }
 
       if ((!data && !isDataReq) || data?.kind === 'PAGE' || data?.kind === 'PAGES') {
         const requestContext = getRequestContext()
