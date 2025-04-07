@@ -508,4 +508,14 @@ describe('route', () => {
 
     expect(call2.body).toBe('{"params":{"slug":"not-in-generateStaticParams"}}')
   })
+
+  test<FixtureTestContext>('cacheable route handler response with 0 length response is served correctly', async (ctx) => {
+    await createFixture('server-components', ctx)
+    await runPlugin(ctx)
+
+    const call = await invokeFunction(ctx, { url: '/api/zero-length-response' })
+
+    expect(call.statusCode).toBe(200)
+    expect(call.body).toBe('')
+  })
 })
