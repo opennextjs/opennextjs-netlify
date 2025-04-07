@@ -367,6 +367,7 @@ describe('plugin', () => {
       '/api/revalidate-handler',
       '/api/static/first',
       '/api/static/second',
+      '/api/zero-length-response',
       '/index',
       '/product/事前レンダリング,test',
       '/revalidate-fetch',
