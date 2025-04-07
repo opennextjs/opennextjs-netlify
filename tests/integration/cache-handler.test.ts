@@ -367,6 +367,7 @@ describe('plugin', () => {
       '/api/revalidate-handler',
       '/api/static/first',
       '/api/static/second',
+      '/api/zero-length-response',
       '/index',
       '/product/事前レンダリング,test',
       '/revalidate-fetch',
@@ -507,5 +508,15 @@ describe('route', () => {
     const call2 = await invokeFunction(ctx, { url: '/api/static/not-in-generateStaticParams' })
 
     expect(call2.body).toBe('{"params":{"slug":"not-in-generateStaticParams"}}')
+  })
+
+  test<FixtureTestContext>('cacheable route handler response with 0 length response is served correctly', async (ctx) => {
+    await createFixture('server-components', ctx)
+    await runPlugin(ctx)
+
+    const call = await invokeFunction(ctx, { url: '/api/zero-length-response' })
+
+    expect(call.statusCode).toBe(200)
+    expect(call.body).toBe('')
   })
 })
