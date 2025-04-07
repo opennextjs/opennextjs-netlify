@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.10.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.3...v5.10.4) (2025-04-07)
+
+
+### Bug Fixes
+
+* add debug information around potential html/rsc response mismatches ([#2816](https://github.com/opennextjs/opennextjs-netlify/issues/2816)) ([70f9b15](https://github.com/opennextjs/opennextjs-netlify/commit/70f9b152ace8ad36911c5018eac89c6336b5c5df))
+* handle case of zero-length cacheable route handler responses ([#2819](https://github.com/opennextjs/opennextjs-netlify/issues/2819)) ([530d2c5](https://github.com/opennextjs/opennextjs-netlify/commit/530d2c5bab7c2bda2f5157226e84d7ee050afb86))
+
 ## [5.10.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.2...v5.10.3) (2025-04-03)
 
 
