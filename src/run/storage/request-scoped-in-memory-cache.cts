@@ -25,44 +25,71 @@ export function setInMemoryCacheMaxSizeFromNextConfig(size: unknown) {
   }
 }
 
-const estimateBlobSize = (valueToStore: BlobType | null | Promise<unknown>): number => {
+type PositiveNumber = number & { __positive: true }
+const isPositiveNumber = (value: unknown): value is PositiveNumber => {
+  return typeof value === 'number' && value > 0
+}
+
+const BASE_BLOB_SIZE = 25 as PositiveNumber
+
+const estimateBlobKnownTypeSize = (
+  valueToStore: BlobType | null | Promise<unknown>,
+): number | undefined => {
   // very approximate size calculation to avoid expensive exact size calculation
   // inspired by https://github.com/vercel/next.js/blob/ed10f7ed0246fcc763194197eb9beebcbd063162/packages/next/src/server/lib/incremental-cache/file-system-cache.ts#L60-L79
   if (valueToStore === null || isPromise(valueToStore) || isTagManifest(valueToStore)) {
-    return 25
+    return BASE_BLOB_SIZE
   }
   if (isHtmlBlob(valueToStore)) {
-    return valueToStore.html.length
-  }
-  let knownKindFailed = false
-  try {
-    if (valueToStore.value?.kind === 'FETCH') {
-      return valueToStore.value.data.body.length
-    }
-    if (valueToStore.value?.kind === 'APP_PAGE') {
-      return valueToStore.value.html.length + (valueToStore.value.rscData?.length ?? 0)
-    }
-    if (valueToStore.value?.kind === 'PAGE' || valueToStore.value?.kind === 'PAGES') {
-      return valueToStore.value.html.length + JSON.stringify(valueToStore.value.pageData).length
-    }
-    if (valueToStore.value?.kind === 'ROUTE' || valueToStore.value?.kind === 'APP_ROUTE') {
-      return valueToStore.value.body.length
-    }
-  } catch {
-    // size calculation rely on the shape of the value, so if it's not what we expect, we fallback to JSON.stringify
-    knownKindFailed = true
+    return BASE_BLOB_SIZE + valueToStore.html.length
   }
 
-  // fallback for not known kinds or known kinds that did fail to calculate size
+  if (valueToStore.value?.kind === 'FETCH') {
+    return BASE_BLOB_SIZE + valueToStore.value.data.body.length
+  }
+  if (valueToStore.value?.kind === 'APP_PAGE') {
+    return (
+      BASE_BLOB_SIZE + valueToStore.value.html.length + (valueToStore.value.rscData?.length ?? 0)
+    )
+  }
+  if (valueToStore.value?.kind === 'PAGE' || valueToStore.value?.kind === 'PAGES') {
+    return (
+      BASE_BLOB_SIZE +
+      valueToStore.value.html.length +
+      JSON.stringify(valueToStore.value.pageData).length
+    )
+  }
+  if (valueToStore.value?.kind === 'ROUTE' || valueToStore.value?.kind === 'APP_ROUTE') {
+    return BASE_BLOB_SIZE + valueToStore.value.body.length
+  }
+}
+
+const estimateBlobSize = (valueToStore: BlobType | null | Promise<unknown>): PositiveNumber => {
+  let knownTypeFailed = false
+  let estimatedKnownTypeSize: number | undefined
+  let estimateBlobKnownTypeSizeError: unknown
+  try {
+    estimatedKnownTypeSize = estimateBlobKnownTypeSize(valueToStore)
+    if (isPositiveNumber(estimatedKnownTypeSize)) {
+      return estimatedKnownTypeSize
+    }
+  } catch (error) {
+    knownTypeFailed = true
+    estimateBlobKnownTypeSizeError = error
+  }
+
+  // fallback for not known kinds or known kinds that did fail to calculate positive size
   // we should also monitor cases when fallback is used because it's not the most efficient way to calculate/estimate size
   // and might indicate need to make adjustments or additions to the size calculation
   recordWarning(
     new Error(
-      `Blob size calculation did fallback to JSON.stringify. Kind: KnownKindFailed: ${knownKindFailed}, ${valueToStore.value?.kind ?? 'undefined'}`,
+      `Blob size calculation did fallback to JSON.stringify. KnownTypeFailed: ${knownTypeFailed}, EstimatedKnownTypeSize: ${estimatedKnownTypeSize}, ValueToStore: ${JSON.stringify(valueToStore)}`,
+      estimateBlobKnownTypeSizeError ? { cause: estimateBlobKnownTypeSizeError } : undefined,
     ),
   )
 
-  return JSON.stringify(valueToStore).length
+  const calculatedSize = JSON.stringify(valueToStore).length
+  return isPositiveNumber(calculatedSize) ? calculatedSize : BASE_BLOB_SIZE
 }
 
 function getInMemoryLRUCache() {
@@ -98,12 +125,26 @@ export const getRequestScopedInMemoryCache = (): RequestScopedInMemoryCache => {
   return {
     get(key) {
       if (!requestContext) return
-      const value = inMemoryLRUCache?.get(`${requestContext.requestID}:${key}`)
-      return value === NullValue ? null : value
+      try {
+        const value = inMemoryLRUCache?.get(`${requestContext.requestID}:${key}`)
+        return value === NullValue ? null : value
+      } catch (error) {
+        // using in-memory store is perf optimization not requirement
+        // trying to use optimization should NOT cause crashes
+        // so we just record warning and return undefined
+        recordWarning(new Error('Failed to get value from memory cache', { cause: error }))
+      }
     },
     set(key, value) {
       if (!requestContext) return
-      inMemoryLRUCache?.set(`${requestContext?.requestID}:${key}`, value ?? NullValue)
+      try {
+        inMemoryLRUCache?.set(`${requestContext?.requestID}:${key}`, value ?? NullValue)
+      } catch (error) {
+        // using in-memory store is perf optimization not requirement
+        // trying to use optimization should NOT cause crashes
+        // so we just record warning and return undefined
+        recordWarning(new Error('Failed to store value in memory cache', { cause: error }))
+      }
     },
   }
 }
