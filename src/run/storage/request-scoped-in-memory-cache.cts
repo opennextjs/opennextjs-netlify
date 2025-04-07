@@ -65,7 +65,6 @@ const estimateBlobKnownTypeSize = (
 }
 
 const estimateBlobSize = (valueToStore: BlobType | null | Promise<unknown>): PositiveNumber => {
-  let knownTypeFailed = false
   let estimatedKnownTypeSize: number | undefined
   let estimateBlobKnownTypeSizeError: unknown
   try {
@@ -74,21 +73,21 @@ const estimateBlobSize = (valueToStore: BlobType | null | Promise<unknown>): Pos
       return estimatedKnownTypeSize
     }
   } catch (error) {
-    knownTypeFailed = true
     estimateBlobKnownTypeSizeError = error
   }
 
   // fallback for not known kinds or known kinds that did fail to calculate positive size
+  const calculatedSize = JSON.stringify(valueToStore).length
+
   // we should also monitor cases when fallback is used because it's not the most efficient way to calculate/estimate size
   // and might indicate need to make adjustments or additions to the size calculation
   recordWarning(
     new Error(
-      `Blob size calculation did fallback to JSON.stringify. KnownTypeFailed: ${knownTypeFailed}, EstimatedKnownTypeSize: ${estimatedKnownTypeSize}, ValueToStore: ${JSON.stringify(valueToStore)}`,
+      `Blob size calculation did fallback to JSON.stringify. EstimatedKnownTypeSize: ${estimatedKnownTypeSize}, CalculatedSize: ${calculatedSize}, ValueToStore: ${JSON.stringify(valueToStore)}`,
       estimateBlobKnownTypeSizeError ? { cause: estimateBlobKnownTypeSizeError } : undefined,
     ),
   )
 
-  const calculatedSize = JSON.stringify(valueToStore).length
   return isPositiveNumber(calculatedSize) ? calculatedSize : BASE_BLOB_SIZE
 }
 
