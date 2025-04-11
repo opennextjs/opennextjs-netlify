@@ -140,7 +140,7 @@ export default async (
       netlifyCdnCacheControl,
     })
 
-    if (requestContext.isCacheableAppPage) {
+    if (requestContext.isCacheableAppPage && response.status !== 304) {
       const isRSCRequest = request.headers.get('rsc') === '1'
       const contentType = response.headers.get('content-type') ?? undefined
 
