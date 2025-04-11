@@ -19,7 +19,7 @@
     "daisyui": "^4.12.2",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.4",
-    "netlify-cli": "^19.1.5",
+    "netlify-cli": "^19.1.7",
     "postcss": "^8.4.38",
     "sass": "^1.77.1",
     "tailwindcss": "^3.4.4"
