@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.10.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.4...v5.10.5) (2025-04-11)
+
+
+### Bug Fixes
+
+* forcefully add _rsc query param to vary ([#2827](https://github.com/opennextjs/opennextjs-netlify/issues/2827)) ([af8bb84](https://github.com/opennextjs/opennextjs-netlify/commit/af8bb84f762ad1beccd76f9dbddff030eedf8d2a))
+
 ## [5.10.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.3...v5.10.4) (2025-04-07)
 
 
