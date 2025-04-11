@@ -55,7 +55,7 @@
     "@netlify/edge-functions": "^2.11.1",
     "@netlify/eslint-config-node": "^7.0.1",
     "@netlify/functions": "^3.0.4",
-    "@netlify/serverless-functions-api": "^1.36.0",
+    "@netlify/serverless-functions-api": "^1.37.0",
     "@netlify/zip-it-and-ship-it": "^10.0.6",
     "@opentelemetry/api": "^1.8.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.51.0",
