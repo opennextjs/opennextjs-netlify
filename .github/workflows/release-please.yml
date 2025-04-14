@@ -3,19 +3,18 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: navikt/github-app-token-generator@793caf0d755fb4d6e88150825f680f188535cb48
-        id: get-token
-        with:
-          private-key: ${{ secrets.TOKENS_PRIVATE_KEY }}
-          app-id: ${{ secrets.TOKENS_APP_ID }}
       - uses: googleapis/release-please-action@v4
         id: release
-        with:
-          token: ${{ steps.get-token.outputs.token }}
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created }}
       - uses: actions/setup-node@v4
@@ -40,7 +39,3 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-      - uses: netlify/submit-build-plugin-action@v1
-        if: ${{ steps.release.outputs.release_created }}
-        with:
-          github-token: ${{ steps.get-token.outputs.token }}
