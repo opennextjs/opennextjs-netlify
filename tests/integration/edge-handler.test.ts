@@ -88,7 +88,7 @@ describe('redirect', () => {
     expect(response.status).toBe(307)
     expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
     expect(
-      new URL(response.headers.get('location') as string).pathname,
+      new URL(response.headers.get('location')!).pathname,
       'redirected to the correct path',
     ).toEqual('/other')
     expect(origin.calls).toBe(0)
@@ -111,11 +111,33 @@ describe('redirect', () => {
     expect(response.status).toBe(307)
     expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
     expect(
-      new URL(response.headers.get('location') as string).pathname,
+      new URL(response.headers.get('location')!).pathname,
       'redirected to the correct path',
     ).toEqual('/other')
     expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
     expect(origin.calls).toBe(0)
+  })
+
+  test<FixtureTestContext>('should ignore x-middleware-rewrite when redirecting', async (ctx) => {
+    await createFixture('middleware', ctx)
+    await runPlugin(ctx)
+
+    const origin = new LocalServer()
+    const response = await invokeEdgeFunction(ctx, {
+      functions: ['___netlify-edge-handler-middleware'],
+      origin,
+      redirect: 'manual',
+      url: '/test/rewrite-and-redirect',
+    })
+
+    ctx.cleanup?.push(() => origin.stop())
+
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+    expect(
+      new URL(response.headers.get('location')!).pathname,
+      'redirected to the correct path',
+    ).toEqual('/other')
   })
 })
 
@@ -309,7 +331,7 @@ describe('should run middleware on data requests', () => {
     expect(response.status).toBe(307)
     expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
     expect(
-      new URL(response.headers.get('location') as string).pathname,
+      new URL(response.headers.get('location')!).pathname,
       'redirected to the correct path',
     ).toEqual('/other')
     expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -333,7 +355,7 @@ describe('should run middleware on data requests', () => {
     expect(response.status).toBe(307)
     expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
     expect(
-      new URL(response.headers.get('location') as string).pathname,
+      new URL(response.headers.get('location')!).pathname,
       'redirected to the correct path',
     ).toEqual('/other')
     expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')

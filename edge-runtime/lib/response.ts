@@ -119,9 +119,10 @@ export const buildResponse = async ({
   const res = new Response(result.response.body, result.response)
   request.headers.set('x-nf-next-middleware', 'skip')
 
-  let rewrite = res.headers.get('x-middleware-rewrite')
   let redirect = res.headers.get('location')
   let nextRedirect = res.headers.get('x-nextjs-redirect')
+  // If we have both a redirect and a rewrite, the redirect must take precedence
+  let rewrite = !redirect && !nextRedirect ? res.headers.get('x-middleware-rewrite') : false
 
   // Data requests (i.e. requests for /_next/data ) need special handling
   const isDataReq = request.headers.has('x-nextjs-data')
