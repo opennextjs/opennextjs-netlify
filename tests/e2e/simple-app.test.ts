@@ -1,6 +1,8 @@
 import { expect, type Locator } from '@playwright/test'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
+import { join } from 'node:path'
+import { readdir } from 'node:fs/promises'
 
 const expectImageWasLoaded = async (locator: Locator) => {
   expect(await locator.evaluate((img: HTMLImageElement) => img.naturalHeight)).toBeGreaterThan(0)
@@ -281,4 +283,28 @@ test('can require CJS module that is not bundled', async ({ simple }) => {
 
   expect(parsedBody.notBundledCJSModule.isBundled).toEqual(false)
   expect(parsedBody.bundledCJSModule.isBundled).toEqual(true)
+})
+
+test('serves a 200 for an existing static asset without invoking a function', async ({
+  page,
+  simple,
+}) => {
+  // Since assets are hashed, we can't hardcode anything here. Find something to fetch.
+  const [staticAsset] = await readdir(join(simple.isolatedFixtureRoot, '.next', 'static', 'chunks'))
+  expect(staticAsset).toBeDefined()
+
+  const response = await page.goto(`${simple.url}/_next/static/chunks/${staticAsset}`)
+
+  expect(response?.status()).toBe(200)
+  expect(response?.headers()).not.toHaveProperty('x-nf-function-type')
+})
+
+test('serves a 404 for a nonexistent static asset without invoking a function', async ({
+  page,
+  simple,
+}) => {
+  const response = await page.goto(`${simple.url}/_next/static/stale123abcdef.js`)
+
+  expect(response?.status()).toBe(404)
+  expect(response?.headers()).not.toHaveProperty('x-nf-function-type')
 })
