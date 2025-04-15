@@ -80,6 +80,13 @@ const getResponse = (request: NextRequest) => {
     })
   }
 
+  if (request.nextUrl.pathname === '/test/rewrite-to-cached-page') {
+    return NextResponse.rewrite(new URL('/caching-rewrite-target', request.url))
+  }
+  if (request.nextUrl.pathname === '/test/redirect-to-cached-page') {
+    return NextResponse.redirect(new URL('/caching-redirect-target', request.url))
+  }
+
   return NextResponse.json({ error: 'Error' }, { status: 500 })
 }
 
