@@ -76,7 +76,7 @@
     "fs-monkey": "^1.0.6",
     "get-port": "^7.1.0",
     "lambda-local": "^2.2.0",
-    "lru-cache": "^10.4.3",
+    "lru-cache": "^11.0.0",
     "memfs": "^4.9.2",
     "mock-require": "^3.0.3",
     "msw": "^2.0.7",
