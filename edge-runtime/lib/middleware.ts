@@ -1,6 +1,7 @@
 import type { Context } from '@netlify/edge-functions'
 
 import type { ElementHandlers } from '../vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
+import { getCookies } from '../vendor/deno.land/std@0.175.0/http/cookie.ts'
 
 type NextDataTransform = <T>(data: T) => T
 
@@ -57,4 +58,20 @@ export const addMiddlewareHeaders = async (
     }
   })
   return response
+}
+
+export function mergeMiddlewareCookies(middlewareResponse: Response, request: Request) {
+  let mergedCookies = getCookies(request.headers)
+  const middlewareCookies = middlewareResponse.headers.get('x-middleware-set-cookie') || ''
+  const regex = new RegExp(/,(?!\s)/) // commas that are not followed by whitespace
+
+  middlewareCookies.split(regex).forEach((entry) => {
+    const [cookie] = entry.split(';')
+    const [name, value] = cookie.split('=')
+    mergedCookies[name] = value
+  })
+
+  return Object.entries(mergedCookies)
+    .map((kv) => kv.join('='))
+    .join('; ')
 }
