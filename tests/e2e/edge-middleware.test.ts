@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test'
+import { expect, Response } from '@playwright/test'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 import { getImageSize } from 'next/dist/server/image-optimizer.js'
@@ -231,4 +231,60 @@ test("requests with x-middleware-subrequest don't skip middleware (GHSA-f82v-jwr
 
   // ensure we are testing version before the fix for self hosted
   expect(response.headers.get('x-test-used-next-version')).toBe('15.2.2')
+})
+
+test.describe('RSC cache poisoning', () => {
+  test('Middleware rewrite', async ({ page, middleware }) => {
+    const prefetchResponsePromise = new Promise<Response>((resolve) => {
+      page.on('response', (response) => {
+        if (response.url().includes('/test/rewrite-to-cached-page')) {
+          resolve(response)
+        }
+      })
+    })
+    await page.goto(`${middleware.url}/link-to-rewrite-to-cached-page`)
+
+    // ensure prefetch
+    await page.hover('text=NextResponse.rewrite')
+
+    // wait for prefetch request to finish
+    const prefetchResponse = await prefetchResponsePromise
+
+    // ensure prefetch respond with RSC data
+    expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
+    expect(prefetchResponse.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+
+    const htmlResponse = await page.goto(`${middleware.url}/test/rewrite-to-cached-page`)
+
+    // ensure we get HTML response
+    expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
+    expect(htmlResponse?.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+  })
+
+  test('Middleware redirect', async ({ page, middleware }) => {
+    const prefetchResponsePromise = new Promise<Response>((resolve) => {
+      page.on('response', (response) => {
+        if (response.url().includes('/caching-redirect-target')) {
+          resolve(response)
+        }
+      })
+    })
+    await page.goto(`${middleware.url}/link-to-redirect-to-cached-page`)
+
+    // ensure prefetch
+    await page.hover('text=NextResponse.redirect')
+
+    // wait for prefetch request to finish
+    const prefetchResponse = await prefetchResponsePromise
+
+    // ensure prefetch respond with RSC data
+    expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
+    expect(prefetchResponse.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+
+    const htmlResponse = await page.goto(`${middleware.url}/test/redirect-to-cached-page`)
+
+    // ensure we get HTML response
+    expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
+    expect(htmlResponse?.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+  })
 })
