@@ -1,6 +1,6 @@
 {
   "name": "@netlify/plugin-nextjs",
-  "version": "5.10.5",
+  "version": "5.10.6",
   "description": "Run Next.js seamlessly on Netlify",
   "main": "./dist/index.js",
   "type": "module",
@@ -92,7 +92,7 @@
     "typescript": "^5.4.5",
     "unionfs": "^4.5.4",
     "uuid": "^10.0.0",
-    "vitest": "^1.5.3"
+    "vitest": "^3.0.0"
   },
   "clean-package": {
     "indent": 2,

@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.10.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.5...v5.10.6) (2025-04-15)
+
+
+### Bug Fixes
+
+* narrow down mismatch content warning to non-304 responses ([#2826](https://github.com/opennextjs/opennextjs-netlify/issues/2826)) ([5ecd720](https://github.com/opennextjs/opennextjs-netlify/commit/5ecd72016d671ad0ae6084b396f2e31b349f0f15))
+* RSC responses when using middleware rewrites or redirects for cacheable page being served for html requests ([#2843](https://github.com/opennextjs/opennextjs-netlify/issues/2843)) ([9c8353b](https://github.com/opennextjs/opennextjs-netlify/commit/9c8353b67a6485c90c1041d149ef991dc2034bf6))
+
 ## [5.10.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.4...v5.10.5) (2025-04-11)
 
 

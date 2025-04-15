@@ -39,7 +39,15 @@ const generateNetlifyVaryValues = ({
     }
   }
   if (header.length !== 0) {
-    values.push(`header=${header.join(`|`)}`)
+    const uniqueHeaderNames = [
+      ...new Set(
+        header.map((headerName) =>
+          // header names are case insensitive
+          headerName.toLowerCase(),
+        ),
+      ),
+    ]
+    values.push(`header=${uniqueHeaderNames.join(`|`)}`)
   }
   if (language.length !== 0) {
     values.push(`language=${language.join(`|`)}`)
@@ -78,7 +86,19 @@ export const setVaryHeaders = (
   { basePath, i18n }: Pick<NextConfigComplete, 'basePath' | 'i18n'>,
 ) => {
   const netlifyVaryValues: NetlifyVaryValues = {
-    header: ['x-nextjs-data', 'x-next-debug-logging'],
+    header: [
+      'x-nextjs-data',
+      'x-next-debug-logging',
+      // using _rsc query param might not be enough because it is stripped for middleware redirect and rewrites
+      // so adding all request headers that are used to produce the _rsc query param
+      // https://github.com/vercel/next.js/blob/e5fe535ed17cee5e1d5576ccc33e4c49b5da1273/packages/next/src/client/components/router-reducer/set-cache-busting-search-param.ts#L32-L39
+      'Next-Router-Prefetch',
+      'Next-Router-Segment-Prefetch',
+      'Next-Router-State-Tree',
+      'Next-Url',
+      // and exact header that actually instruct Next.js to produce RSC response
+      'RSC',
+    ],
     language: [],
     cookie: ['__prerender_bypass', '__next_preview_data'],
     query: ['__nextDataReq', '_rsc'],
