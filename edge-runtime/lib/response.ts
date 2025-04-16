@@ -234,7 +234,10 @@ export const buildResponse = async ({
 
     // coookies set in middleware need to be available during the lambda request
     const newRequest = new Request(request)
-    newRequest.headers.set('Cookie', mergeMiddlewareCookies(edgeResponse, newRequest))
+    const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
+    if (newRequestCookies) {
+      newRequest.headers.set('Cookie', newRequestCookies)
+    }
 
     return addMiddlewareHeaders(context.next(newRequest), edgeResponse)
   }

@@ -60,16 +60,20 @@ export const addMiddlewareHeaders = async (
   return response
 }
 
-export function mergeMiddlewareCookies(middlewareResponse: Response, request: Request) {
-  let mergedCookies = getCookies(request.headers)
-  const middlewareCookies = middlewareResponse.headers.get('x-middleware-set-cookie') || ''
+// This serves the same purpose as the mergeMiddlewareCookies in Next.js but has been customized to our domain
+// See: https://github.com/vercel/next.js/blob/6e4495f8430eab33b12cd11dffdd8e27eee6e0cf/packages/next/src/server/async-storage/request-store.ts#L78-L105
+export function mergeMiddlewareCookies(middlewareResponse: Response, lambdaRequest: Request) {
+  let mergedCookies = getCookies(lambdaRequest.headers)
+  const middlewareCookies = middlewareResponse.headers.get('x-middleware-set-cookie')
   const regex = new RegExp(/,(?!\s)/) // commas that are not followed by whitespace
 
-  middlewareCookies.split(regex).forEach((entry) => {
-    const [cookie] = entry.split(';')
-    const [name, value] = cookie.split('=')
-    mergedCookies[name] = value
-  })
+  if (middlewareCookies) {
+    middlewareCookies.split(regex).forEach((entry) => {
+      const [cookie] = entry.split(';')
+      const [name, value] = cookie.split('=')
+      mergedCookies[name] = value
+    })
+  }
 
   return Object.entries(mergedCookies)
     .map((kv) => kv.join('='))
