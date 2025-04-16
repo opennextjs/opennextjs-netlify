@@ -12,5 +12,7 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           deno-version: v1.x.x
+      - name: Vendor Deno modules
+        run: deno vendor edge-runtime/vendor.ts --output=edge-runtime/vendor --force
       - name: Test
         run: deno test -A edge-runtime/
