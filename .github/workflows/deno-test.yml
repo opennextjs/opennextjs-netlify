@@ -11,6 +11,6 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: vx.x.x
+          deno-version: v1.x.x
       - name: Test
         run: deno test -A edge-runtime/
