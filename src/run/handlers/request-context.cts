@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-import type { Context } from '@netlify/functions'
 import { LogLevel, systemLogger } from '@netlify/functions/internal'
+import type { Context } from '@netlify/serverless-functions-api'
 
 import type { NetlifyCachedRouteValue } from '../../shared/cache-types.cjs'
 
