@@ -65,9 +65,12 @@ export const addMiddlewareHeaders = async (
 export function mergeMiddlewareCookies(middlewareResponse: Response, lambdaRequest: Request) {
   let mergedCookies = getCookies(lambdaRequest.headers)
   const middlewareCookies = middlewareResponse.headers.get('x-middleware-set-cookie')
-  const regex = new RegExp(/,(?!\s)/) // commas that are not followed by whitespace
 
   if (middlewareCookies) {
+    // Targets commas that are not followed by whitespace
+    // See: https://github.com/vercel/next.js/blob/e6145d3a37bb4c7b481fd58e05cdff9046ace8ad/packages/next/src/server/web/spec-extension/response.ts#L58-L66
+    const regex = new RegExp(/,(?!\s)/)
+
     middlewareCookies.split(regex).forEach((entry) => {
       const [cookie] = entry.split(';')
       const [name, value] = cookie.split('=')
