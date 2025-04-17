@@ -396,6 +396,12 @@ export async function invokeFunction(
       process.env[key] = environment[key]
     })
 
+    let resolveInvocation, rejectInvocation
+    const invocationPromise = new Promise((resolve, reject) => {
+      resolveInvocation = resolve
+      rejectInvocation = reject
+    })
+
     const response = (await execute({
       event: {
         headers: headers || {},
@@ -405,7 +411,19 @@ export async function invokeFunction(
       },
       lambdaFunc: { handler },
       timeoutMs: 4_000,
+      onInvocationEnd: (error) => {
+        // lambda-local resolve promise return from execute when response is closed
+        // but we should wait for tracked background work to finish
+        // before resolving the promise to allow background work to finish
+        if (error) {
+          rejectInvocation(error)
+        } else {
+          resolveInvocation()
+        }
+      },
     })) as LambdaResponse
+
+    await invocationPromise
 
     const responseHeaders = Object.entries(response.multiValueHeaders || {}).reduce(
       (prev, [key, value]) => ({
