@@ -72,7 +72,9 @@ export function mergeMiddlewareCookies(middlewareResponse: Response, lambdaReque
     const regex = new RegExp(/,(?!\s)/)
 
     middlewareCookies.split(regex).forEach((entry) => {
-      const [cookie] = entry.split(';')
+      // Extra directives within a cookie are joined on separated by "; "
+      // See: https://github.com/vercel/next.js/blob/0edb1123066a010eff2aac274f948ca2c6e85c0f/packages/next/src/compiled/%40edge-runtime/cookies/index.js#L32-L47
+      const [cookie] = entry.split('; ')
       const [name, value] = cookie.split('=')
       mergedCookies[name] = value
     })
