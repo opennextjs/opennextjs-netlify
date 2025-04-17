@@ -205,7 +205,15 @@ export const buildResponse = async ({
     }
     edgeResponse.headers.set('x-middleware-rewrite', relativeUrl)
     request.headers.set('x-middleware-rewrite', target)
-    return addMiddlewareHeaders(context.rewrite(target), edgeResponse)
+
+    // coookies set in middleware need to be available during the lambda request
+    const newRequest = new Request(target, request)
+    const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
+    if (newRequestCookies) {
+      newRequest.headers.set('Cookie', newRequestCookies)
+    }
+
+    return addMiddlewareHeaders(context.next(newRequest), edgeResponse)
   }
 
   if (redirect) {
