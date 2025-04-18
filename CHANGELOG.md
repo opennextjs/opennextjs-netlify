@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.10.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.6...v5.10.7) (2025-04-18)
+
+
+### Bug Fixes
+
+* cookies set in middleware accessible during the same request ([#2847](https://github.com/opennextjs/opennextjs-netlify/issues/2847)) ([263853b](https://github.com/opennextjs/opennextjs-netlify/commit/263853b0b33492eda65e2a406351257418e7e6ef))
+
 ## [5.10.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.5...v5.10.6) (2025-04-15)
 
 
