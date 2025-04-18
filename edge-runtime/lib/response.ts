@@ -6,7 +6,12 @@ import {
 
 import { updateModifiedHeaders } from './headers.ts'
 import type { StructuredLogger } from './logging.ts'
-import { addMiddlewareHeaders, isMiddlewareRequest, isMiddlewareResponse } from './middleware.ts'
+import {
+  addMiddlewareHeaders,
+  isMiddlewareRequest,
+  isMiddlewareResponse,
+  mergeMiddlewareCookies,
+} from './middleware.ts'
 import { RequestData } from './next-request.ts'
 import {
   addBasePath,
@@ -116,12 +121,13 @@ export const buildResponse = async ({
     }
     return rewriter.transform(response.originResponse)
   }
-  const res = new Response(result.response.body, result.response)
+
+  const edgeResponse = new Response(result.response.body, result.response)
   request.headers.set('x-nf-next-middleware', 'skip')
 
-  let rewrite = res.headers.get('x-middleware-rewrite')
-  let redirect = res.headers.get('location')
-  let nextRedirect = res.headers.get('x-nextjs-redirect')
+  let rewrite = edgeResponse.headers.get('x-middleware-rewrite')
+  let redirect = edgeResponse.headers.get('location')
+  let nextRedirect = edgeResponse.headers.get('x-nextjs-redirect')
 
   // Data requests (i.e. requests for /_next/data ) need special handling
   const isDataReq = request.headers.has('x-nextjs-data')
@@ -152,7 +158,7 @@ export const buildResponse = async ({
       // Data requests might be rewritten to an external URL
       // This header tells the client router the redirect target, and if it's external then it will do a full navigation
 
-      res.headers.set('x-nextjs-rewrite', relativeUrl)
+      edgeResponse.headers.set('x-nextjs-rewrite', relativeUrl)
     }
 
     if (rewriteUrl.origin !== baseUrl.origin) {
@@ -178,7 +184,7 @@ export const buildResponse = async ({
         })
       }
 
-      return addMiddlewareHeaders(fetch(proxyRequest, { redirect: 'manual' }), res)
+      return addMiddlewareHeaders(fetch(proxyRequest, { redirect: 'manual' }), edgeResponse)
     }
 
     if (isDataReq) {
@@ -197,9 +203,17 @@ export const buildResponse = async ({
       logger.withFields({ rewrite_url: rewrite }).debug('Rewrite url is same as original url')
       return
     }
-    res.headers.set('x-middleware-rewrite', relativeUrl)
+    edgeResponse.headers.set('x-middleware-rewrite', relativeUrl)
     request.headers.set('x-middleware-rewrite', target)
-    return addMiddlewareHeaders(context.rewrite(target), res)
+
+    // coookies set in middleware need to be available during the lambda request
+    const newRequest = new Request(target, request)
+    const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
+    if (newRequestCookies) {
+      newRequest.headers.set('Cookie', newRequestCookies)
+    }
+
+    return addMiddlewareHeaders(context.next(newRequest), edgeResponse)
   }
 
   if (redirect) {
@@ -208,27 +222,35 @@ export const buildResponse = async ({
       logger.withFields({ redirect_url: redirect }).debug('Redirect url is same as original url')
       return
     }
-    res.headers.set('location', redirect)
+    edgeResponse.headers.set('location', redirect)
   }
 
   // Data requests shouldn't automatically redirect in the browser (they might be HTML pages): they're handled by the router
   if (redirect && isDataReq) {
-    res.headers.delete('location')
-    res.headers.set('x-nextjs-redirect', relativizeURL(redirect, request.url))
+    edgeResponse.headers.delete('location')
+    edgeResponse.headers.set('x-nextjs-redirect', relativizeURL(redirect, request.url))
   }
 
-  nextRedirect = res.headers.get('x-nextjs-redirect')
+  nextRedirect = edgeResponse.headers.get('x-nextjs-redirect')
 
   if (nextRedirect && isDataReq) {
-    res.headers.set('x-nextjs-redirect', normalizeDataUrl(nextRedirect))
+    edgeResponse.headers.set('x-nextjs-redirect', normalizeDataUrl(nextRedirect))
   }
 
-  if (res.headers.get('x-middleware-next') === '1') {
-    res.headers.delete('x-middleware-next')
-    return addMiddlewareHeaders(context.next(), res)
+  if (edgeResponse.headers.get('x-middleware-next') === '1') {
+    edgeResponse.headers.delete('x-middleware-next')
+
+    // coookies set in middleware need to be available during the lambda request
+    const newRequest = new Request(request)
+    const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
+    if (newRequestCookies) {
+      newRequest.headers.set('Cookie', newRequestCookies)
+    }
+
+    return addMiddlewareHeaders(context.next(newRequest), edgeResponse)
   }
 
-  return res
+  return edgeResponse
 }
 
 /**

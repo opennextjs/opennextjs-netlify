@@ -1,6 +1,7 @@
 import type { Context } from '@netlify/edge-functions'
 
 import type { ElementHandlers } from '../vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
+import { getCookies } from '../vendor/deno.land/std@0.175.0/http/cookie.ts'
 
 type NextDataTransform = <T>(data: T) => T
 
@@ -57,4 +58,29 @@ export const addMiddlewareHeaders = async (
     }
   })
   return response
+}
+
+// This serves the same purpose as the mergeMiddlewareCookies in Next.js but has been customized to our domain
+// See: https://github.com/vercel/next.js/blob/6e4495f8430eab33b12cd11dffdd8e27eee6e0cf/packages/next/src/server/async-storage/request-store.ts#L78-L105
+export function mergeMiddlewareCookies(middlewareResponse: Response, lambdaRequest: Request) {
+  let mergedCookies = getCookies(lambdaRequest.headers)
+  const middlewareCookies = middlewareResponse.headers.get('x-middleware-set-cookie')
+
+  if (middlewareCookies) {
+    // Targets commas that are not followed by whitespace
+    // See: https://github.com/vercel/next.js/blob/e6145d3a37bb4c7b481fd58e05cdff9046ace8ad/packages/next/src/server/web/spec-extension/response.ts#L58-L66
+    const regex = new RegExp(/,(?!\s)/)
+
+    middlewareCookies.split(regex).forEach((entry) => {
+      // Extra directives within a cookie are joined on separated by "; "
+      // See: https://github.com/vercel/next.js/blob/0edb1123066a010eff2aac274f948ca2c6e85c0f/packages/next/src/compiled/%40edge-runtime/cookies/index.js#L32-L47
+      const [cookie] = entry.split('; ')
+      const [name, value] = cookie.split('=')
+      mergedCookies[name] = value
+    })
+  }
+
+  return Object.entries(mergedCookies)
+    .map((kv) => kv.join('='))
+    .join('; ')
 }
