@@ -57,8 +57,8 @@ test.describe('Dynamic CMS', () => {
 
         expect(response1?.status()).toEqual(404)
         expect(headers1['cache-control']).toEqual('public,max-age=0,must-revalidate')
-        expect(headers1['cache-status']).toEqual(
-          '"Next.js"; fwd=miss, "Netlify Durable"; fwd=uri-miss; stored, "Netlify Edge"; fwd=miss',
+        expect(headers1['cache-status']).toMatch(
+          /"Next.js"; fwd=miss\s*(,|\n)\s*"Netlify Durable"; fwd=uri-miss; stored\s*(, |\n)\s*"Netlify Edge"; fwd=miss/,
         )
         expect(headers1['netlify-cache-tag']).toEqual(expectedCacheTag)
         expect(headers1['netlify-cdn-cache-control']).toMatch(
@@ -77,7 +77,7 @@ test.describe('Dynamic CMS', () => {
         expect(response2?.status()).toEqual(200)
         expect(headers2['cache-control']).toEqual('public,max-age=0,must-revalidate')
         expect(headers2['cache-status']).toMatch(
-          /"Next.js"; hit, "Netlify Durable"; fwd=stale; ttl=[0-9]+; stored, "Netlify Edge"; fwd=(stale|miss)/,
+          /"Next.js"; hit\s*(,|\n)\s*"Netlify Durable"; fwd=stale; ttl=[0-9]+; stored\s*(,|\n)\s*"Netlify Edge"; fwd=(stale|miss)/,
         )
         expect(headers2['netlify-cache-tag']).toEqual(expectedCacheTag)
         expect(headers2['netlify-cdn-cache-control']).toMatch(
@@ -96,7 +96,7 @@ test.describe('Dynamic CMS', () => {
         expect(response3?.status()).toEqual(404)
         expect(headers3['cache-control']).toEqual('public,max-age=0,must-revalidate')
         expect(headers3['cache-status']).toMatch(
-          /"Next.js"; fwd=miss, "Netlify Durable"; fwd=stale; ttl=[0-9]+; stored, "Netlify Edge"; fwd=(stale|miss)/,
+          /"Next.js"; fwd=miss\s*(,|\n)\s*"Netlify Durable"; fwd=stale; ttl=[0-9]+; stored\s*(,|\n)\s*"Netlify Edge"; fwd=(stale|miss)/,
         )
         expect(headers3['netlify-cache-tag']).toEqual(expectedCacheTag)
         expect(headers3['netlify-cdn-cache-control']).toMatch(
