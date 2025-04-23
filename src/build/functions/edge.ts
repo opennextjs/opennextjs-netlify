@@ -1,7 +1,7 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-import type { IntegrationsConfig, Manifest, ManifestFunction } from '@netlify/edge-functions'
+import type { Manifest, ManifestFunction } from '@netlify/edge-functions'
 import { glob } from 'fast-glob'
 import type { EdgeFunctionDefinition as NextDefinition } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
 import { pathToRegexp } from 'path-to-regexp'
@@ -160,7 +160,7 @@ const getHandlerName = ({ name }: Pick<NextDefinition, 'name'>): string =>
 const buildHandlerDefinition = (
   ctx: PluginContext,
   { name, matchers, page }: NextDefinition,
-): ManifestFunction & IntegrationsConfig => {
+): ManifestFunction => {
   const functionHandlerName = getHandlerName({ name })
   const functionName = name.endsWith('middleware')
     ? 'Next.js Middleware Handler'
