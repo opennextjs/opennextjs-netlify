@@ -1,7 +1,7 @@
 // @ts-check
 // this installs and builds all the fixtures
 // Needed to run before executing the integration tests
-import { existsSync, readdirSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
 import { rm, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { argv } from 'node:process'

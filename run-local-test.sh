@@ -18,4 +18,3 @@ cd ../next.js/
 git apply $RUNTIME_DIR/tests/e2e-utils.patch || git apply $RUNTIME_DIR/tests/e2e-utils-v2.patch
 node run-tests.js --type e2e --debug --test-pattern $1
 git checkout -- test/lib/e2e-utils.ts
-
