@@ -115,11 +115,11 @@ export async function loadAndInvokeFunctionImpl(
   ctx,
   { headers, httpMethod, flags, url, env } = {},
 ) {
+  const restoreEnvironment = temporarilySetEnv(ctx, env)
+
   const { handler } = await import(
     'file:///' + join(ctx.functionDist, SERVER_HANDLER_NAME, '___netlify-entry-point.mjs')
   )
-
-  const restoreEnvironment = temporarilySetEnv(ctx, env)
 
   let resolveInvocation, rejectInvocation
   const invocationPromise = new Promise((resolve, reject) => {
