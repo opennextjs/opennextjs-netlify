@@ -1,7 +1,7 @@
 // @ts-check
 
 import { getLogger } from 'lambda-local'
-import { loadAndInvokeFunctionImpl } from './lambda-helpers.mjs'
+import { loadFunction } from './lambda-helpers.mjs'
 
 getLogger().level = 'alert'
 
@@ -17,7 +17,9 @@ process.on(
       try {
         const [ctx, options] = msg.args
 
-        const result = await loadAndInvokeFunctionImpl(ctx, options)
+        const invokeFunctionImpl = await loadFunction(ctx, options)
+        const result = await invokeFunctionImpl(options)
+
         if (process.send) {
           process.send({
             action: 'invokeFunctionResult',

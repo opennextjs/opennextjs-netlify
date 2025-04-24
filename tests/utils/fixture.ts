@@ -14,7 +14,7 @@ import { env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { v4 } from 'uuid'
 import { LocalServer } from './local-server.js'
-import { loadAndInvokeFunctionImpl, type FunctionInvocationOptions } from './lambda-helpers.mjs'
+import { loadFunction, type FunctionInvocationOptions } from './lambda-helpers.mjs'
 
 import { glob } from 'fast-glob'
 import {
@@ -345,7 +345,8 @@ export async function invokeFunction(
     .spyOn(process, 'cwd')
     .mockReturnValue(join(ctx.functionDist, SERVER_HANDLER_NAME))
   try {
-    return await loadAndInvokeFunctionImpl(ctx, options)
+    const invokeFunctionImpl = await loadFunction(ctx, options)
+    return await invokeFunctionImpl(options)
   } finally {
     cwdMock.mockRestore()
   }

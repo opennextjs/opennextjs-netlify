@@ -20,6 +20,8 @@ const SERVER_HANDLER_NAME = '___netlify-server-handler'
  * @property {string} [url] TThe relative path that should be requested. Defaults to '/'
  * @property {Record<string, string>} [headers] The headers used for the invocation
  * @property {Record<string, unknown>} [flags] Feature flags that should be set during the invocation
+ *
+ * @typedef {Pick<FunctionInvocationOptions, 'env'>} LoadFunctionOptions
  */
 
 /**
@@ -109,73 +111,84 @@ const DEFAULT_FLAGS = {}
 
 /**
  * @param {FixtureTestContext} ctx
- * @param {FunctionInvocationOptions} options
+ * @param {LoadFunctionOptions} options
  */
-export async function loadAndInvokeFunctionImpl(
-  ctx,
-  { headers, httpMethod, flags, url, env } = {},
-) {
+export async function loadFunction(ctx, { env } = {}) {
   const restoreEnvironment = temporarilySetEnv(ctx, env)
 
   const { handler } = await import(
     'file:///' + join(ctx.functionDist, SERVER_HANDLER_NAME, '___netlify-entry-point.mjs')
   )
 
-  let resolveInvocation, rejectInvocation
-  const invocationPromise = new Promise((resolve, reject) => {
-    resolveInvocation = resolve
-    rejectInvocation = reject
-  })
+  /**
+   * @param {FunctionInvocationOptions} options
+   */
+  async function invokeFunction({ headers, httpMethod, flags, url, env: invokeEnv } = {}) {
+    const restoreEnvironment = temporarilySetEnv(ctx, {
+      ...env,
+      ...invokeEnv,
+    })
 
-  const response = await execute({
-    event: {
-      headers: headers || {},
-      httpMethod: httpMethod || 'GET',
-      rawUrl: new URL(url || '/', 'https://example.netlify').href,
-      flags: flags ?? DEFAULT_FLAGS,
-    },
-    lambdaFunc: { handler },
-    timeoutMs: 4_000,
-    onInvocationEnd: (error) => {
-      // lambda-local resolve promise return from execute when response is closed
-      // but we should wait for tracked background work to finish
-      // before resolving the promise to allow background work to finish
-      if (error) {
-        rejectInvocation(error)
-      } else {
-        resolveInvocation()
-      }
-    },
-  })
+    let resolveInvocation, rejectInvocation
+    const invocationPromise = new Promise((resolve, reject) => {
+      resolveInvocation = resolve
+      rejectInvocation = reject
+    })
 
-  await invocationPromise
+    const response = await execute({
+      event: {
+        headers: headers || {},
+        httpMethod: httpMethod || 'GET',
+        rawUrl: new URL(url || '/', 'https://example.netlify').href,
+        flags: flags ?? DEFAULT_FLAGS,
+      },
+      lambdaFunc: { handler },
+      timeoutMs: 4_000,
+      onInvocationEnd: (error) => {
+        // lambda-local resolve promise return from execute when response is closed
+        // but we should wait for tracked background work to finish
+        // before resolving the promise to allow background work to finish
+        if (error) {
+          rejectInvocation(error)
+        } else {
+          resolveInvocation()
+        }
+      },
+    })
 
-  if (!response) {
-    throw new Error('No response from lambda-local')
+    await invocationPromise
+
+    if (!response) {
+      throw new Error('No response from lambda-local')
+    }
+
+    const responseHeaders = Object.entries(response.multiValueHeaders || {}).reduce(
+      (prev, [key, value]) => ({
+        ...prev,
+        [key]: value.length === 1 ? `${value}` : value.join(', '),
+      }),
+      response.headers || {},
+    )
+
+    const bodyBuffer = await streamToBuffer(response.body)
+
+    restoreEnvironment()
+
+    return {
+      statusCode: response.statusCode,
+      bodyBuffer,
+      body: bodyBuffer.toString('utf-8'),
+      headers: responseHeaders,
+      isBase64Encoded: response.isBase64Encoded,
+    }
   }
-
-  const responseHeaders = Object.entries(response.multiValueHeaders || {}).reduce(
-    (prev, [key, value]) => ({
-      ...prev,
-      [key]: value.length === 1 ? `${value}` : value.join(', '),
-    }),
-    response.headers || {},
-  )
-
-  const bodyBuffer = await streamToBuffer(response.body)
 
   restoreEnvironment()
 
-  return {
-    statusCode: response.statusCode,
-    bodyBuffer,
-    body: bodyBuffer.toString('utf-8'),
-    headers: responseHeaders,
-    isBase64Encoded: response.isBase64Encoded,
-  }
+  return invokeFunction
 }
 
 /**
- * @typedef {typeof loadAndInvokeFunctionImpl} InvokeFunction
+ * @typedef {Awaited<ReturnType<typeof loadFunction>>} InvokeFunction
  * @typedef {Promise<Awaited<ReturnType<InvokeFunction>>>} InvokeFunctionResult
  */
