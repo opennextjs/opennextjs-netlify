@@ -5,6 +5,11 @@ import { loadFunction } from './lambda-helpers.mjs'
 
 getLogger().level = 'alert'
 
+/**
+ * @type {import('./lambda-helpers.mjs').InvokeFunction | undefined}
+ */
+let invokeFunctionImpl
+
 process.on(
   'message',
   /**
@@ -13,16 +18,29 @@ process.on(
   async (msg) => {
     if (msg?.action === 'exit') {
       process.exit(0)
+    } else if (msg?.action === 'loadFunction') {
+      const [ctx, options] = msg.args
+
+      invokeFunctionImpl = await loadFunction(ctx, options)
+
+      if (process.send) {
+        process.send({
+          action: 'loadedFunction',
+        })
+      }
     } else if (msg?.action === 'invokeFunction') {
       try {
         const [ctx, options] = msg.args
 
-        const invokeFunctionImpl = await loadFunction(ctx, options)
+        if (!invokeFunctionImpl) {
+          throw new Error('Function not loaded')
+        }
         const result = await invokeFunctionImpl(options)
 
         if (process.send) {
           process.send({
             action: 'invokeFunctionResult',
+            operationId: msg.operationId,
             result,
           })
         }

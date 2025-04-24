@@ -14,7 +14,12 @@ import { env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { v4 } from 'uuid'
 import { LocalServer } from './local-server.js'
-import { loadFunction, type FunctionInvocationOptions } from './lambda-helpers.mjs'
+import {
+  type InvokeFunctionResult,
+  loadFunction,
+  type LoadFunctionOptions,
+  type FunctionInvocationOptions,
+} from './lambda-helpers.mjs'
 
 import { glob } from 'fast-glob'
 import {
@@ -405,48 +410,140 @@ export async function invokeEdgeFunction(
   })
 }
 
-export async function invokeSandboxedFunction(
+/**
+ * Load function in child process and allow for multiple invocations
+ */
+export async function loadSandboxedFunction(
   ctx: FixtureTestContext,
-  options: Parameters<typeof invokeFunction>[1] = {},
+  options: LoadFunctionOptions = {},
 ) {
-  return new Promise<ReturnType<typeof invokeFunction>>((resolve, reject) => {
-    const childProcess = spawn(process.execPath, [import.meta.dirname + '/sandbox-child.mjs'], {
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-      cwd: process.cwd(),
+  const childProcess = spawn(process.execPath, [import.meta.dirname + '/sandbox-child.mjs'], {
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    cwd: join(ctx.functionDist, SERVER_HANDLER_NAME),
+    env: {
+      ...process.env,
+      ...(options.env || {}),
+    },
+  })
+
+  let isRunning = true
+  let operationCounter = 1
+
+  childProcess.stdout?.on('data', (data) => {
+    console.log(data.toString())
+  })
+
+  childProcess.stderr?.on('data', (data) => {
+    console.error(data.toString())
+  })
+
+  const onGoingOperationsMap = new Map<
+    number,
+    {
+      resolve: (value?: any) => void
+      reject: (reason?: any) => void
+    }
+  >()
+
+  function createOperation<T>() {
+    const operationId = operationCounter
+    operationCounter += 1
+
+    let promiseResolve, promiseReject
+    const promise = new Promise<T>((innerResolve, innerReject) => {
+      promiseResolve = innerResolve
+      promiseReject = innerReject
     })
 
-    childProcess.stdout?.on('data', (data) => {
-      console.log(data.toString())
-    })
+    function resolve(value: T) {
+      onGoingOperationsMap.delete(operationId)
+      promiseResolve?.(value)
+    }
+    function reject(reason) {
+      onGoingOperationsMap.delete(operationId)
+      promiseReject?.(reason)
+    }
 
-    childProcess.stderr?.on('data', (data) => {
-      console.error(data.toString())
-    })
+    onGoingOperationsMap.set(operationId, { resolve, reject })
+    return { operationId, promise, resolve, reject }
+  }
 
-    childProcess.on('message', (msg: any) => {
-      if (msg?.action === 'invokeFunctionResult') {
-        resolve(msg.result)
-        childProcess.send({ action: 'exit' })
-      }
-    })
+  childProcess.on('exit', () => {
+    isRunning = false
 
-    childProcess.on('exit', () => {
-      reject(new Error('worker exited before returning result'))
-    })
+    const error = new Error('worker exited before returning result')
+
+    for (const { reject } of onGoingOperationsMap.values()) {
+      reject(error)
+    }
+  })
+
+  function exit() {
+    if (isRunning) {
+      childProcess.send({ action: 'exit' })
+    }
+  }
+
+  // make sure to exit the child process when the test is done just in case
+  ctx.cleanup?.push(async () => exit())
+
+  const { promise: loadPromise, resolve: loadResolve } = createOperation<void>()
+
+  childProcess.on('message', (msg: any) => {
+    if (msg?.action === 'invokeFunctionResult') {
+      onGoingOperationsMap.get(msg.operationId)?.resolve(msg.result)
+    } else if (msg?.action === 'loadedFunction') {
+      loadResolve()
+    }
+  })
+
+  // context object is not serializable so we create serializable object
+  // containing required properties to invoke lambda
+  const serializableCtx = {
+    functionDist: ctx.functionDist,
+    blobStoreHost: ctx.blobStoreHost,
+    siteID: ctx.siteID,
+    deployID: ctx.deployID,
+  }
+
+  childProcess.send({
+    action: 'loadFunction',
+    args: [serializableCtx],
+  })
+
+  await loadPromise
+
+  function invokeFunction(options: FunctionInvocationOptions): InvokeFunctionResult {
+    if (!isRunning) {
+      throw new Error('worker is not running anymore')
+    }
+
+    const { operationId, promise } = createOperation<Awaited<InvokeFunctionResult>>()
 
     childProcess.send({
       action: 'invokeFunction',
-      args: [
-        // context object is not serializable so we create serializable object
-        // containing required properties to invoke lambda
-        {
-          functionDist: ctx.functionDist,
-          blobStoreHost: ctx.blobStoreHost,
-          siteID: ctx.siteID,
-          deployID: ctx.deployID,
-        },
-        options,
-      ],
+      operationId,
+      args: [serializableCtx, options],
     })
-  })
+
+    return promise
+  }
+
+  return {
+    invokeFunction,
+    exit,
+  }
+}
+
+/**
+ * Load function in child process and execute single invocation
+ */
+export async function invokeSandboxedFunction(
+  ctx: FixtureTestContext,
+  options: FunctionInvocationOptions = {},
+) {
+  const { invokeFunction, exit } = await loadSandboxedFunction(ctx, options)
+  const result = await invokeFunction(options)
+  exit()
+  return result
 }
