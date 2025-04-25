@@ -6,7 +6,7 @@ import fg from 'fast-glob'
 import { coerce, gt, gte, satisfies, valid } from 'semver'
 import { execaCommand } from 'execa'
 
-const FUTURE_NEXT_PATCH_VERSION = '14.999.0'
+const FUTURE_NEXT_PATCH_VERSION = '15.999.0'
 
 const NEXT_VERSION_REQUIRES_REACT_19 = '14.3.0-canary.45'
 const REACT_18_VERSION = '18.2.0'
