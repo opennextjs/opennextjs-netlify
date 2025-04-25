@@ -2,11 +2,9 @@ import { assert, vi } from 'vitest'
 
 import { type NetlifyPluginConstants, type NetlifyPluginOptions } from '@netlify/build'
 import { bundle, serve } from '@netlify/edge-bundler'
-import type { LambdaResponse } from '@netlify/serverless-functions-api/dist/lambda/response.js'
 import { zipFunctions } from '@netlify/zip-it-and-ship-it'
 import { execaCommand } from 'execa'
 import getPort from 'get-port'
-import { execute } from 'lambda-local'
 import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -16,7 +14,12 @@ import { env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { v4 } from 'uuid'
 import { LocalServer } from './local-server.js'
-import { streamToBuffer } from './stream-to-buffer.js'
+import {
+  type InvokeFunctionResult,
+  loadFunction,
+  type LoadFunctionOptions,
+  type FunctionInvocationOptions,
+} from './lambda-helpers.mjs'
 
 import { glob } from 'fast-glob'
 import {
@@ -24,9 +27,8 @@ import {
   PluginContext,
   SERVER_HANDLER_NAME,
 } from '../../src/build/plugin-context.js'
-import { BLOB_TOKEN } from './constants.js'
+import { BLOB_TOKEN } from './constants.mjs'
 import { type FixtureTestContext } from './contexts.js'
-import { createBlobContext } from './helpers.js'
 import { setNextVersionInFixture } from './next-version-helpers.mjs'
 
 const bootstrapURL = 'https://edge.netlify.com/bootstrap/index-combined.ts'
@@ -339,117 +341,17 @@ export async function uploadBlobs(ctx: FixtureTestContext, blobsDir: string) {
   )
 }
 
-const DEFAULT_FLAGS = {}
-/**
- * Execute the function with the provided parameters
- * @param ctx
- * @param options
- */
 export async function invokeFunction(
   ctx: FixtureTestContext,
-  options: {
-    /**
-     * The http method that is used for the invocation
-     * @default 'GET'
-     */
-    httpMethod?: string
-    /**
-     * The relative path that should be requested
-     * @default '/'
-     */
-    url?: string
-    /** The headers used for the invocation*/
-    headers?: Record<string, string>
-    /** The body that is used for the invocation */
-    body?: unknown
-    /** Environment variables that should be set during the invocation */
-    env?: Record<string, string | number>
-    /** Feature flags that should be set during the invocation */
-    flags?: Record<string, unknown>
-  } = {},
+  options: FunctionInvocationOptions = {},
 ) {
-  const { httpMethod, headers, flags, url, env } = options
   // now for the execution set the process working directory to the dist entry point
   const cwdMock = vi
     .spyOn(process, 'cwd')
     .mockReturnValue(join(ctx.functionDist, SERVER_HANDLER_NAME))
   try {
-    const { handler } = await import(
-      join(ctx.functionDist, SERVER_HANDLER_NAME, '___netlify-entry-point.mjs')
-    )
-
-    // The environment variables available during execution
-    const environment = {
-      NODE_ENV: 'production',
-      NETLIFY_BLOBS_CONTEXT: createBlobContext(ctx),
-      ...(env || {}),
-    }
-
-    const envVarsToRestore = {}
-
-    // We are not using lambda-local's environment variable setting because it cleans up
-    // environment vars to early (before stream is closed)
-    Object.keys(environment).forEach(function (key) {
-      if (typeof process.env[key] !== 'undefined') {
-        envVarsToRestore[key] = process.env[key]
-      }
-      process.env[key] = environment[key]
-    })
-
-    let resolveInvocation, rejectInvocation
-    const invocationPromise = new Promise((resolve, reject) => {
-      resolveInvocation = resolve
-      rejectInvocation = reject
-    })
-
-    const response = (await execute({
-      event: {
-        headers: headers || {},
-        httpMethod: httpMethod || 'GET',
-        rawUrl: new URL(url || '/', 'https://example.netlify').href,
-        flags: flags ?? DEFAULT_FLAGS,
-      },
-      lambdaFunc: { handler },
-      timeoutMs: 4_000,
-      onInvocationEnd: (error) => {
-        // lambda-local resolve promise return from execute when response is closed
-        // but we should wait for tracked background work to finish
-        // before resolving the promise to allow background work to finish
-        if (error) {
-          rejectInvocation(error)
-        } else {
-          resolveInvocation()
-        }
-      },
-    })) as LambdaResponse
-
-    await invocationPromise
-
-    const responseHeaders = Object.entries(response.multiValueHeaders || {}).reduce(
-      (prev, [key, value]) => ({
-        ...prev,
-        [key]: value.length === 1 ? `${value}` : value.join(', '),
-      }),
-      response.headers || {},
-    )
-
-    const bodyBuffer = await streamToBuffer(response.body)
-
-    Object.keys(environment).forEach(function (key) {
-      if (typeof envVarsToRestore[key] !== 'undefined') {
-        process.env[key] = envVarsToRestore[key]
-      } else {
-        delete process.env[key]
-      }
-    })
-
-    return {
-      statusCode: response.statusCode,
-      bodyBuffer,
-      body: bodyBuffer.toString('utf-8'),
-      headers: responseHeaders,
-      isBase64Encoded: response.isBase64Encoded,
-    }
+    const invokeFunctionImpl = await loadFunction(ctx, options)
+    return await invokeFunctionImpl(options)
   } finally {
     cwdMock.mockRestore()
   }
@@ -508,48 +410,140 @@ export async function invokeEdgeFunction(
   })
 }
 
-export async function invokeSandboxedFunction(
+/**
+ * Load function in child process and allow for multiple invocations
+ */
+export async function loadSandboxedFunction(
   ctx: FixtureTestContext,
-  options: Parameters<typeof invokeFunction>[1] = {},
+  options: LoadFunctionOptions = {},
 ) {
-  return new Promise<ReturnType<typeof invokeFunction>>((resolve, reject) => {
-    const childProcess = spawn(process.execPath, [import.meta.dirname + '/sandbox-child.mjs'], {
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-      cwd: process.cwd(),
+  const childProcess = spawn(process.execPath, [import.meta.dirname + '/sandbox-child.mjs'], {
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    cwd: join(ctx.functionDist, SERVER_HANDLER_NAME),
+    env: {
+      ...process.env,
+      ...(options.env || {}),
+    },
+  })
+
+  let isRunning = true
+  let operationCounter = 1
+
+  childProcess.stdout?.on('data', (data) => {
+    console.log(data.toString())
+  })
+
+  childProcess.stderr?.on('data', (data) => {
+    console.error(data.toString())
+  })
+
+  const onGoingOperationsMap = new Map<
+    number,
+    {
+      resolve: (value?: any) => void
+      reject: (reason?: any) => void
+    }
+  >()
+
+  function createOperation<T>() {
+    const operationId = operationCounter
+    operationCounter += 1
+
+    let promiseResolve, promiseReject
+    const promise = new Promise<T>((innerResolve, innerReject) => {
+      promiseResolve = innerResolve
+      promiseReject = innerReject
     })
 
-    childProcess.stdout?.on('data', (data) => {
-      console.log(data.toString())
-    })
+    function resolve(value: T) {
+      onGoingOperationsMap.delete(operationId)
+      promiseResolve?.(value)
+    }
+    function reject(reason) {
+      onGoingOperationsMap.delete(operationId)
+      promiseReject?.(reason)
+    }
 
-    childProcess.stderr?.on('data', (data) => {
-      console.error(data.toString())
-    })
+    onGoingOperationsMap.set(operationId, { resolve, reject })
+    return { operationId, promise, resolve, reject }
+  }
 
-    childProcess.on('message', (msg: any) => {
-      if (msg?.action === 'invokeFunctionResult') {
-        resolve(msg.result)
-        childProcess.send({ action: 'exit' })
-      }
-    })
+  childProcess.on('exit', () => {
+    isRunning = false
 
-    childProcess.on('exit', () => {
-      reject(new Error('worker exited before returning result'))
-    })
+    const error = new Error('worker exited before returning result')
+
+    for (const { reject } of onGoingOperationsMap.values()) {
+      reject(error)
+    }
+  })
+
+  function exit() {
+    if (isRunning) {
+      childProcess.send({ action: 'exit' })
+    }
+  }
+
+  // make sure to exit the child process when the test is done just in case
+  ctx.cleanup?.push(async () => exit())
+
+  const { promise: loadPromise, resolve: loadResolve } = createOperation<void>()
+
+  childProcess.on('message', (msg: any) => {
+    if (msg?.action === 'invokeFunctionResult') {
+      onGoingOperationsMap.get(msg.operationId)?.resolve(msg.result)
+    } else if (msg?.action === 'loadedFunction') {
+      loadResolve()
+    }
+  })
+
+  // context object is not serializable so we create serializable object
+  // containing required properties to invoke lambda
+  const serializableCtx = {
+    functionDist: ctx.functionDist,
+    blobStoreHost: ctx.blobStoreHost,
+    siteID: ctx.siteID,
+    deployID: ctx.deployID,
+  }
+
+  childProcess.send({
+    action: 'loadFunction',
+    args: [serializableCtx],
+  })
+
+  await loadPromise
+
+  function invokeFunction(options: FunctionInvocationOptions): InvokeFunctionResult {
+    if (!isRunning) {
+      throw new Error('worker is not running anymore')
+    }
+
+    const { operationId, promise } = createOperation<Awaited<InvokeFunctionResult>>()
 
     childProcess.send({
       action: 'invokeFunction',
-      args: [
-        // context object is not serializable so we create serializable object
-        // containing required properties to invoke lambda
-        {
-          functionDist: ctx.functionDist,
-          blobStoreHost: ctx.blobStoreHost,
-          siteID: ctx.siteID,
-          deployID: ctx.deployID,
-        },
-        options,
-      ],
+      operationId,
+      args: [serializableCtx, options],
     })
-  })
+
+    return promise
+  }
+
+  return {
+    invokeFunction,
+    exit,
+  }
+}
+
+/**
+ * Load function in child process and execute single invocation
+ */
+export async function invokeSandboxedFunction(
+  ctx: FixtureTestContext,
+  options: FunctionInvocationOptions = {},
+) {
+  const { invokeFunction, exit } = await loadSandboxedFunction(ctx, options)
+  const result = await invokeFunction(options)
+  exit()
+  return result
 }
