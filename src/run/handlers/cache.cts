@@ -5,13 +5,10 @@ import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
-import { purgeCache } from '@netlify/functions'
 import { type Span } from '@opentelemetry/api'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 
-import { name as nextRuntimePkgName, version as nextRuntimePkgVersion } from '../../../package.json'
-import { type TagManifest } from '../../shared/blob-types.cjs'
 import {
   type CacheHandlerContext,
   type CacheHandlerForMultipleVersions,
@@ -28,9 +25,8 @@ import {
 } from '../storage/storage.cjs'
 
 import { getLogger, getRequestContext } from './request-context.cjs'
+import { isAnyTagStale, markTagsAsStaleAndPurgeEdgeCache, purgeEdgeCache } from './tags-handler.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'
-
-const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   options: CacheHandlerContext
@@ -427,70 +423,15 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
           const tag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
-          const tags = tag.split(/,|%2c/gi).filter(Boolean)
 
-          if (tags.length === 0) {
-            return
-          }
-
-          getLogger().debug(`Purging CDN cache for: [${tag}]`)
-          requestContext.trackBackgroundWork(
-            purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
-              // TODO: add reporting here
-              getLogger()
-                .withError(error)
-                .error(`[NetlifyCacheHandler]: Purging the cache for tag ${tag} failed`)
-            }),
-          )
+          requestContext?.trackBackgroundWork(purgeEdgeCache(tag))
         }
       }
     })
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async revalidateTag(tagOrTags: string | string[], ...args: any) {
-    const revalidateTagPromise = this.doRevalidateTag(tagOrTags, ...args)
-
-    const requestContext = getRequestContext()
-    if (requestContext) {
-      requestContext.trackBackgroundWork(revalidateTagPromise)
-    }
-
-    return revalidateTagPromise
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async doRevalidateTag(tagOrTags: string | string[], ...args: any) {
-    getLogger().withFields({ tagOrTags, args }).debug('NetlifyCacheHandler.revalidateTag')
-
-    const tags = (Array.isArray(tagOrTags) ? tagOrTags : [tagOrTags])
-      .flatMap((tag) => tag.split(/,|%2c/gi))
-      .filter(Boolean)
-
-    if (tags.length === 0) {
-      return
-    }
-
-    const data: TagManifest = {
-      revalidatedAt: Date.now(),
-    }
-
-    await Promise.all(
-      tags.map(async (tag) => {
-        try {
-          await this.cacheStore.set(tag, data, 'tagManifest.set')
-        } catch (error) {
-          getLogger().withError(error).log(`Failed to update tag manifest for ${tag}`)
-        }
-      }),
-    )
-
-    await purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
-      // TODO: add reporting here
-      getLogger()
-        .withError(error)
-        .error(`[NetlifyCacheHandler]: Purging the cache for tags ${tags.join(', ')} failed`)
-    })
+  async revalidateTag(tagOrTags: string | string[]) {
+    return markTagsAsStaleAndPurgeEdgeCache(tagOrTags)
   }
 
   resetRequestCache() {
@@ -501,7 +442,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   /**
    * Checks if a cache entry is stale through on demand revalidated tags
    */
-  private async checkCacheEntryStaleByTags(
+  private checkCacheEntryStaleByTags(
     cacheEntry: NetlifyCacheHandlerValue,
     tags: string[] = [],
     softTags: string[] = [],
@@ -534,45 +475,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     }
 
     // 2. If any in-memory tags don't indicate that any of tags was invalidated
-    //    we will check blob store. Full-route cache and fetch caches share a lot of tags
-    //    but we will only do actual blob read once withing a single request due to cacheStore
-    //    memoization.
-    //    Additionally, we will resolve the promise as soon as we find first
-    //    stale tag, so that we don't wait for all of them to resolve (but keep all
-    //    running in case future `CacheHandler.get` calls would be able to use results).
-    //    "Worst case" scenario is none of tag was invalidated in which case we need to wait
-    //    for all blob store checks to finish before we can be certain that no tag is stale.
-    return new Promise<boolean>((resolve, reject) => {
-      const tagManifestPromises: Promise<boolean>[] = []
-
-      for (const tag of cacheTags) {
-        const tagManifestPromise: Promise<TagManifest | null> = this.cacheStore.get<TagManifest>(
-          tag,
-          'tagManifest.get',
-        )
-
-        tagManifestPromises.push(
-          tagManifestPromise.then((tagManifest) => {
-            if (!tagManifest) {
-              return false
-            }
-            const isStale = tagManifest.revalidatedAt >= (cacheEntry.lastModified || Date.now())
-            if (isStale) {
-              resolve(true)
-              return true
-            }
-            return false
-          }),
-        )
-      }
-
-      // make sure we resolve promise after all blobs are checked (if we didn't resolve as stale yet)
-      Promise.all(tagManifestPromises)
-        .then((tagManifestAreStale) => {
-          resolve(tagManifestAreStale.some((tagIsStale) => tagIsStale))
-        })
-        .catch(reject)
-    })
+    //    we will check blob store.
+    return isAnyTagStale(cacheTags, cacheEntry.lastModified)
   }
 }
 
