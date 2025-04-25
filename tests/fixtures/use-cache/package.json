@@ -1,0 +1,23 @@
+{
+  "name": "use-cache",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "next build",
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.2"
+  },
+  "test": {
+    "dependencies": {
+      "next": ">=15.3.0-canary.13"
+    }
+  }
+}
