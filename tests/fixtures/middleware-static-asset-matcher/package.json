@@ -1,0 +1,17 @@
+{
+  "name": "middleware",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "next build",
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "@aws-amplify/adapter-nextjs": "^1.0.18",
+    "aws-amplify": "^6.0.18",
+    "next": "latest",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  }
+}
