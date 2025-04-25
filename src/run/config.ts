@@ -4,14 +4,19 @@ import { join, resolve } from 'node:path'
 
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
-import { PLUGIN_DIR, RUN_CONFIG } from './constants.js'
+import { PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
 import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
+
+export type RunConfig = {
+  nextConfig: NextConfigComplete
+  enableUseCacheHandler: boolean
+}
 
 /**
  * Get Next.js config from the build output
  */
 export const getRunConfig = async () => {
-  return JSON.parse(await readFile(resolve(PLUGIN_DIR, RUN_CONFIG), 'utf-8'))
+  return JSON.parse(await readFile(resolve(PLUGIN_DIR, RUN_CONFIG_FILE), 'utf-8')) as RunConfig
 }
 
 type NextConfigForMultipleVersions = NextConfigComplete & {
