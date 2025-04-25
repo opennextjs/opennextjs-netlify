@@ -424,7 +424,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           // encode here to deal with non ASCII characters in the key
           const tag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
 
-          purgeEdgeCache(tag)
+          requestContext?.trackBackgroundWork(purgeEdgeCache(tag))
         }
       }
     })

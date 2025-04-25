@@ -84,23 +84,21 @@ function getCacheTagsFromTagOrTags(tagOrTags: string | string[]): string[] {
     .filter(Boolean)
 }
 
-export function purgeEdgeCache(tagOrTags: string | string[]): void {
+export function purgeEdgeCache(tagOrTags: string | string[]): Promise<void> {
   const tags = getCacheTagsFromTagOrTags(tagOrTags)
 
   if (tags.length === 0) {
-    return
+    return Promise.resolve()
   }
 
   getLogger().debug(`[NextRuntime] Purging CDN cache for: [${tags}.join(', ')]`)
 
-  const purgeCachePromise = purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
+  return purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
     // TODO: add reporting here
     getLogger()
       .withError(error)
       .error(`[NextRuntime] Purging the cache for tags [${tags.join(',')}] failed`)
   })
-
-  getRequestContext()?.trackBackgroundWork(purgeCachePromise)
 }
 
 async function doRevalidateTagAndPurgeEdgeCache(tags: string[]): Promise<void> {
@@ -126,7 +124,7 @@ async function doRevalidateTagAndPurgeEdgeCache(tags: string[]): Promise<void> {
     }),
   )
 
-  purgeEdgeCache(tags)
+  await purgeEdgeCache(tags)
 }
 
 export function markTagsAsStaleAndPurgeEdgeCache(tagOrTags: string | string[]) {
