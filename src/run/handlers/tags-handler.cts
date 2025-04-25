@@ -126,12 +126,7 @@ async function doRevalidateTagAndPurgeEdgeCache(tags: string[]): Promise<void> {
     }),
   )
 
-  await purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
-    // TODO: add reporting here
-    getLogger()
-      .withError(error)
-      .error(`[NextRuntime]: Purging the cache for tags ${tags.join(', ')} failed`)
-  })
+  purgeEdgeCache(tags)
 }
 
 export function markTagsAsStaleAndPurgeEdgeCache(tagOrTags: string | string[]) {
