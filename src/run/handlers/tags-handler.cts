@@ -108,7 +108,7 @@ async function doRevalidateTag(tags: string[]): Promise<void> {
     return
   }
 
-  const data: TagManifest = {
+  const tagManifest: TagManifest = {
     revalidatedAt: Date.now(),
   }
 
@@ -117,7 +117,7 @@ async function doRevalidateTag(tags: string[]): Promise<void> {
   await Promise.all(
     tags.map(async (tag) => {
       try {
-        await cacheStore.set(tag, data, 'tagManifest.set')
+        await cacheStore.set(tag, tagManifest, 'tagManifest.set')
       } catch (error) {
         getLogger().withError(error).log(`Failed to update tag manifest for ${tag}`)
       }
