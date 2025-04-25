@@ -1,7 +1,7 @@
 // Here we need to actually import `trace` from @opentelemetry/api to add extra wrappers
 // other places should import `getTracer` from this module
 // eslint-disable-next-line no-restricted-imports
-import { type Span, trace, Tracer } from '@opentelemetry/api'
+import { type Span, trace, type Tracer } from '@opentelemetry/api'
 import { type SugaredTracer, wrapTracer } from '@opentelemetry/api/experimental'
 
 import { getRequestContext, type RequestContext } from './request-context.cjs'
