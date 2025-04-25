@@ -424,8 +424,6 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           // encode here to deal with non ASCII characters in the key
           const tag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
 
-          getLogger().debug(`Purging CDN cache for: [${tag}]`)
-
           purgeEdgeCache(tag)
         }
       }

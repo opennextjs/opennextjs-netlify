@@ -91,6 +91,8 @@ export function purgeEdgeCache(tagOrTags: string | string[]): void {
     return
   }
 
+  getLogger().debug(`[NextRuntime] Purging CDN cache for: [${tags}.join(', ')]`)
+
   const purgeCachePromise = purgeCache({ tags, userAgent: purgeCacheUserAgent }).catch((error) => {
     // TODO: add reporting here
     getLogger()
