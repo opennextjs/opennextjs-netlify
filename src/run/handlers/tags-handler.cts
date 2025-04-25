@@ -97,14 +97,14 @@ export function purgeEdgeCache(tagOrTags: string | string[]): void {
     // TODO: add reporting here
     getLogger()
       .withError(error)
-      .error(`[NetlifyCacheHandler]: Purging the cache for tags [${tags.join(',')}] failed`)
+      .error(`[NextRuntime] Purging the cache for tags [${tags.join(',')}] failed`)
   })
 
   getRequestContext()?.trackBackgroundWork(purgeCachePromise)
 }
 
-async function doRevalidateTag(tags: string[]): Promise<void> {
-  getLogger().withFields({ tags }).debug('NetlifyCacheHandler.revalidateTag')
+async function doRevalidateTagAndPurgeEdgeCache(tags: string[]): Promise<void> {
+  getLogger().withFields({ tags }).debug('doRevalidateTagAndPurgeEdgeCache')
 
   if (tags.length === 0) {
     return
@@ -121,7 +121,7 @@ async function doRevalidateTag(tags: string[]): Promise<void> {
       try {
         await cacheStore.set(tag, tagManifest, 'tagManifest.set')
       } catch (error) {
-        getLogger().withError(error).log(`Failed to update tag manifest for ${tag}`)
+        getLogger().withError(error).log(`[NextRuntime] Failed to update tag manifest for ${tag}`)
       }
     }),
   )
@@ -130,14 +130,14 @@ async function doRevalidateTag(tags: string[]): Promise<void> {
     // TODO: add reporting here
     getLogger()
       .withError(error)
-      .error(`[NetlifyCacheHandler]: Purging the cache for tags ${tags.join(', ')} failed`)
+      .error(`[NextRuntime]: Purging the cache for tags ${tags.join(', ')} failed`)
   })
 }
 
 export function markTagsAsStaleAndPurgeEdgeCache(tagOrTags: string | string[]) {
   const tags = getCacheTagsFromTagOrTags(tagOrTags)
 
-  const revalidateTagPromise = doRevalidateTag(tags)
+  const revalidateTagPromise = doRevalidateTagAndPurgeEdgeCache(tags)
 
   const requestContext = getRequestContext()
   if (requestContext) {
