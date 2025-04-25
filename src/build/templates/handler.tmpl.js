@@ -4,15 +4,11 @@ import {
 } from './.netlify/dist/run/handlers/request-context.cjs'
 import serverHandler from './.netlify/dist/run/handlers/server.js'
 import { getTracer } from './.netlify/dist/run/handlers/tracer.cjs'
-import tracing from './.netlify/dist/run/handlers/tracing.js'
 
 // Set feature flag for regional blobs
 process.env.USE_REGIONAL_BLOBS = '{{useRegionalBlobs}}'
 
 export default async function handler(req, context) {
-  if (process.env.NETLIFY_OTLP_TRACE_EXPORTER_URL) {
-    tracing.start()
-  }
   const requestContext = createRequestContext(req, context)
   const tracer = getTracer()
 
