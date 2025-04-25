@@ -14,7 +14,7 @@ const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 /**
  * Get timestamp of the last revalidation for a tag
  */
-async function lastTagRevalidationTimestamp(
+async function getTagRevalidatedAt(
   tag: string,
   cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore,
 ): Promise<number | null> {
@@ -47,7 +47,7 @@ export function isAnyTagStale(tags: string[], timestamp: number): Promise<boolea
     const tagManifestPromises: Promise<boolean>[] = []
 
     for (const tag of tags) {
-      const lastRevalidationTimestampPromise = lastTagRevalidationTimestamp(tag, cacheStore)
+      const lastRevalidationTimestampPromise = getTagRevalidatedAt(tag, cacheStore)
 
       tagManifestPromises.push(
         lastRevalidationTimestampPromise.then((lastRevalidationTimestamp) => {
