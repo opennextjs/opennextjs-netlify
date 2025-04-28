@@ -29,6 +29,19 @@ const nextConfig = {
         destination: 'https://example.vercel.sh',
         basePath: false,
       },
+      {
+        source: '/config-rewrite/source',
+        destination: '/config-rewrite/dest',
+      },
+    ]
+  },
+  async redirects() {
+    return [
+      {
+        source: '/config-redirect/source',
+        destination: '/config-redirect/dest',
+        permanent: true,
+      },
     ]
   },
 }
