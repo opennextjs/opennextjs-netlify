@@ -1,4 +1,4 @@
-import { expect, type Locator } from '@playwright/test'
+import { expect, type Locator, type Response } from '@playwright/test'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 
@@ -281,4 +281,60 @@ test('can require CJS module that is not bundled', async ({ simple }) => {
 
   expect(parsedBody.notBundledCJSModule.isBundled).toEqual(false)
   expect(parsedBody.bundledCJSModule.isBundled).toEqual(true)
+})
+
+test.describe('RSC cache poisoning', () => {
+  test('Next.config.js rewrite', async ({ page, simple }) => {
+    const prefetchResponsePromise = new Promise<Response>((resolve) => {
+      page.on('response', (response) => {
+        if (response.url().includes('/config-rewrite/source')) {
+          resolve(response)
+        }
+      })
+    })
+    await page.goto(`${simple.url}/config-rewrite`)
+
+    // ensure prefetch
+    await page.hover('text=NextConfig.rewrite')
+
+    // wait for prefetch request to finish
+    const prefetchResponse = await prefetchResponsePromise
+
+    // ensure prefetch respond with RSC data
+    expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
+    expect(prefetchResponse.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+
+    const htmlResponse = await page.goto(`${simple.url}/config-rewrite/source`)
+
+    // ensure we get HTML response
+    expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
+    expect(htmlResponse?.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+  })
+
+  test('Next.config.js redirect', async ({ page, simple }) => {
+    const prefetchResponsePromise = new Promise<Response>((resolve) => {
+      page.on('response', (response) => {
+        if (response.url().includes('/config-redirect/dest')) {
+          resolve(response)
+        }
+      })
+    })
+    await page.goto(`${simple.url}/config-redirect`)
+
+    // ensure prefetch
+    await page.hover('text=NextConfig.redirect')
+
+    // wait for prefetch request to finish
+    const prefetchResponse = await prefetchResponsePromise
+
+    // ensure prefetch respond with RSC data
+    expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
+    expect(prefetchResponse.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+
+    const htmlResponse = await page.goto(`${simple.url}/config-rewrite/source`)
+
+    // ensure we get HTML response
+    expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
+    expect(htmlResponse?.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+  })
 })
