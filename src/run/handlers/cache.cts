@@ -178,10 +178,12 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       try {
         let loadManifest
         try {
-          // Starting in 15.4.0-canary.10 loadManifest was relocated (https://github.com/vercel/next.js/pull/78358)
-          ({ loadManifest } = await import('next/dist/server/load-manifest.external.js'))
+          // @ts-expect-error Starting in 15.4.0-canary.10 loadManifest was relocated (https://github.com/vercel/next.js/pull/78358)
+          // eslint-disable-next-line @typescript-eslint/no-extra-semi, n/no-missing-import, import/no-unresolved
+          ;({ loadManifest } = await import('next/dist/server/load-manifest.external.js'))
         } catch {
-          ({ loadManifest } = await import('next/dist/server/load-manifest.js'))
+          // eslint-disable-next-line @typescript-eslint/no-extra-semi
+          ;({ loadManifest } = await import('next/dist/server/load-manifest.js'))
         }
         const prerenderManifest = loadManifest(
           join(this.options.serverDistDir, '..', 'prerender-manifest.json'),
