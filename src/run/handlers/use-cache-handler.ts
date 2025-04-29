@@ -16,24 +16,20 @@ import {
 } from './tags-handler.cjs'
 import { getTracer } from './tracer.cjs'
 
-// copied from default implementation
-// packages/next/src/server/lib/cache-handlers/default.ts
+// Most of this code is copied and adapted from Next.js default 'use cache' handler implementation
+// https://github.com/vercel/next.js/blob/84fde91e03918344c5d356986914ab68a5083462/packages/next/src/server/lib/cache-handlers/default.ts
+// this includes:
+//  - PrivateCacheEntry (with removed `isErrored` and `errorRetryCount` as those are not actually used there)
+//  - Main logic of .get and .set methods
+// Main difference is:
+//  - Tag handling - default Next.js implementation handles tags in memory only, but we need to support tag
+//    invalidation cross serverless instances, so we do use same persistent storage as we use for response and fetch cache
+//    Additionally we do not actually implement refreshTags to update in-memory tag manifest as this operation is blocking
+//    and our serverless instances also can handle any page template so implementing it would not have good perf tradeoffs
+//  - Addition of tracing
+
 type PrivateCacheEntry = {
   entry: CacheEntry
-
-  // For the default cache we store errored cache
-  // entries and allow them to be used up to 3 times
-  // after that we want to dispose it and try for fresh
-
-  // If an entry is errored we return no entry
-  // three times so that we retry hitting origin (MISS)
-  // and then if it still fails to set after the third we
-  // return the errored content and use expiration of
-  // Math.min(30, entry.expiration)
-
-  isErrored: boolean // pieh: this doesn't seem to be actually used in the default implementation
-  errorRetryCount: number // pieh: this doesn't seem to be actually used in the default implementation
-
   // compute size on set since we need to read size
   // of the ReadableStream for LRU evicting
   size: number
@@ -207,8 +203,6 @@ export const NetlifyDefaultUseCacheHandler = {
 
           getLRUCache().set(cacheKey, {
             entry,
-            isErrored: false,
-            errorRetryCount: 0,
             size,
           })
         } catch (error) {
