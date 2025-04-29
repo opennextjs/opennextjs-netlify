@@ -1,12 +1,13 @@
 import { CheerioAPI, load } from 'cheerio'
 import { getLogger } from 'lambda-local'
 import { v4 } from 'uuid'
-import { beforeAll, describe, expect, test, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, loadSandboxedFunction, runPlugin } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
 import { InvokeFunctionResult } from '../utils/lambda-helpers.mjs'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
+import { afterTestCleanup } from '../test-setup.js'
 
 function compareDates(
   $response1: CheerioAPI,
@@ -145,25 +146,33 @@ declare module 'vitest' {
 // Disable the verbose logging of the lambda-local runtime
 getLogger().level = 'alert'
 
-let ctx: FixtureTestContext
-beforeAll(async () => {
-  ctx = {
-    deployID: generateRandomObjectID(),
-    siteID: v4(),
-  } as FixtureTestContext
-
-  vi.stubEnv('SITE_ID', ctx.siteID)
-  vi.stubEnv('DEPLOY_ID', ctx.deployID)
-  vi.stubEnv('NETLIFY_PURGE_API_TOKEN', 'fake-token')
-  await startMockBlobStore(ctx as FixtureTestContext)
-
-  await createFixture('use-cache', ctx)
-  await runPlugin(ctx)
-})
-
 // only supporting latest variant (https://github.com/vercel/next.js/pull/76687)
 // first released in v15.3.0-canary.13 so we should not run tests on older next versions
 describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => {
+  // note that in this test suite we are setting up test fixture once
+  // because every test is using different path and also using sandboxed functions
+  // so tests are not sharing context between them and this make test running
+  // much more performant
+  let ctx: FixtureTestContext
+  beforeAll(async () => {
+    ctx = {
+      deployID: generateRandomObjectID(),
+      siteID: v4(),
+    } as FixtureTestContext
+
+    vi.stubEnv('SITE_ID', ctx.siteID)
+    vi.stubEnv('DEPLOY_ID', ctx.deployID)
+    vi.stubEnv('NETLIFY_PURGE_API_TOKEN', 'fake-token')
+    await startMockBlobStore(ctx as FixtureTestContext)
+
+    await createFixture('use-cache', ctx)
+    await runPlugin(ctx)
+  })
+
+  afterAll(async () => {
+    await afterTestCleanup(ctx)
+  })
+
   describe('default (in-memory cache entries, shared tag manifests)', () => {
     for (const {
       expectedCachingBehaviorWhenUseCacheRegenerates,
