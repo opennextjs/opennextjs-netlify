@@ -42,7 +42,7 @@ function compareDates(
 }
 
 type ExpectedCachingBehaviorDefinition = {
-  getDataTimeShouldShouldBeEqual: boolean
+  getDataTimeShouldBeEqual: boolean
   resultWrapperComponentTimeShouldBeEqual: boolean
   pageComponentTimeShouldBeEqual: boolean
 }
@@ -87,7 +87,7 @@ expect.extend({
     response1: Awaited<InvokeFunctionResult>,
     response2: Awaited<InvokeFunctionResult>,
     {
-      getDataTimeShouldShouldBeEqual,
+      getDataTimeShouldBeEqual,
       resultWrapperComponentTimeShouldBeEqual,
       pageComponentTimeShouldBeEqual,
     }: ExpectedCachingBehaviorDefinition,
@@ -99,7 +99,7 @@ expect.extend({
       $response1,
       $response2,
       'getData-time',
-      getDataTimeShouldShouldBeEqual,
+      getDataTimeShouldBeEqual,
       this.utils.diff,
     )
     const resultComponentComparison = compareDates(
@@ -186,7 +186,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
         useCacheTagPrefix: 'data',
         expectedCachingBehaviorWhenUseCacheRegenerates: {
           // getData function has 'use cache' so it should report same generation time, everything else is dynamically regenerated on each request
-          getDataTimeShouldShouldBeEqual: true,
+          getDataTimeShouldBeEqual: true,
           resultWrapperComponentTimeShouldBeEqual: false,
           pageComponentTimeShouldBeEqual: false,
         },
@@ -197,7 +197,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
         useCacheTagPrefix: 'component',
         expectedCachingBehaviorWhenUseCacheRegenerates: {
           // <ResultWrapperComponent> has 'use cache' so it should report same generation time, everything else is dynamically regenerated on each request
-          getDataTimeShouldShouldBeEqual: false,
+          getDataTimeShouldBeEqual: false,
           resultWrapperComponentTimeShouldBeEqual: true,
           pageComponentTimeShouldBeEqual: false,
         },
@@ -208,7 +208,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
         useCacheTagPrefix: 'page',
         expectedCachingBehaviorWhenUseCacheRegenerates: {
           // <PageComponent> has 'use cache' so it should report same generation time for everything as this is entry point
-          getDataTimeShouldShouldBeEqual: true,
+          getDataTimeShouldBeEqual: true,
           resultWrapperComponentTimeShouldBeEqual: true,
           pageComponentTimeShouldBeEqual: true,
         },
@@ -247,7 +247,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
               const call2 = await invokeFunction({ url })
               expect(call2).toHaveExpectedCachingBehavior(call1, {
                 // getData function has 'use cache', but it was on-demand revalidated so everything should be fresh
-                getDataTimeShouldShouldBeEqual: false,
+                getDataTimeShouldBeEqual: false,
                 resultWrapperComponentTimeShouldBeEqual: false,
                 pageComponentTimeShouldBeEqual: false,
               })
@@ -265,7 +265,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
               const call2 = await invokeFunctionLambda2({ url })
               expect(call2).toHaveExpectedCachingBehavior(call1, {
                 // default cache is in-memory so we expect lambdas not to share data
-                getDataTimeShouldShouldBeEqual: false,
+                getDataTimeShouldBeEqual: false,
                 resultWrapperComponentTimeShouldBeEqual: false,
                 pageComponentTimeShouldBeEqual: false,
               })
@@ -285,7 +285,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
               const call2 = await invokeFunctionLambda1({ url })
               expect(call2).toHaveExpectedCachingBehavior(call1, {
                 // invalidation done by lambda2 should invalidate lambda1 as well
-                getDataTimeShouldShouldBeEqual: false,
+                getDataTimeShouldBeEqual: false,
                 resultWrapperComponentTimeShouldBeEqual: false,
                 pageComponentTimeShouldBeEqual: false,
               })
@@ -316,7 +316,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
               const call3 = await invokeFunction({ url })
               expect(call3).toHaveExpectedCachingBehavior(call2, {
                 // cache should expire and fresh content should be generated
-                getDataTimeShouldShouldBeEqual: false,
+                getDataTimeShouldBeEqual: false,
                 resultWrapperComponentTimeShouldBeEqual: false,
                 pageComponentTimeShouldBeEqual: false,
               })
@@ -361,7 +361,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
 
                   expect(call2).toHaveExpectedCachingBehavior(call1, {
                     // response is served from response cache and `use cache` is not even actually used
-                    getDataTimeShouldShouldBeEqual: true,
+                    getDataTimeShouldBeEqual: true,
                     resultWrapperComponentTimeShouldBeEqual: true,
                     pageComponentTimeShouldBeEqual: true,
                   })
@@ -375,7 +375,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
 
                   expect(call3).toHaveExpectedCachingBehavior(call2, {
                     // invalidation shot result in everything changing
-                    getDataTimeShouldShouldBeEqual: false,
+                    getDataTimeShouldBeEqual: false,
                     resultWrapperComponentTimeShouldBeEqual: false,
                     pageComponentTimeShouldBeEqual: false,
                   })
@@ -405,7 +405,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
 
                   expect(call2).toHaveExpectedCachingBehavior(call1, {
                     // response is served from response cache and `use cache` is not even actually used
-                    getDataTimeShouldShouldBeEqual: true,
+                    getDataTimeShouldBeEqual: true,
                     resultWrapperComponentTimeShouldBeEqual: true,
                     pageComponentTimeShouldBeEqual: true,
                   })
@@ -416,7 +416,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
                   const call3 = await invokeFunction({ url })
                   expect(call3).toHaveExpectedCachingBehavior(call2, {
                     // still stale content on first request after invalidation
-                    getDataTimeShouldShouldBeEqual: true,
+                    getDataTimeShouldBeEqual: true,
                     resultWrapperComponentTimeShouldBeEqual: true,
                     pageComponentTimeShouldBeEqual: true,
                   })
