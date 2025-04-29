@@ -34,7 +34,7 @@ function isError(error: unknown): error is NodeJS.ErrnoException {
  * Copy App/Pages Router Javascript needed by the server handler
  */
 export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
-  return await tracer.withActiveSpan('copyNextServerCode', async () => {
+  await tracer.withActiveSpan('copyNextServerCode', async () => {
     // update the dist directory inside the required-server-files.json to work with
     // nx monorepos and other setups where the dist directory is modified
     const reqServerFilesPath = join(
