@@ -1,13 +1,11 @@
-import { createWriteStream } from 'node:fs'
 import { cp, readFile, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Readable } from 'stream'
-import { finished } from 'stream/promises'
 
 import { build, context } from 'esbuild'
-import { execaCommand } from 'execa'
 import glob from 'fast-glob'
+
+import { vendorDeno } from './build-helpers.js'
 
 const OUT_DIR = 'dist'
 await rm(OUT_DIR, { force: true, recursive: true })
@@ -83,47 +81,22 @@ async function bundle(entryPoints, format, watch) {
   })
 }
 
-async function vendorDeno() {
+async function vendorMiddlewareDenoModules() {
   const vendorSource = resolve('edge-runtime/vendor.ts')
-  const vendorDest = resolve('edge-runtime/vendor')
+  const middlewareDir = resolve('edge-runtime')
 
-  try {
-    await execaCommand('deno --version')
-  } catch {
-    throw new Error('Could not check the version of Deno. Is it installed on your system?')
-  }
-
-  console.log(`🧹 Deleting '${vendorDest}'...`)
-
-  await rm(vendorDest, { force: true, recursive: true })
-
-  console.log(`📦 Vendoring Deno modules into '${vendorDest}'...`)
-
-  await execaCommand(`deno vendor ${vendorSource} --output=${vendorDest} --force`)
-
-  // htmlrewriter contains wasm files and those don't currently work great with vendoring
-  // see https://github.com/denoland/deno/issues/14123
-  // to workaround this we copy the wasm files manually
-  const filesToDownload = ['https://deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm']
-  await Promise.all(
-    filesToDownload.map(async (urlString) => {
-      const url = new URL(urlString)
-
-      const destination = join(vendorDest, url.hostname, url.pathname)
-
-      const res = await fetch(url)
-      if (!res.ok) throw new Error('Failed to fetch .wasm file to vendor', { cause: err })
-      const fileStream = createWriteStream(destination, { flags: 'wx' })
-      await finished(Readable.fromWeb(res.body).pipe(fileStream))
-    }),
-  )
+  await vendorDeno({
+    vendorSource,
+    cwd: middlewareDir,
+    wasmFilesToDownload: ['https://deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm'],
+  })
 }
 
 const args = new Set(process.argv.slice(2))
 const watch = args.has('--watch') || args.has('-w')
 
 await Promise.all([
-  vendorDeno(),
+  vendorMiddlewareDenoModules(),
   bundle(entryPointsESM, 'esm', watch),
   ...entryPointsCJS.map((entry) => bundle([entry], 'cjs', watch)),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
