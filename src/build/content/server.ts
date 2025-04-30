@@ -16,10 +16,11 @@ import { join as posixJoin, sep as posixSep } from 'node:path/posix'
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
-import { prerelease, lt as semverLowerThan, lte as semverLowerThanOrEqual } from 'semver'
+import { prerelease, satisfies, lt as semverLowerThan, lte as semverLowerThanOrEqual } from 'semver'
 
-import { RUN_CONFIG } from '../../run/constants.js'
-import { PluginContext } from '../plugin-context.js'
+import type { RunConfig } from '../../run/config.js'
+import { RUN_CONFIG_FILE } from '../../run/constants.js'
+import type { PluginContext, RequiredServerFilesManifest } from '../plugin-context.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
@@ -54,7 +55,9 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         throw error
       }
     }
-    const reqServerFiles = JSON.parse(await readFile(reqServerFilesPath, 'utf-8'))
+    const reqServerFiles = JSON.parse(
+      await readFile(reqServerFilesPath, 'utf-8'),
+    ) as RequiredServerFilesManifest
 
     // if the resolved dist folder does not match the distDir of the required-server-files.json
     // this means the path got altered by a plugin like nx and contained ../../ parts so we have to reset it
@@ -73,8 +76,17 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
     // write our run-config.json to the root dir so that we can easily get the runtime config of the required-server-files.json
     // without the need to know about the monorepo or distDir configuration upfront.
     await writeFile(
-      join(ctx.serverHandlerDir, RUN_CONFIG),
-      JSON.stringify(reqServerFiles.config),
+      join(ctx.serverHandlerDir, RUN_CONFIG_FILE),
+      JSON.stringify({
+        nextConfig: reqServerFiles.config,
+        // only enable setting up 'use cache' handler when Next.js supports CacheHandlerV2 as we don't have V1 compatible implementation
+        // see https://github.com/vercel/next.js/pull/76687 first released in v15.3.0-canary.13
+        enableUseCacheHandler: ctx.nextVersion
+          ? satisfies(ctx.nextVersion, '>=15.3.0-canary.13', {
+              includePrerelease: true,
+            })
+          : false,
+      } satisfies RunConfig),
       'utf-8',
     )
 
@@ -336,9 +348,11 @@ const replaceMiddlewareManifest = async (sourcePath: string, destPath: string) =
 }
 
 export const verifyHandlerDirStructure = async (ctx: PluginContext) => {
-  const runConfig = JSON.parse(await readFile(join(ctx.serverHandlerDir, RUN_CONFIG), 'utf-8'))
+  const { nextConfig } = JSON.parse(
+    await readFile(join(ctx.serverHandlerDir, RUN_CONFIG_FILE), 'utf-8'),
+  ) as RunConfig
 
-  const expectedBuildIDPath = join(ctx.serverHandlerDir, runConfig.distDir, 'BUILD_ID')
+  const expectedBuildIDPath = join(ctx.serverHandlerDir, nextConfig.distDir, 'BUILD_ID')
   if (!existsSync(expectedBuildIDPath)) {
     ctx.failBuild(
       `Failed creating server handler. BUILD_ID file not found at expected location "${expectedBuildIDPath}".`,

@@ -26,6 +26,27 @@ async function getTagRevalidatedAt(
 }
 
 /**
+ * Get the most recent revalidation timestamp for a list of tags
+ */
+export async function getMostRecentTagRevalidationTimestamp(tags: string[]) {
+  if (tags.length === 0) {
+    return 0
+  }
+
+  const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+
+  const timestampsOrNulls = await Promise.all(
+    tags.map((tag) => getTagRevalidatedAt(tag, cacheStore)),
+  )
+
+  const timestamps = timestampsOrNulls.filter((timestamp) => timestamp !== null)
+  if (timestamps.length === 0) {
+    return 0
+  }
+  return Math.max(...timestamps)
+}
+
+/**
  * Check if any of the tags were invalidated since the given timestamp
  */
 export function isAnyTagStale(tags: string[], timestamp: number): Promise<boolean> {

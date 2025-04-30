@@ -3,9 +3,9 @@ import type { OutgoingHttpHeaders } from 'http'
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
 import type { Context } from '@netlify/functions'
 import { Span } from '@opentelemetry/api'
-import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
+import { getRunConfig, setRunConfig } from '../config.js'
 import {
   adjustDateHeader,
   setCacheControlHeaders,
@@ -18,15 +18,22 @@ import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
 import { getLogger, type RequestContext } from './request-context.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'
+import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
-
+// make use of global fetch before Next.js applies any patching
 setFetchBeforeNextPatchedIt(globalThis.fetch)
+// configure globals that Next.js make use of before we start importing any Next.js code
+// as some globals are consumed at import time
+const { nextConfig, enableUseCacheHandler } = await getRunConfig()
+if (enableUseCacheHandler) {
+  configureUseCacheHandlers()
+}
+setRunConfig(nextConfig)
+setupWaitUntil()
 
 const nextImportPromise = import('../next.cjs')
 
-setupWaitUntil()
-
-let nextHandler: WorkerRequestHandler, nextConfig: NextConfigComplete
+let nextHandler: WorkerRequestHandler
 
 /**
  * When Next.js proxies requests externally, it writes the response back as-is.
@@ -61,11 +68,6 @@ export default async (
 
   if (!nextHandler) {
     await tracer.withActiveSpan('initialize next server', async () => {
-      // set the server config
-      const { getRunConfig, setRunConfig } = await import('../config.js')
-      nextConfig = await getRunConfig()
-      setRunConfig(nextConfig)
-
       const { getMockedRequestHandler } = await nextImportPromise
       const url = new URL(request.url)
 
