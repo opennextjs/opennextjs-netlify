@@ -1,10 +1,10 @@
 import type { Context } from 'https://edge.netlify.com'
 // Available at build time
-import matchers from './matchers.json' assert { type: 'json' }
+import matchers from './matchers.json' with { type: 'json' }
 import edgeFunction from './bundle.js'
 import { buildNextRequest, buildResponse } from '../edge-shared/utils.ts'
 import { getMiddlewareRouteMatcher, MiddlewareRouteMatch, searchParamsToUrlQuery } from '../edge-shared/next-utils.ts'
-import nextConfig from '../edge-shared/nextConfig.json' assert { type: 'json' }
+import nextConfig from '../edge-shared/nextConfig.json' with { type: 'json' }
 
 const matchesMiddleware: MiddlewareRouteMatch = getMiddlewareRouteMatcher(matchers || [])
 
