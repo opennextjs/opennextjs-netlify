@@ -28,11 +28,12 @@ import { getLogger, getRequestContext } from './request-context.cjs'
 import { isAnyTagStale, markTagsAsStaleAndPurgeEdgeCache, purgeEdgeCache } from './tags-handler.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'
 
+let memoizedPrerenderManifest: PrerenderManifest
+
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   options: CacheHandlerContext
   revalidatedTags: string[]
   cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore
-  prerenderManifest?: Promise<PrerenderManifest>
   tracer = getTracer()
 
   constructor(options: CacheHandlerContext) {
@@ -167,8 +168,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   private async getPrerenderManifest(serverDistDir: string): Promise<PrerenderManifest> {
-    if (this.prerenderManifest) {
-      return this.prerenderManifest
+    if (memoizedPrerenderManifest) {
+      return memoizedPrerenderManifest
     }
 
     const prerenderManifestPath = join(serverDistDir, '..', 'prerender-manifest.json')
@@ -177,17 +178,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       // @ts-expect-error Starting in 15.4.0-canary.10 loadManifest was relocated (https://github.com/vercel/next.js/pull/78358)
       // eslint-disable-next-line import/no-unresolved, n/no-missing-import
       const { loadManifest } = await import('next/dist/server/load-manifest.external.js')
-      this.prerenderManifest = Promise.resolve(
-        loadManifest(prerenderManifestPath) as PrerenderManifest,
-      )
+      memoizedPrerenderManifest = loadManifest(prerenderManifestPath) as PrerenderManifest
     } catch {
       const { loadManifest } = await import('next/dist/server/load-manifest.js')
-      this.prerenderManifest = Promise.resolve(
-        loadManifest(prerenderManifestPath) as PrerenderManifest,
-      )
+      memoizedPrerenderManifest = loadManifest(prerenderManifestPath) as PrerenderManifest
     }
 
-    return this.prerenderManifest
+    return memoizedPrerenderManifest
   }
 
   private async injectEntryToPrerenderManifest(
