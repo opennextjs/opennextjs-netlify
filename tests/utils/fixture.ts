@@ -292,8 +292,25 @@ export async function runPlugin(
       configPath: join(edgeSource, 'manifest.json'),
     })
     const { asset } = result.manifest.bundles[0]
-    const cmd = `deno run --allow-read --allow-write --allow-net --allow-env ${eszipHelper} extract ./${asset} .`
-    await execaCommand(cmd, { cwd: dist })
+
+    if (ctx.debug) {
+      await execaCommand(`deno -v`, { cwd: dist, stdio: 'inherit' })
+      await execaCommand(`deno info`, { cwd: dist, stdio: 'inherit' })
+      await execaCommand(`which deno`, { cwd: dist, stdio: 'inherit' })
+
+      console.log(`[${new Date().toISOString()}] start to extract`, dist)
+    }
+
+    try {
+      const cmd = `deno run --allow-read --allow-write --allow-net --allow-env ${eszipHelper} extract ./${asset} .`
+      await execaCommand(cmd, { cwd: dist })
+      console.log(`[${new Date().toISOString()}] finished extracting`, dist)
+    } catch (err) {
+      if (ctx.debug) {
+        console.log(`[${new Date().toISOString()}] failed extracting`, dist, err)
+      }
+      throw err
+    }
 
     // start the edge functions server:
     const servePath = base.resolveFromPackagePath('.netlify', 'edge-functions-serve')

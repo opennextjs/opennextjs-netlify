@@ -155,22 +155,37 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
   // much more performant
   let ctx: FixtureTestContext
   beforeAll(async () => {
-    ctx = {
-      deployID: generateRandomObjectID(),
-      siteID: v4(),
-    } as FixtureTestContext
+    console.log(`[${new Date().toISOString()}] Starting use-cache beforeAll`)
+    try {
+      ctx = {
+        deployID: generateRandomObjectID(),
+        siteID: v4(),
+      } as FixtureTestContext
+      ctx.debug = true
 
-    vi.stubEnv('SITE_ID', ctx.siteID)
-    vi.stubEnv('DEPLOY_ID', ctx.deployID)
-    vi.stubEnv('NETLIFY_PURGE_API_TOKEN', 'fake-token')
-    await startMockBlobStore(ctx as FixtureTestContext)
+      vi.stubEnv('SITE_ID', ctx.siteID)
+      vi.stubEnv('DEPLOY_ID', ctx.deployID)
+      vi.stubEnv('NETLIFY_PURGE_API_TOKEN', 'fake-token')
+      await startMockBlobStore(ctx as FixtureTestContext)
 
-    await createFixture('use-cache', ctx)
-    await runPlugin(ctx)
+      await createFixture('use-cache', ctx)
+      await runPlugin(ctx)
+      console.log(`[${new Date().toISOString()}] Finished use-cache beforeAll`)
+    } catch (err) {
+      console.log(`[${new Date().toISOString()}] use-cache beforeAll failed`, err)
+      throw err
+    }
   })
 
   afterAll(async () => {
-    await afterTestCleanup(ctx)
+    console.log(`[${new Date().toISOString()}] Finished use-cache afterAll`)
+    try {
+      await afterTestCleanup(ctx)
+      console.log(`[${new Date().toISOString()}] Finished use-cache afterAll`)
+    } catch (err) {
+      console.log(`[${new Date().toISOString()}] use-cache afterAll failed`, err)
+      throw err
+    }
   })
 
   describe('default (in-memory cache entries, shared tag manifests)', () => {
