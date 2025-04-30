@@ -93,7 +93,7 @@ test<FixtureTestContext>('linked static resources are placed in correct place in
     ...Array.from(document('script[src]')).map((elem) => {
       return elem.attribs.src
     }),
-    ...Array.from(document('link[href]')).map((elem) => {
+    ...Array.from(document('link[href]:not([blocking="render"])')).map((elem) => {
       return elem.attribs.href
     }),
     ...Array.from(document('img[src]')).map((elem) => {
@@ -143,7 +143,7 @@ test<FixtureTestContext>('linked static resources are placed in correct place in
     ...Array.from(document('script[src]')).map((elem) => {
       return elem.attribs.src
     }),
-    ...Array.from(document('link[href]')).map((elem) => {
+    ...Array.from(document('link[href]:not([blocking="render"])')).map((elem) => {
       return elem.attribs.href
     }),
     ...Array.from(document('img[src]')).map((elem) => {
