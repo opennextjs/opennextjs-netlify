@@ -151,6 +151,8 @@ jobs:
         run: npm ci
       - name: 'Build'
         run: npm run build
+      - name: 'Vendor deno helpers for integration tests'
+        run: node tools/vendor-deno-tools.js
       - name: Resolve Next.js version
         id: resolve-next-version
         shell: bash
