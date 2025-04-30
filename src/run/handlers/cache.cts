@@ -28,6 +28,8 @@ import { getLogger, getRequestContext } from './request-context.cjs'
 import { isAnyTagStale, markTagsAsStaleAndPurgeEdgeCache, purgeEdgeCache } from './tags-handler.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'
 
+let memoizedPrerenderManifest: PrerenderManifest
+
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   options: CacheHandlerContext
   revalidatedTags: string[]
@@ -165,6 +167,26 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     }
   }
 
+  private async getPrerenderManifest(serverDistDir: string): Promise<PrerenderManifest> {
+    if (memoizedPrerenderManifest) {
+      return memoizedPrerenderManifest
+    }
+
+    const prerenderManifestPath = join(serverDistDir, '..', 'prerender-manifest.json')
+
+    try {
+      // @ts-expect-error Starting in 15.4.0-canary.10 loadManifest was relocated (https://github.com/vercel/next.js/pull/78358)
+      // eslint-disable-next-line import/no-unresolved, n/no-missing-import
+      const { loadManifest } = await import('next/dist/server/load-manifest.external.js')
+      memoizedPrerenderManifest = loadManifest(prerenderManifestPath) as PrerenderManifest
+    } catch {
+      const { loadManifest } = await import('next/dist/server/load-manifest.js')
+      memoizedPrerenderManifest = loadManifest(prerenderManifestPath) as PrerenderManifest
+    }
+
+    return memoizedPrerenderManifest
+  }
+
   private async injectEntryToPrerenderManifest(
     key: string,
     { revalidate, cacheControl }: Pick<NetlifyCachedPageValue, 'revalidate' | 'cacheControl'>,
@@ -176,11 +198,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         typeof cacheControl !== 'undefined')
     ) {
       try {
-        const { loadManifest } = await import('next/dist/server/load-manifest.js')
-        const prerenderManifest = loadManifest(
-          join(this.options.serverDistDir, '..', 'prerender-manifest.json'),
-        ) as PrerenderManifest
-
+        const prerenderManifest = await this.getPrerenderManifest(this.options.serverDistDir)
         if (typeof cacheControl !== 'undefined') {
           // instead of `revalidate` property, we might get `cacheControls` ( https://github.com/vercel/next.js/pull/76207 )
           // then we need to keep track of revalidate values via SharedCacheControls
