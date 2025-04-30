@@ -38,8 +38,7 @@ export async function vendorDeno({
   }
 
   console.log(`📦 Vendoring Deno modules for '${vendorSource}' into '${vendorDest}'...`)
-  // --output=${vendorDest}
-  await execaCommand(`deno vendor ${vendorSource}  --force`, {
+  await execaCommand(`deno --allow-import ${vendorSource}`, {
     cwd,
   })
 
