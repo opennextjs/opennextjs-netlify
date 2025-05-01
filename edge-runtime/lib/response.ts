@@ -241,7 +241,11 @@ export const buildResponse = async ({
     edgeResponse.headers.delete('x-middleware-next')
 
     // coookies set in middleware need to be available during the lambda request
-    const newRequest = new Request(request)
+    const newRequest = new Request(request.url, {
+      headers: request.headers,
+      method: request.method,
+      body: request.body && !request.bodyUsed ? await request.arrayBuffer() : undefined,
+    })
     const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
     if (newRequestCookies) {
       newRequest.headers.set('Cookie', newRequestCookies)
