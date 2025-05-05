@@ -119,7 +119,7 @@ const writeHandlerFile = async (ctx: PluginContext, { matchers, name }: NextDefi
 
 const copyHandlerDependencies = async (
   ctx: PluginContext,
-  { name, files, wasm }: NextDefinition,
+  { name, env, files, wasm }: NextDefinition,
 ) => {
   const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
   const destDir = join(ctx.edgeFunctionsDir, getHandlerName({ name }))
@@ -131,6 +131,11 @@ const copyHandlerDependencies = async (
   const parts = [shim]
 
   const outputFile = join(destDir, `server/${name}.js`)
+
+  // Prepare environment variables for draft-mode (i.e. __NEXT_PREVIEW_MODE_ID, __NEXT_PREVIEW_MODE_SIGNING_KEY, __NEXT_PREVIEW_MODE_ENCRYPTION_KEY)
+  for (const [key, value] of Object.entries(env)) {
+    parts.push(`process.env.${key} = '${value}';`)
+  }
 
   if (wasm?.length) {
     for (const wasmChunk of wasm ?? []) {
@@ -161,16 +166,16 @@ const buildHandlerDefinition = (
   ctx: PluginContext,
   { name, matchers, page }: NextDefinition,
 ): Array<ManifestFunction> => {
-  const fun = getHandlerName({ name })
-  const funName = name.endsWith('middleware')
+  const functionHandlerName = getHandlerName({ name })
+  const functionName = name.endsWith('middleware')
     ? 'Next.js Middleware Handler'
     : `Next.js Edge Handler: ${page}`
   const cache = name.endsWith('middleware') ? undefined : ('manual' as const)
   const generator = `${ctx.pluginName}@${ctx.pluginVersion}`
 
   return augmentMatchers(matchers, ctx).map((matcher) => ({
-    function: fun,
-    name: funName,
+    function: functionHandlerName,
+    name: functionName,
     pattern: matcher.regexp,
     cache,
     generator,
@@ -183,10 +188,7 @@ export const clearStaleEdgeHandlers = async (ctx: PluginContext) => {
 
 export const createEdgeHandlers = async (ctx: PluginContext) => {
   const nextManifest = await ctx.getMiddlewareManifest()
-  const nextDefinitions = [
-    ...Object.values(nextManifest.middleware),
-    // ...Object.values(nextManifest.functions)
-  ]
+  const nextDefinitions = [...Object.values(nextManifest.middleware)]
   await Promise.all(nextDefinitions.map((def) => createEdgeHandler(ctx, def)))
 
   const netlifyDefinitions = nextDefinitions.flatMap((def) => buildHandlerDefinition(ctx, def))
