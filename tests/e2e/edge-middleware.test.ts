@@ -233,6 +233,15 @@ test("requests with x-middleware-subrequest don't skip middleware (GHSA-f82v-jwr
   expect(response.headers.get('x-test-used-next-version')).toBe('15.2.2')
 })
 
+test('requests with different encoding than matcher match anyway', async ({
+  middlewareStaticAssetMatcher,
+}) => {
+  const response = await fetch(`${middlewareStaticAssetMatcher.url}/hello%2Fworld.txt`)
+
+  // middleware was not skipped
+  expect(await response.text()).toBe('hello from middleware')
+})
+
 test.describe('RSC cache poisoning', () => {
   test('Middleware rewrite', async ({ page, middleware }) => {
     const prefetchResponsePromise = new Promise<Response>((resolve) => {
