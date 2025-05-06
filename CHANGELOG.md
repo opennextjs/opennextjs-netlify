@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.11.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.0...v5.11.1) (2025-05-06)
+
+
+### Bug Fixes
+
+* **edge-runtime:** match path with URI-encoded chars ([#2873](https://github.com/opennextjs/opennextjs-netlify/issues/2873)) ([7fe6b3b](https://github.com/opennextjs/opennextjs-netlify/commit/7fe6b3b634322de47d06110e952a5b67bc8e1d1c))
+
+## [5.11.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.7...v5.11.0) (2025-05-05)
+
+
+### Features
+
+* support 'use cache' ([#2862](https://github.com/opennextjs/opennextjs-netlify/issues/2862)) ([2810004](https://github.com/opennextjs/opennextjs-netlify/commit/2810004a2cbeeb738cbe7cf70f2b8bd2bbea6156))
+
+
+### Bug Fixes
+
+* add a fallback for loadManifest import path ([#2881](https://github.com/opennextjs/opennextjs-netlify/issues/2881)) ([a9119d3](https://github.com/opennextjs/opennextjs-netlify/commit/a9119d3574e30dd61b22ab80f273f12ed7f2982f))
+* remove unused OTel tracing setup ([#2874](https://github.com/opennextjs/opennextjs-netlify/issues/2874)) ([a220a30](https://github.com/opennextjs/opennextjs-netlify/commit/a220a30fa3d5ff14b6059963630825c8b3dd1005))
+
 ## [5.10.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.6...v5.10.7) (2025-04-18)
 
 

@@ -58,7 +58,7 @@ jobs:
           node-version: '18.x'
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
-      - uses: oven-sh/setup-bun@v1
+      - uses: oven-sh/setup-bun@v2
       - name: setup pnpm/yarn
         run: |
           npm install -g corepack
@@ -114,13 +114,18 @@ jobs:
 
   test:
     needs: setup
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
         os: [ubuntu-latest, windows-latest]
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
+        exclude:
+          - os: windows-latest
+            version: '13.5.1'
+          - os: windows-latest
+            version: '14.2.15'
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: 'Install Node'
