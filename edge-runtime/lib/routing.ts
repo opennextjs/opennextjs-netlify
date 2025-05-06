@@ -424,14 +424,24 @@ export interface MiddlewareMatcher {
   missing?: RouteHas[]
 }
 
+const decodeMaybeEncodedPath = (path: string): string => {
+  try {
+    return decodeURIComponent(path)
+  } catch {
+    return path
+  }
+}
+
 export function getMiddlewareRouteMatcher(matchers: MiddlewareMatcher[]): MiddlewareRouteMatch {
   return (
-    pathname: string | null | undefined,
+    unsafePathname: string | null | undefined,
     req: Pick<Request, 'headers' | 'url'>,
     query: Params,
   ) => {
+    const pathname = decodeMaybeEncodedPath(unsafePathname ?? '')
+
     for (const matcher of matchers) {
-      const routeMatch = new RegExp(matcher.regexp).exec(pathname!)
+      const routeMatch = new RegExp(matcher.regexp).exec(pathname)
       if (!routeMatch) {
         continue
       }
