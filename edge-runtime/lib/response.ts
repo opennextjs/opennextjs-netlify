@@ -163,25 +163,13 @@ export const buildResponse = async ({
 
     if (rewriteUrl.origin !== baseUrl.origin) {
       logger.withFields({ rewrite_url: rewrite }).debug('Rewriting to external url')
-      let proxyRequest: Request
+      const proxyRequest = await cloneRequest(rewriteUrl, request)
 
       // Remove Netlify internal headers
-      const headers = new Headers(
-        [...request.headers.entries()].filter(([key]) => !key.startsWith('x-nf-')),
-      )
-      if (request.body && !request.bodyUsed) {
-        // This is not ideal, but streaming to an external URL doesn't work
-        const body = await request.arrayBuffer()
-        proxyRequest = new Request(rewriteUrl, {
-          headers,
-          method: request.method,
-          body,
-        })
-      } else {
-        proxyRequest = new Request(rewriteUrl, {
-          headers,
-          method: request.method,
-        })
+      for (const key of request.headers.keys()) {
+        if (key.startsWith('x-nf-')) {
+          proxyRequest.headers.delete(key)
+        }
       }
 
       return addMiddlewareHeaders(fetch(proxyRequest, { redirect: 'manual' }), edgeResponse)
@@ -207,7 +195,7 @@ export const buildResponse = async ({
     request.headers.set('x-middleware-rewrite', target)
 
     // coookies set in middleware need to be available during the lambda request
-    const newRequest = new Request(target, request)
+    const newRequest = await cloneRequest(target, request)
     const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
     if (newRequestCookies) {
       newRequest.headers.set('Cookie', newRequestCookies)
@@ -241,11 +229,7 @@ export const buildResponse = async ({
     edgeResponse.headers.delete('x-middleware-next')
 
     // coookies set in middleware need to be available during the lambda request
-    const newRequest = new Request(request.url, {
-      headers: request.headers,
-      method: request.method,
-      body: request.body && !request.bodyUsed ? await request.arrayBuffer() : undefined,
-    })
+    const newRequest = await cloneRequest(request.url, request)
     const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
     if (newRequestCookies) {
       newRequest.headers.set('Cookie', newRequestCookies)
@@ -287,4 +271,14 @@ function normalizeLocalizedTarget({
     targetUrl.pathname = addBasePath(normalizedTarget.pathname, nextConfig?.basePath) || `/`
   }
   return targetUrl.toString()
+}
+
+async function cloneRequest(url, request: Request) {
+  // This is not ideal, but streaming to an external URL doesn't work
+  const body = request.body && !request.bodyUsed ? await request.arrayBuffer() : undefined
+  return new Request(url, {
+    headers: request.headers,
+    method: request.method,
+    body,
+  })
 }
