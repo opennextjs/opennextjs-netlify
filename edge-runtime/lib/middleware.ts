@@ -67,6 +67,10 @@ export function mergeMiddlewareCookies(middlewareResponse: Response, lambdaReque
   const middlewareCookies = middlewareResponse.headers.get('x-middleware-set-cookie')
 
   if (middlewareCookies) {
+    // Next expects internal headers to be omitted when cookies are set by the middleware
+    // See: https://github.com/vercel/next.js/blob/005db43079c7b59fd8c2594e8362761dc4cb3211/test/e2e/app-dir/app-middleware/app-middleware.test.ts#L197-L207
+    middlewareResponse.headers.delete('x-middleware-set-cookie')
+
     // Targets commas that are not followed by whitespace
     // See: https://github.com/vercel/next.js/blob/e6145d3a37bb4c7b481fd58e05cdff9046ace8ad/packages/next/src/server/web/spec-extension/response.ts#L58-L66
     const regex = new RegExp(/,(?!\s)/)
