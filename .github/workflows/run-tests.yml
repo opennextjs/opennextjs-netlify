@@ -58,7 +58,7 @@ jobs:
           node-version: '18.x'
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
-      - uses: oven-sh/setup-bun@v1
+      - uses: oven-sh/setup-bun@v2
       - name: setup pnpm/yarn
         run: |
           npm install -g corepack
