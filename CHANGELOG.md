@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.11.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.0...v5.11.1) (2025-05-06)
+
+
+### Bug Fixes
+
+* **edge-runtime:** match path with URI-encoded chars ([#2873](https://github.com/opennextjs/opennextjs-netlify/issues/2873)) ([7fe6b3b](https://github.com/opennextjs/opennextjs-netlify/commit/7fe6b3b634322de47d06110e952a5b67bc8e1d1c))
+
 ## [5.11.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.10.7...v5.11.0) (2025-05-05)
 
 
