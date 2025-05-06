@@ -148,7 +148,7 @@ export class NextDeployInstance extends NextInstance {
 
     try {
       const deployUrlRegex = new RegExp(
-        /https:\/\/app\.netlify\.com\/sites\/(?<siteName>.+)\/deploys\/(?<deployID>[0-9a-f]+)/gm,
+        /https:\/\/app\.netlify\.com\/sites\/(?<siteName>[^\/]+)\/deploys\/(?<deployID>[0-9a-f]+)/gm,
       ).exec(deployRes.stdout)
       const [buildLogsUrl] = deployUrlRegex || []
       const { deployID, siteName } = deployUrlRegex?.groups || {}
