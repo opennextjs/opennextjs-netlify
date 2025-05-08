@@ -198,7 +198,7 @@ jobs:
           NODE_ENV: production
           NEXT_EXTERNAL_TESTS_FILTERS: ${{ steps.test-filters.outputs.filters }}
           NEXT_TEST_SKIP_RETRY_MANIFEST: ${{ steps.test-filters.outputs.skip-retry }}
-        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e --timings
+        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e
         working-directory: ${{ env.next-path }}
 
       - name: Upload Test Results
