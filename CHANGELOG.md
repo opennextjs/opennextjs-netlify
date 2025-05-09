@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.11.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.1...v5.11.2) (2025-05-09)
+
+
+### Bug Fixes
+
+* address edge can read request body failures ([#2890](https://github.com/opennextjs/opennextjs-netlify/issues/2890)) ([5489c0d](https://github.com/opennextjs/opennextjs-netlify/commit/5489c0da29fb863ff2efb624b4dd128b5f37a8f0))
+* ensure internal `x-middleware-set-cookie` header is not passed on to lambda ([#2891](https://github.com/opennextjs/opennextjs-netlify/issues/2891)) ([b3ab558](https://github.com/opennextjs/opennextjs-netlify/commit/b3ab558bf50ded49cb6dac1ff714926c2832413d))
+
 ## [5.11.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.0...v5.11.1) (2025-05-06)
 
 
