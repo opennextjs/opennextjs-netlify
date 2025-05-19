@@ -36,10 +36,7 @@ import {
 } from '../utils/helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
-const mockedCp = cp as Mock<
-  Parameters<(typeof import('node:fs/promises'))['cp']>,
-  ReturnType<(typeof import('node:fs/promises'))['cp']>
->
+const mockedCp = cp as Mock<(typeof import('node:fs/promises'))['cp']>
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const fsPromisesModule = (await importOriginal()) as typeof import('node:fs/promises')

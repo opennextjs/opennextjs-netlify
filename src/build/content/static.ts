@@ -27,21 +27,23 @@ export const copyStaticContent = async (ctx: PluginContext): Promise<void> => {
     })
 
     const fallbacks = ctx.getFallbacks(await ctx.getPrerenderManifest())
+    const fullyStaticPages = await ctx.getFullyStaticHtmlPages()
 
     try {
       await mkdir(destDir, { recursive: true })
       await Promise.all(
         paths
-          .filter((path) => !paths.includes(`${path.slice(0, -5)}.json`))
+          .filter((path) => !path.endsWith('.json') && !paths.includes(`${path.slice(0, -5)}.json`))
           .map(async (path): Promise<void> => {
             const html = await readFile(join(srcDir, path), 'utf-8')
             verifyNetlifyForms(ctx, html)
 
             const isFallback = fallbacks.includes(path.slice(0, -5))
+            const isFullyStaticPage = !isFallback && fullyStaticPages.includes(path)
 
             await writeFile(
               join(destDir, await encodeBlobKey(path)),
-              JSON.stringify({ html, isFallback } satisfies HtmlBlob),
+              JSON.stringify({ html, isFullyStaticPage } satisfies HtmlBlob),
               'utf-8',
             )
           }),
