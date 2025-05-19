@@ -25,6 +25,7 @@ import {
   createFixture,
   getFixtureSourceDirectory,
   invokeFunction,
+  loadSandboxedFunction,
   runPlugin,
 } from '../utils/fixture.js'
 import {
@@ -115,6 +116,7 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
     '/route-resolves-to-not-found',
     '404.html',
     '500.html',
+    'fully-static.html',
   ])
 
   // test the function call
@@ -243,6 +245,62 @@ test<FixtureTestContext>('handlers can add cookies in route handlers with the co
   expect(setCookieHeader).toContain('foo=foo1; Path=/')
   expect(setCookieHeader).toContain('test1=value1; Path=/; Secure')
   expect(setCookieHeader).toContain('test2=value2; Path=/handler; HttpOnly')
+})
+
+test<FixtureTestContext>("slow NOT cacheable route handler is NOT cached on cdn (dynamic='force-dynamic')", async (ctx) => {
+  await createFixture('simple', ctx)
+  await runPlugin(ctx)
+
+  const { invokeFunction } = await loadSandboxedFunction(ctx)
+
+  // there is a side effect of initializing next-server that might impact "random" request/response which can't
+  // be forced, so this test attempt its best to trigger a lot of requests in hope it will hit the side effect
+
+  const staggeredInvocationPromises = [] as Promise<ReturnType<typeof invokeFunction>>[]
+  for (let delay = 0; delay < 5_000; delay += 100) {
+    staggeredInvocationPromises.push(
+      new Promise((res) => {
+        setTimeout(() => {
+          res(invokeFunction({ url: '/api/slow-not-cacheable' }))
+        }, delay)
+      }),
+    )
+  }
+
+  const staggeredInvocations = await Promise.all(staggeredInvocationPromises)
+
+  for (const invocation of staggeredInvocations) {
+    expect(invocation.statusCode).toBe(200)
+    expect(invocation.headers['netlify-cdn-cache-control']).toBeUndefined()
+  }
+})
+
+test<FixtureTestContext>("slow NOT cacheable route handler reading html files is NOT cached on cdn (dynamic='force-dynamic')", async (ctx) => {
+  await createFixture('simple', ctx)
+  await runPlugin(ctx)
+
+  const { invokeFunction } = await loadSandboxedFunction(ctx)
+
+  // there is a side effect of initializing next-server that might impact "random" request/response which can't
+  // be forced, so this test attempt its best to trigger a lot of requests in hope it will hit the side effect
+
+  const staggeredInvocationPromises = [] as Promise<ReturnType<typeof invokeFunction>>[]
+  for (let delay = 0; delay < 5_000; delay += 100) {
+    staggeredInvocationPromises.push(
+      new Promise((res) => {
+        setTimeout(() => {
+          res(invokeFunction({ url: '/api/slow-not-cacheable-with-html-read' }))
+        }, delay)
+      }),
+    )
+  }
+
+  const staggeredInvocations = await Promise.all(staggeredInvocationPromises)
+
+  for (const invocation of staggeredInvocations) {
+    expect(invocation.statusCode).toBe(200)
+    expect(invocation.headers['netlify-cdn-cache-control']).toBeUndefined()
+  }
 })
 
 test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=false / permanent caching)', async (ctx) => {

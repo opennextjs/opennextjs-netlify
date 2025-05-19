@@ -143,7 +143,7 @@ export async function loadFunction(ctx, { env } = {}) {
         flags: flags ?? DEFAULT_FLAGS,
       },
       lambdaFunc: { handler },
-      timeoutMs: 4_000,
+      timeoutMs: 10_000,
       onInvocationEnd: (error) => {
         // lambda-local resolve promise return from execute when response is closed
         // but we should wait for tracked background work to finish

@@ -1,6 +1,7 @@
 import { assert, vi } from 'vitest'
 
 import { type NetlifyPluginConstants, type NetlifyPluginOptions } from '@netlify/build'
+import { resolveConfig as resolveNetlifyConfig } from '@netlify/config'
 import { bundle, serve } from '@netlify/edge-bundler'
 import { zipFunctions } from '@netlify/zip-it-and-ship-it'
 import { execaCommand } from 'execa'
@@ -191,6 +192,20 @@ export async function runPluginStep(
   constants: Partial<NetlifyPluginConstants> = {},
 ) {
   const stepFunction = (await import('../../src/index.js'))[step]
+
+  let netlifyConfig = {
+    headers: [],
+    redirects: [],
+  }
+
+  // load netlify.toml if it exists
+  if (existsSync(join(ctx.cwd, 'netlify.toml'))) {
+    const resolvedNetlifyConfig = await resolveNetlifyConfig({ cwd: ctx.cwd })
+    if (resolvedNetlifyConfig.config) {
+      netlifyConfig = resolvedNetlifyConfig.config
+    }
+  }
+
   const options = {
     constants: {
       SITE_ID: ctx.siteID,
@@ -208,10 +223,7 @@ export async function runPluginStep(
       // INTERNAL_FUNCTIONS_SRC: '.netlify/functions-internal',
       // INTERNAL_EDGE_FUNCTIONS_SRC: '.netlify/edge-functions',
     },
-    netlifyConfig: {
-      headers: [],
-      redirects: [],
-    },
+    netlifyConfig,
     utils: {
       build: {
         failBuild: (message, options: { error?: Error } = {}) => {
