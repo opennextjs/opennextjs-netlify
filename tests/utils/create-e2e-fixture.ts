@@ -281,7 +281,7 @@ async function deploySite(
 
   const { siteName, deployID } =
     new RegExp(
-      /app\.netlify\.com\/sites\/(?<siteName>[^\/]+)\/deploys\/(?<deployID>[0-9a-f]+)/gm,
+      /app\.netlify\.com\/(sites|projects)\/(?<siteName>[^\/]+)\/deploys\/(?<deployID>[0-9a-f]+)/gm,
     ).exec(output)?.groups || {}
 
   if (!deployID) {

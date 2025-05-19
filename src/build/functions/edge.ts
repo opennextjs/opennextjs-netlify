@@ -132,9 +132,11 @@ const copyHandlerDependencies = async (
 
   const outputFile = join(destDir, `server/${name}.js`)
 
-  // Prepare environment variables for draft-mode (i.e. __NEXT_PREVIEW_MODE_ID, __NEXT_PREVIEW_MODE_SIGNING_KEY, __NEXT_PREVIEW_MODE_ENCRYPTION_KEY)
-  for (const [key, value] of Object.entries(env)) {
-    parts.push(`process.env.${key} = '${value}';`)
+  if (env) {
+    // Prepare environment variables for draft-mode (i.e. __NEXT_PREVIEW_MODE_ID, __NEXT_PREVIEW_MODE_SIGNING_KEY, __NEXT_PREVIEW_MODE_ENCRYPTION_KEY)
+    for (const [key, value] of Object.entries(env)) {
+      parts.push(`process.env.${key} = '${value}';`)
+    }
   }
 
   if (wasm?.length) {
