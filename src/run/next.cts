@@ -1,5 +1,6 @@
-import fs from 'fs/promises'
-import { relative, resolve } from 'path'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import fs from 'node:fs/promises'
+import { relative, resolve } from 'node:path'
 
 // @ts-expect-error no types installed
 import { patchFs } from 'fs-monkey'
@@ -79,6 +80,13 @@ ResponseCache.prototype.get = function get(...getArgs: unknown[]) {
 type FS = typeof import('fs')
 
 export async function getMockedRequestHandler(...args: Parameters<typeof getRequestHandlers>) {
+  const initContext = { initializingServer: true }
+  /**
+   * Using async local storage to identify operations happening as part of server initialization
+   * and not part of handling of current request.
+   */
+  const initAsyncLocalStorage = new AsyncLocalStorage<typeof initContext>()
+
   const tracer = getTracer()
   return tracer.withActiveSpan('mocked request handler', async () => {
     const ofs = { ...fs }
@@ -96,9 +104,16 @@ export async function getMockedRequestHandler(...args: Parameters<typeof getRequ
           const relPath = relative(resolve('.next/server/pages'), path)
           const file = await cacheStore.get<HtmlBlob>(relPath, 'staticHtml.get')
           if (file !== null) {
-            if (!file.isFallback) {
+            if (file.isFullyStaticPage) {
               const requestContext = getRequestContext()
-              if (requestContext) {
+              // On server initialization Next.js attempt to preload all pages
+              // which might result in reading .html files from the file system
+              // for fully static pages. We don't want to capture those cases.
+              // Note that Next.js does NOT cache read html files so on actual requests
+              // that those will be served, it will read those AGAIN and then we do
+              // want to capture fact of reading them.
+              const { initializingServer } = initAsyncLocalStorage.getStore() ?? {}
+              if (!initializingServer && requestContext) {
                 requestContext.usedFsReadForNonFallback = true
               }
             }
@@ -120,7 +135,12 @@ export async function getMockedRequestHandler(...args: Parameters<typeof getRequ
       require('fs').promises,
     )
 
-    const requestHandlers = await getRequestHandlers(...args)
+    const requestHandlers = await initAsyncLocalStorage.run(initContext, async () => {
+      // we need to await getRequestHandlers(...) promise in this callback to ensure that initAsyncLocalStorage
+      // is available in async / background work
+      return await getRequestHandlers(...args)
+    })
+
     // depending on Next.js version requestHandlers might be an array of object
     // see https://github.com/vercel/next.js/commit/08e7410f15706379994b54c3195d674909a8d533#diff-37243d614f1f5d3f7ea50bbf2af263f6b1a9a4f70e84427977781e07b02f57f1R742
     return Array.isArray(requestHandlers) ? requestHandlers[0] : requestHandlers.requestHandler

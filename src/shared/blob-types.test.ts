@@ -9,14 +9,14 @@ describe('isTagManifest', () => {
   })
 
   it(`returns false for non-TagManifest instance`, () => {
-    const value: BlobType = { html: '', isFallback: false }
+    const value: BlobType = { html: '', isFullyStaticPage: false }
     expect(isTagManifest(value)).toBe(false)
   })
 })
 
 describe('isHtmlBlob', () => {
   it(`returns true for HtmlBlob instance`, () => {
-    const value: HtmlBlob = { html: '', isFallback: false }
+    const value: HtmlBlob = { html: '', isFullyStaticPage: false }
     expect(isHtmlBlob(value)).toBe(true)
   })
 

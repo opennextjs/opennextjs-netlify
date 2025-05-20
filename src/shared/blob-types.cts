@@ -4,7 +4,7 @@ export type TagManifest = { revalidatedAt: number }
 
 export type HtmlBlob = {
   html: string
-  isFallback: boolean
+  isFullyStaticPage: boolean
 }
 
 export type BlobType = NetlifyCacheHandlerValue | TagManifest | HtmlBlob
@@ -24,9 +24,9 @@ export const isHtmlBlob = (value: BlobType): value is HtmlBlob => {
     typeof value === 'object' &&
     value !== null &&
     'html' in value &&
-    'isFallback' in value &&
+    'isFullyStaticPage' in value &&
     typeof value.html === 'string' &&
-    typeof value.isFallback === 'boolean' &&
+    typeof value.isFullyStaticPage === 'boolean' &&
     Object.keys(value).length === 2
   )
 }

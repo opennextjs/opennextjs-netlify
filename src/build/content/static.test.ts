@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, Mock, test, vi } from 'vitest'
 import { decodeBlobKey, encodeBlobKey, mockFileSystem } from '../../../tests/index.js'
 import { type FixtureTestContext } from '../../../tests/utils/contexts.js'
 import { createFsFixture } from '../../../tests/utils/fixture.js'
+import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { PluginContext, RequiredServerFilesManifest } from '../plugin-context.js'
 
 import { copyStaticAssets, copyStaticContent } from './static.js'
@@ -22,18 +23,19 @@ type Context = FixtureTestContext & {
 const createFsFixtureWithBasePath = (
   fixture: Record<string, string>,
   ctx: Omit<Context, 'pluginContext'>,
-
   {
     basePath = '',
     // eslint-disable-next-line unicorn/no-useless-undefined
     i18n = undefined,
     dynamicRoutes = {},
+    pagesManifest = {},
   }: {
     basePath?: string
     i18n?: Pick<NonNullable<RequiredServerFilesManifest['config']['i18n']>, 'locales'>
     dynamicRoutes?: {
       [route: string]: Pick<PrerenderManifest['dynamicRoutes'][''], 'fallback'>
     }
+    pagesManifest?: Record<string, string>
   } = {},
 ) => {
   return createFsFixture(
@@ -49,6 +51,7 @@ const createFsFixtureWithBasePath = (
         },
       } as Pick<RequiredServerFilesManifest, 'relativeAppDir' | 'appDir'>),
       [join(ctx.publishDir, 'prerender-manifest.json')]: JSON.stringify({ dynamicRoutes }),
+      [join(ctx.publishDir, 'server', 'pages-manifest.json')]: JSON.stringify(pagesManifest),
     },
     ctx,
   )
@@ -62,10 +65,7 @@ async function readDirRecursive(dir: string) {
   return paths
 }
 
-let failBuildMock: Mock<
-  Parameters<PluginContext['utils']['build']['failBuild']>,
-  ReturnType<PluginContext['utils']['build']['failBuild']>
->
+let failBuildMock: Mock<PluginContext['utils']['build']['failBuild']>
 
 const dontFailTest: PluginContext['utils']['build']['failBuild'] = () => {
   return undefined as never
@@ -197,12 +197,13 @@ describe('Regular Repository layout', () => {
     )
   })
 
-  describe('should copy the static pages to the publish directory if there are no corresponding JSON files and mark wether html file is a fallback', () => {
+  describe('should copy the static pages to the publish directory if there are no corresponding JSON files and mark wether html file is a fully static pages router page', () => {
     test<Context>('no i18n', async ({ pluginContext, ...ctx }) => {
       await createFsFixtureWithBasePath(
         {
           '.next/server/pages/test.html': '',
           '.next/server/pages/test2.html': '',
+          '.next/server/pages/test3.html': '',
           '.next/server/pages/test3.json': '',
           '.next/server/pages/blog/[slug].html': '',
         },
@@ -213,27 +214,36 @@ describe('Regular Repository layout', () => {
               fallback: '/blog/[slug].html',
             },
           },
+          pagesManifest: {
+            '/blog/[slug]': 'pages/blog/[slug].js',
+            '/test': 'pages/test.html',
+            '/test2': 'pages/test2.html',
+            '/test3': 'pages/test3.js',
+          },
         },
       )
 
       await copyStaticContent(pluginContext)
       const files = await glob('**/*', { cwd: pluginContext.blobDir, dot: true })
 
-      const expectedStaticPages = ['blog/[slug].html', 'test.html', 'test2.html']
-      const expectedFallbacks = new Set(['blog/[slug].html'])
+      const expectedHtmlBlobs = ['blog/[slug].html', 'test.html', 'test2.html']
+      const expectedFullyStaticPages = new Set(['test.html', 'test2.html'])
 
-      expect(files.map((path) => decodeBlobKey(path)).sort()).toEqual(expectedStaticPages)
+      expect(files.map((path) => decodeBlobKey(path)).sort()).toEqual(expectedHtmlBlobs)
 
-      for (const page of expectedStaticPages) {
-        const expectedIsFallback = expectedFallbacks.has(page)
+      for (const page of expectedHtmlBlobs) {
+        const expectedIsFullyStaticPage = expectedFullyStaticPages.has(page)
 
         const blob = JSON.parse(
           await readFile(join(pluginContext.blobDir, await encodeBlobKey(page)), 'utf-8'),
-        )
+        ) as HtmlBlob
 
-        expect(blob, `${page} should ${expectedIsFallback ? '' : 'not '}be a fallback`).toEqual({
+        expect(
+          blob,
+          `${page} should ${expectedIsFullyStaticPage ? '' : 'not '}be a fully static Page`,
+        ).toEqual({
           html: '',
-          isFallback: expectedIsFallback,
+          isFullyStaticPage: expectedIsFullyStaticPage,
         })
       }
     })
@@ -243,10 +253,12 @@ describe('Regular Repository layout', () => {
         {
           '.next/server/pages/de/test.html': '',
           '.next/server/pages/de/test2.html': '',
+          '.next/server/pages/de/test3.html': '',
           '.next/server/pages/de/test3.json': '',
           '.next/server/pages/de/blog/[slug].html': '',
           '.next/server/pages/en/test.html': '',
           '.next/server/pages/en/test2.html': '',
+          '.next/server/pages/en/test3.html': '',
           '.next/server/pages/en/test3.json': '',
           '.next/server/pages/en/blog/[slug].html': '',
         },
@@ -260,13 +272,21 @@ describe('Regular Repository layout', () => {
           i18n: {
             locales: ['en', 'de'],
           },
+          pagesManifest: {
+            '/blog/[slug]': 'pages/blog/[slug].js',
+            '/en/test': 'pages/en/test.html',
+            '/de/test': 'pages/de/test.html',
+            '/en/test2': 'pages/en/test2.html',
+            '/de/test2': 'pages/de/test2.html',
+            '/test3': 'pages/test3.js',
+          },
         },
       )
 
       await copyStaticContent(pluginContext)
       const files = await glob('**/*', { cwd: pluginContext.blobDir, dot: true })
 
-      const expectedStaticPages = [
+      const expectedHtmlBlobs = [
         'de/blog/[slug].html',
         'de/test.html',
         'de/test2.html',
@@ -274,20 +294,28 @@ describe('Regular Repository layout', () => {
         'en/test.html',
         'en/test2.html',
       ]
-      const expectedFallbacks = new Set(['en/blog/[slug].html', 'de/blog/[slug].html'])
+      const expectedFullyStaticPages = new Set([
+        'en/test.html',
+        'de/test.html',
+        'en/test2.html',
+        'de/test2.html',
+      ])
 
-      expect(files.map((path) => decodeBlobKey(path)).sort()).toEqual(expectedStaticPages)
+      expect(files.map((path) => decodeBlobKey(path)).sort()).toEqual(expectedHtmlBlobs)
 
-      for (const page of expectedStaticPages) {
-        const expectedIsFallback = expectedFallbacks.has(page)
+      for (const page of expectedHtmlBlobs) {
+        const expectedIsFullyStaticPage = expectedFullyStaticPages.has(page)
 
         const blob = JSON.parse(
           await readFile(join(pluginContext.blobDir, await encodeBlobKey(page)), 'utf-8'),
-        )
+        ) as HtmlBlob
 
-        expect(blob, `${page} should ${expectedIsFallback ? '' : 'not '}be a fallback`).toEqual({
+        expect(
+          blob,
+          `${page} should ${expectedIsFullyStaticPage ? '' : 'not '}be a fully static Page`,
+        ).toEqual({
           html: '',
-          isFallback: expectedIsFallback,
+          isFullyStaticPage: expectedIsFullyStaticPage,
         })
       }
     })
@@ -419,12 +447,13 @@ describe('Mono Repository', () => {
     )
   })
 
-  describe('should copy the static pages to the publish directory if there are no corresponding JSON files and mark wether html file is a fallback', () => {
+  describe('should copy the static pages to the publish directory if there are no corresponding JSON files and mark wether html file is a fully static pages router page', () => {
     test<Context>('no i18n', async ({ pluginContext, ...ctx }) => {
       await createFsFixtureWithBasePath(
         {
           'apps/app-1/.next/server/pages/test.html': '',
           'apps/app-1/.next/server/pages/test2.html': '',
+          'apps/app-1/.next/server/pages/test3.html': '',
           'apps/app-1/.next/server/pages/test3.json': '',
           'apps/app-1/.next/server/pages/blog/[slug].html': '',
         },
@@ -435,27 +464,36 @@ describe('Mono Repository', () => {
               fallback: '/blog/[slug].html',
             },
           },
+          pagesManifest: {
+            '/blog/[slug]': 'pages/blog/[slug].js',
+            '/test': 'pages/test.html',
+            '/test2': 'pages/test2.html',
+            '/test3': 'pages/test3.js',
+          },
         },
       )
 
       await copyStaticContent(pluginContext)
       const files = await glob('**/*', { cwd: pluginContext.blobDir, dot: true })
 
-      const expectedStaticPages = ['blog/[slug].html', 'test.html', 'test2.html']
-      const expectedFallbacks = new Set(['blog/[slug].html'])
+      const expectedHtmlBlobs = ['blog/[slug].html', 'test.html', 'test2.html']
+      const expectedFullyStaticPages = new Set(['test.html', 'test2.html'])
 
-      expect(files.map((path) => decodeBlobKey(path)).sort()).toEqual(expectedStaticPages)
+      expect(files.map((path) => decodeBlobKey(path)).sort()).toEqual(expectedHtmlBlobs)
 
-      for (const page of expectedStaticPages) {
-        const expectedIsFallback = expectedFallbacks.has(page)
+      for (const page of expectedHtmlBlobs) {
+        const expectedIsFullyStaticPage = expectedFullyStaticPages.has(page)
 
         const blob = JSON.parse(
           await readFile(join(pluginContext.blobDir, await encodeBlobKey(page)), 'utf-8'),
-        )
+        ) as HtmlBlob
 
-        expect(blob, `${page} should ${expectedIsFallback ? '' : 'not '}be a fallback`).toEqual({
+        expect(
+          blob,
+          `${page} should ${expectedIsFullyStaticPage ? '' : 'not '}be a fully static Page`,
+        ).toEqual({
           html: '',
-          isFallback: expectedIsFallback,
+          isFullyStaticPage: expectedIsFullyStaticPage,
         })
       }
     })
@@ -465,10 +503,12 @@ describe('Mono Repository', () => {
         {
           'apps/app-1/.next/server/pages/de/test.html': '',
           'apps/app-1/.next/server/pages/de/test2.html': '',
+          'apps/app-1/.next/server/pages/de/test3.html': '',
           'apps/app-1/.next/server/pages/de/test3.json': '',
           'apps/app-1/.next/server/pages/de/blog/[slug].html': '',
           'apps/app-1/.next/server/pages/en/test.html': '',
           'apps/app-1/.next/server/pages/en/test2.html': '',
+          'apps/app-1/.next/server/pages/en/test3.html': '',
           'apps/app-1/.next/server/pages/en/test3.json': '',
           'apps/app-1/.next/server/pages/en/blog/[slug].html': '',
         },
@@ -482,13 +522,21 @@ describe('Mono Repository', () => {
           i18n: {
             locales: ['en', 'de'],
           },
+          pagesManifest: {
+            '/blog/[slug]': 'pages/blog/[slug].js',
+            '/en/test': 'pages/en/test.html',
+            '/de/test': 'pages/de/test.html',
+            '/en/test2': 'pages/en/test2.html',
+            '/de/test2': 'pages/de/test2.html',
+            '/test3': 'pages/test3.js',
+          },
         },
       )
 
       await copyStaticContent(pluginContext)
       const files = await glob('**/*', { cwd: pluginContext.blobDir, dot: true })
 
-      const expectedStaticPages = [
+      const expectedHtmlBlobs = [
         'de/blog/[slug].html',
         'de/test.html',
         'de/test2.html',
@@ -496,20 +544,28 @@ describe('Mono Repository', () => {
         'en/test.html',
         'en/test2.html',
       ]
-      const expectedFallbacks = new Set(['en/blog/[slug].html', 'de/blog/[slug].html'])
+      const expectedFullyStaticPages = new Set([
+        'en/test.html',
+        'de/test.html',
+        'en/test2.html',
+        'de/test2.html',
+      ])
 
-      expect(files.map((path) => decodeBlobKey(path)).sort()).toEqual(expectedStaticPages)
+      expect(files.map((path) => decodeBlobKey(path)).sort()).toEqual(expectedHtmlBlobs)
 
-      for (const page of expectedStaticPages) {
-        const expectedIsFallback = expectedFallbacks.has(page)
+      for (const page of expectedHtmlBlobs) {
+        const expectedIsFullyStaticPage = expectedFullyStaticPages.has(page)
 
         const blob = JSON.parse(
           await readFile(join(pluginContext.blobDir, await encodeBlobKey(page)), 'utf-8'),
-        )
+        ) as HtmlBlob
 
-        expect(blob, `${page} should ${expectedIsFallback ? '' : 'not '}be a fallback`).toEqual({
+        expect(
+          blob,
+          `${page} should ${expectedIsFullyStaticPage ? '' : 'not '}be a fully static Page`,
+        ).toEqual({
           html: '',
-          isFallback: expectedIsFallback,
+          isFullyStaticPage: expectedIsFullyStaticPage,
         })
       }
     })

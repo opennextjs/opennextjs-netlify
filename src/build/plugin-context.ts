@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join, relative, resolve } from 'node:path'
-import { join as posixJoin } from 'node:path/posix'
+import { join as posixJoin, relative as posixRelative } from 'node:path/posix'
 import { fileURLToPath } from 'node:url'
 
 import type {
@@ -12,6 +12,7 @@ import type {
 } from '@netlify/build'
 import type { PrerenderManifest, RoutesManifest } from 'next/dist/build/index.js'
 import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
+import type { PagesManifest } from 'next/dist/build/webpack/plugins/pages-manifest-plugin.js'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import { satisfies } from 'semver'
 
@@ -368,6 +369,35 @@ export class PluginContext {
     }
 
     return this.#fallbacks
+  }
+
+  #fullyStaticHtmlPages: string[] | null = null
+  /**
+   * Get an array of fully static pages router pages (no `getServerSideProps` or `getStaticProps`).
+   * Those are being served as-is without involving CacheHandler, so we need to keep track of them
+   * to make sure we apply permanent caching headers for responses that use them.
+   */
+  async getFullyStaticHtmlPages(): Promise<string[]> {
+    if (!this.#fullyStaticHtmlPages) {
+      const pagesManifest = JSON.parse(
+        await readFile(join(this.publishDir, 'server/pages-manifest.json'), 'utf-8'),
+      ) as PagesManifest
+
+      this.#fullyStaticHtmlPages = Object.values(pagesManifest)
+        .filter(
+          (filePath) =>
+            // Limit handling to pages router files (App Router pages should not be included in pages-manifest.json
+            // as they have their own app-paths-manifest.json)
+            filePath.startsWith('pages/') &&
+            // Fully static pages will have entries in the pages-manifest.json pointing to .html files.
+            // Pages with data fetching exports will point to .js files.
+            filePath.endsWith('.html'),
+        )
+        // values will be prefixed with `pages/`, so removing it here for consistency with other methods
+        // like `getFallbacks` that return the route without the prefix
+        .map((filePath) => posixRelative('pages', filePath))
+    }
+    return this.#fullyStaticHtmlPages
   }
 
   /** Fails a build with a message and an optional error */
