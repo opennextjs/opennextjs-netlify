@@ -199,8 +199,18 @@
       ]
     },
     {
+      "//": "This was the test file name before v15.3.0-canary.27 / v15.3.0",
       "file": "test/e2e/basepath.test.ts",
-      "reason": "Hard-coded Vercel error message",
+      "reason": "Hard-coded expectation of Vercel's default 404 page",
+      "tests": [
+        "basePath should not update URL for a 404",
+        "basePath should handle 404 urls that start with basePath",
+        "basePath should show 404 for page not under the /docs prefix"
+      ]
+    },
+    {
+      "file": "test/e2e/basepath/basepath.test.ts",
+      "reason": "Hard-coded expectation of Vercel's default 404 page",
       "tests": [
         "basePath should not update URL for a 404",
         "basePath should handle 404 urls that start with basePath",
