@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.11.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.1...v5.11.2) (2025-05-21)
+
+
+### Bug Fixes
+
+* address edge can read request body failures ([#2890](https://github.com/opennextjs/opennextjs-netlify/issues/2890)) ([5489c0d](https://github.com/opennextjs/opennextjs-netlify/commit/5489c0da29fb863ff2efb624b4dd128b5f37a8f0))
+* ensure internal `x-middleware-set-cookie` header is not passed on to lambda ([#2891](https://github.com/opennextjs/opennextjs-netlify/issues/2891)) ([b3ab558](https://github.com/opennextjs/opennextjs-netlify/commit/b3ab558bf50ded49cb6dac1ff714926c2832413d))
+* handle case of env not being defined for edge functions ([#2936](https://github.com/opennextjs/opennextjs-netlify/issues/2936)) ([ca1b7e8](https://github.com/opennextjs/opennextjs-netlify/commit/ca1b7e8f54e101bef76c1c3675b299ae90edac44))
+* only set permament caching header when reading html file when it's not during server initialization AND when read html is Next produced fully static html ([#2935](https://github.com/opennextjs/opennextjs-netlify/issues/2935)) ([6a8ef66](https://github.com/opennextjs/opennextjs-netlify/commit/6a8ef6693e17febd1b6bb0fdc7bc32c7c2b9a5e7))
+
 ## [5.11.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.0...v5.11.1) (2025-05-06)
 
 
