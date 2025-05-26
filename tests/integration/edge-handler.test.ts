@@ -625,4 +625,40 @@ describe('page router', () => {
     expect(bodyFr.nextUrlPathname).toBe('/json')
     expect(bodyFr.nextUrlLocale).toBe('fr')
   })
+
+  test<FixtureTestContext>('should use edge caching', async (ctx) => {
+    vi.stubEnv('NEXT_MIDDLEWARE_CACHE', 'true')
+
+    await createFixture('middleware-edge-cache', ctx)
+    await runPlugin(ctx)
+    const origin = await LocalServer.run(async (req, res) => {
+      res.write(
+        JSON.stringify({
+          url: req.url,
+          headers: req.headers,
+        }),
+      )
+      res.end()
+    })
+    ctx.cleanup?.push(() => origin.stop())
+
+    const response = await invokeEdgeFunction(ctx, {
+      functions: ['___netlify-edge-handler-middleware'],
+      origin,
+      url: `/test/cached`,
+    })
+    expect(response.status).toBe(200)
+
+    expect(response.headers.has('netlify-cdn-cache-control')).toBeTruthy()
+    expect(response.headers.get('netlify-cdn-cache-control')).toBe('s-maxage=31536000, durable')
+
+    const responseUncached = await invokeEdgeFunction(ctx, {
+      functions: ['___netlify-edge-handler-middleware'],
+      origin,
+      url: `/test/uncached`,
+    })
+    expect(responseUncached.status).toBe(200)
+
+    expect(responseUncached.headers.has('netlify-cdn-cache-control')).toBeFalsy()
+  })
 })

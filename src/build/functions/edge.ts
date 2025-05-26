@@ -172,7 +172,10 @@ const buildHandlerDefinition = (
   const functionName = name.endsWith('middleware')
     ? 'Next.js Middleware Handler'
     : `Next.js Edge Handler: ${page}`
-  const cache = name.endsWith('middleware') ? undefined : ('manual' as const)
+  const cache =
+    !process.env.NEXT_MIDDLEWARE_CACHE && name.endsWith('middleware')
+      ? undefined
+      : ('manual' as const)
   const generator = `${ctx.pluginName}@${ctx.pluginVersion}`
 
   return augmentMatchers(matchers, ctx).map((matcher) => ({
