@@ -154,6 +154,8 @@ export class NextDeployInstance extends NextInstance {
     const deployRes = await deployResPromise
 
     if (deployRes.exitCode !== 0) {
+      // clear deploy output to avoid printing it again in destroy()
+      this._deployOutput = ''
       throw new Error(
         `Failed to deploy project (${deployRes.exitCode}) ${deployRes.stdout} ${deployRes.stderr} `,
       )
