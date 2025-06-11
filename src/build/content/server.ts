@@ -16,6 +16,7 @@ import { join as posixJoin, sep as posixSep } from 'node:path/posix'
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
+import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
 import { prerelease, satisfies, lt as semverLowerThan, lte as semverLowerThanOrEqual } from 'semver'
 
 import type { RunConfig } from '../../run/config.js'
@@ -324,15 +325,17 @@ export const copyNextDependencies = async (ctx: PluginContext): Promise<void> =>
 }
 
 /**
- * Generates a copy of the middleware manifest without any middleware in it. We
+ * Generates a copy of the middleware manifest that make all matchers never match on anything. We
  * do this because we'll run middleware in an edge function, and we don't want
- * to run it again in the server handler.
+ * to run it again in the server handler. Additionally Next.js conditionally enable some handling
+ * depending if there is a middleware present, so we need to keep reference to middleware in server
+ * even if we don't actually want to ever run it there.
  */
 const replaceMiddlewareManifest = async (sourcePath: string, destPath: string) => {
   await mkdir(dirname(destPath), { recursive: true })
 
   const data = await readFile(sourcePath, 'utf8')
-  const manifest = JSON.parse(data)
+  const manifest = JSON.parse(data) as MiddlewareManifest
 
   // TODO: Check for `manifest.version` and write an error to the system log
   // when we find a value that is not equal to 2. This will alert us in case
@@ -340,7 +343,26 @@ const replaceMiddlewareManifest = async (sourcePath: string, destPath: string) =
   // one with the old version.
   const newManifest = {
     ...manifest,
-    middleware: {},
+    middleware: Object.fromEntries(
+      Object.entries(manifest.middleware).map(([key, edgeFunctionDefinition]) => {
+        return [
+          key,
+          {
+            ...edgeFunctionDefinition,
+            matchers: edgeFunctionDefinition.matchers.map((matcher) => {
+              return {
+                ...matcher,
+                // matcher that won't match on anything
+                // this is meant to disable actually running middleware in the server handler,
+                // while still allowing next server to enable some middleware specific handling
+                // such as _next/data normalization ( https://github.com/vercel/next.js/blob/7bb72e508572237fe0d4aac5418546d4b4b3a363/packages/next/src/server/lib/router-utils/resolve-routes.ts#L395 )
+                regexp: '(?!.*)',
+              }
+            }),
+          },
+        ]
+      }),
+    ),
   }
   const newData = JSON.stringify(newManifest)
 
