@@ -153,6 +153,11 @@ export class NextDeployInstance extends NextInstance {
 
     const deployRes = await deployResPromise
 
+    // tmp - force timeout
+    await new Promise((resolve) => {
+      setTimeout(resolve, 120_000)
+    })
+
     if (deployRes.exitCode !== 0) {
       throw new Error(
         `Failed to deploy project (${deployRes.exitCode}) ${deployRes.stdout} ${deployRes.stderr} `,
