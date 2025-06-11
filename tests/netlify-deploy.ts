@@ -36,6 +36,8 @@ export class NextDeployInstance extends NextInstance {
   private _buildId: string
   private _deployId: string
   private _shouldDeleteDeploy: boolean = false
+  private _isCurrentlyDeploying: boolean = false
+  private _deployOutput: string = ''
 
   public get buildId() {
     // get deployment ID via fetch since we can't access
@@ -51,6 +53,8 @@ export class NextDeployInstance extends NextInstance {
       this._buildId = process.env.BUILD_ID
       return
     }
+
+    this._isCurrentlyDeploying = true
 
     const setupStartTime = Date.now()
 
@@ -131,7 +135,7 @@ export class NextDeployInstance extends NextInstance {
       : testName
     const deployAlias = 'vercel-next-e2e'
 
-    const deployRes = await execa(
+    const deployResPromise = execa(
       'npx',
       ['netlify', 'deploy', '--build', '--message', deployTitle ?? '', '--alias', deployAlias],
       {
@@ -139,6 +143,15 @@ export class NextDeployInstance extends NextInstance {
         reject: false,
       },
     )
+
+    const handleOutput = (chunk) => {
+      this._deployOutput += chunk
+    }
+
+    deployResPromise.stdout.on('data', handleOutput)
+    deployResPromise.stderr.on('data', handleOutput)
+
+    const deployRes = await deployResPromise
 
     if (deployRes.exitCode !== 0) {
       throw new Error(
@@ -168,7 +181,7 @@ export class NextDeployInstance extends NextInstance {
         require('console').log(`Logs: ${buildLogsUrl}`)
       }
     } catch (err) {
-      console.error(err)
+      require('console').error(err)
       throw new Error(`Failed to parse deploy output: ${deployRes.stdout}`)
     }
 
@@ -181,6 +194,8 @@ export class NextDeployInstance extends NextInstance {
 
     require('console').log(`Got buildId: ${this._buildId}`)
     require('console').log(`Setup time: ${(Date.now() - setupStartTime) / 1000.0}s`)
+
+    this._isCurrentlyDeploying = false
   }
 
   public async destroy(): Promise<void> {
@@ -202,6 +217,13 @@ export class NextDeployInstance extends NextInstance {
       } else {
         require('console').log(`Successfully deleted deploy with deploy_id ${this._deployId}`)
         this._shouldDeleteDeploy = false
+      }
+    }
+
+    if (this._isCurrentlyDeploying) {
+      require('console').log('Destroying before deployment finished.')
+      if (this._deployOutput) {
+        require('console').log(`Deploy logs so far:\n\n${this._deployOutput}\n\n`)
       }
     }
 
