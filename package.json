@@ -53,7 +53,7 @@
     "@netlify/build": "^33.3.0",
     "@netlify/config": "^23.0.8",
     "@netlify/edge-bundler": "^14.0.5",
-    "@netlify/edge-functions": "^2.12.0",
+    "@netlify/edge-functions": "^2.14.5",
     "@netlify/eslint-config-node": "^7.0.1",
     "@netlify/functions": "^3.1.10",
     "@netlify/serverless-functions-api": "^1.41.2",
