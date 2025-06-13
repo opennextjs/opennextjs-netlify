@@ -133,7 +133,7 @@ export class NextDeployInstance extends NextInstance {
     const deployTitle = process.env.GITHUB_SHA
       ? `${testName} - ${process.env.GITHUB_SHA}`
       : testName
-    const deployAlias = 'vercel-next-e2e'
+    const deployAlias = process.env.DEPLOY_ALIAS ?? 'vercel-next-e2e'
 
     const deployResPromise = execa(
       'npx',
