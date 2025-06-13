@@ -38,6 +38,9 @@ env:
   NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
   NETLIFY_SITE_ID: 1d5a5c76-d445-4ae5-b694-b0d3f2e2c395
   NEXT_TEST_CONTINUE_ON_ERROR: 1
+  # There's no benefit to cleaning up local site fixture copies in tmp dirs in CI. It wastes precious time.
+  # Deleting deploys is also unnecessary as they will get cleaned up naturally by Netlify.
+  E2E_PERSIST: 1
   next-path: next.js
   runtime-path: opennextjs-netlify
   GH_TOKEN: ${{ github.token }}
