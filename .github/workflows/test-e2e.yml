@@ -38,6 +38,9 @@ env:
   NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
   NETLIFY_SITE_ID: 1d5a5c76-d445-4ae5-b694-b0d3f2e2c395
   NEXT_TEST_CONTINUE_ON_ERROR: 1
+  # There's no benefit to cleaning up local site fixture copies in tmp dirs in CI. It wastes precious time.
+  # Deleting deploys is also unnecessary as they will get cleaned up naturally by Netlify.
+  E2E_PERSIST: 1
   next-path: next.js
   runtime-path: opennextjs-netlify
   GH_TOKEN: ${{ github.token }}
@@ -198,6 +201,10 @@ jobs:
           NODE_ENV: production
           NEXT_EXTERNAL_TESTS_FILTERS: ${{ steps.test-filters.outputs.filters }}
           NEXT_TEST_SKIP_RETRY_MANIFEST: ${{ steps.test-filters.outputs.skip-retry }}
+          # Use a unique alias per test matrix group and shard. Otherwise, a deploy within
+          # one job may wait for deploys in other jobs (only one deploy may be in progress for
+          # a given alias at a time), resulting in cascading timeouts.
+          DEPLOY_ALIAS: vercel-next-e2e-${{ matrix.version_spec.selector }}-${{ matrix.group }}
         run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e
         working-directory: ${{ env.next-path }}
 
