@@ -84,12 +84,17 @@ test.describe('json data', () => {
       selector: 'NextResponse.rewrite()#getStaticProps',
       jsonPathMatcher: '/link/rewrite-me-getstaticprops.json',
     },
-    {
+  ]
+
+  // Linking to static pages reloads on rewrite for versions below 14
+  if (nextVersionSatisfies('>=14.0.0')) {
+    testConfigs.push({
       describeLabel: 'NextResponse.rewrite() -> fully static page',
       selector: 'NextResponse.rewrite()#fullyStatic',
       jsonPathMatcher: '/link/rewrite-me-fullystatic.json',
-    },
-  ]
+    })
+  }
+
   test.describe('no 18n', () => {
     for (const testConfig of testConfigs) {
       test.describe(testConfig.describeLabel, () => {
