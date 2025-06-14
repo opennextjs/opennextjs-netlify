@@ -3,6 +3,10 @@ import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 import { getImageSize } from 'next/dist/server/image-optimizer.js'
 
+type ExtendedWindow = Window & {
+  didReload?: boolean
+}
+
 test('Runs edge middleware', async ({ page, middleware }) => {
   await page.goto(`${middleware.url}/test/redirect`)
 
@@ -53,21 +57,144 @@ test('it should render OpenGraph image meta tag correctly', async ({ page, middl
   expect([size.width, size.height]).toEqual([1200, 630])
 })
 
-test('json data rewrite works', async ({ middlewarePages }) => {
-  const response = await fetch(`${middlewarePages.url}/_next/data/build-id/sha.json`, {
-    headers: {
-      'x-nextjs-data': '1',
+test.describe('json data', () => {
+  const testConfigs = [
+    {
+      describeLabel: 'NextResponse.next() -> getServerSideProps page',
+      selector: 'NextResponse.next()#getServerSideProps',
+      jsonPathMatcher: '/link/next-getserversideprops.json',
     },
+    {
+      describeLabel: 'NextResponse.next() -> getStaticProps page',
+      selector: 'NextResponse.next()#getStaticProps',
+      jsonPathMatcher: '/link/next-getstaticprops.json',
+    },
+    {
+      describeLabel: 'NextResponse.next() -> fully static page',
+      selector: 'NextResponse.next()#fullyStatic',
+      jsonPathMatcher: '/link/next-fullystatic.json',
+    },
+    {
+      describeLabel: 'NextResponse.rewrite() -> getServerSideProps page',
+      selector: 'NextResponse.rewrite()#getServerSideProps',
+      jsonPathMatcher: '/link/rewrite-me-getserversideprops.json',
+    },
+    {
+      describeLabel: 'NextResponse.rewrite() -> getStaticProps page',
+      selector: 'NextResponse.rewrite()#getStaticProps',
+      jsonPathMatcher: '/link/rewrite-me-getstaticprops.json',
+    },
+  ]
+
+  // Linking to static pages reloads on rewrite for versions below 14
+  if (nextVersionSatisfies('>=14.0.0')) {
+    testConfigs.push({
+      describeLabel: 'NextResponse.rewrite() -> fully static page',
+      selector: 'NextResponse.rewrite()#fullyStatic',
+      jsonPathMatcher: '/link/rewrite-me-fullystatic.json',
+    })
+  }
+
+  test.describe('no 18n', () => {
+    for (const testConfig of testConfigs) {
+      test.describe(testConfig.describeLabel, () => {
+        test('json data fetch', async ({ middlewarePages, page }) => {
+          const dataFetchPromise = new Promise<Response>((resolve) => {
+            page.on('response', (response) => {
+              if (response.url().includes(testConfig.jsonPathMatcher)) {
+                resolve(response)
+              }
+            })
+          })
+
+          await page.goto(`${middlewarePages.url}/link`)
+
+          await page.hover(`[data-link="${testConfig.selector}"]`)
+
+          const dataResponse = await dataFetchPromise
+
+          expect(dataResponse.ok()).toBe(true)
+        })
+
+        test('navigation', async ({ middlewarePages, page }) => {
+          await page.goto(`${middlewarePages.url}/link`)
+
+          await page.evaluate(() => {
+            // set some value to window to check later if browser did reload and lost this state
+            ;(window as ExtendedWindow).didReload = false
+          })
+
+          await page.click(`[data-link="${testConfig.selector}"]`)
+
+          // wait for page to be rendered
+          await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
+
+          // check if browser navigation worked by checking if state was preserved
+          const browserNavigationWorked =
+            (await page.evaluate(() => {
+              return (window as ExtendedWindow).didReload
+            })) === false
+
+          // we expect client navigation to work without browser reload
+          expect(browserNavigationWorked).toBe(true)
+        })
+      })
+    }
   })
+  test.describe('with 18n', () => {
+    for (const testConfig of testConfigs) {
+      test.describe(testConfig.describeLabel, () => {
+        for (const { localeLabel, pageWithLinksPathname } of [
+          { localeLabel: 'implicit default locale', pageWithLinksPathname: '/link' },
+          { localeLabel: 'explicit default locale', pageWithLinksPathname: '/en/link' },
+          { localeLabel: 'explicit non-default locale', pageWithLinksPathname: '/fr/link' },
+        ]) {
+          test.describe(localeLabel, () => {
+            test('json data fetch', async ({ middlewareI18n, page }) => {
+              const dataFetchPromise = new Promise<Response>((resolve) => {
+                page.on('response', (response) => {
+                  if (response.url().includes(testConfig.jsonPathMatcher)) {
+                    resolve(response)
+                  }
+                })
+              })
 
-  expect(response.ok).toBe(true)
-  const body = await response.text()
+              await page.goto(`${middlewareI18n.url}${pageWithLinksPathname}`)
 
-  expect(body).toMatch(/^{"pageProps":/)
+              await page.hover(`[data-link="${testConfig.selector}"]`)
 
-  const data = JSON.parse(body)
+              const dataResponse = await dataFetchPromise
 
-  expect(data.pageProps.message).toBeDefined()
+              expect(dataResponse.ok()).toBe(true)
+            })
+
+            test('navigation', async ({ middlewareI18n, page }) => {
+              await page.goto(`${middlewareI18n.url}${pageWithLinksPathname}`)
+
+              await page.evaluate(() => {
+                // set some value to window to check later if browser did reload and lost this state
+                ;(window as ExtendedWindow).didReload = false
+              })
+
+              await page.click(`[data-link="${testConfig.selector}"]`)
+
+              // wait for page to be rendered
+              await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
+
+              // check if browser navigation worked by checking if state was preserved
+              const browserNavigationWorked =
+                (await page.evaluate(() => {
+                  return (window as ExtendedWindow).didReload
+                })) === false
+
+              // we expect client navigation to work without browser reload
+              expect(browserNavigationWorked).toBe(true)
+            })
+          })
+        }
+      })
+    }
+  })
 })
 
 // those tests use `fetch` instead of `page.goto` intentionally to avoid potential client rendering
