@@ -29,6 +29,8 @@
   "test/e2e/app-dir/revalidate-dynamic/revalidate-dynamic.test.ts",
   "test/e2e/app-dir/rsc-basic/rsc-basic.test.ts",
   "test/e2e/basepath.test.ts",
+  "test/e2e/basepath/basepath.test.ts",
+  "test/e2e/basepath/error-pages.test.ts",
   "test/e2e/getserversideprops/test/index.test.ts",
   "test/e2e/middleware-general/test/index.test.ts",
   "test/e2e/module-layer/index.test.ts",
