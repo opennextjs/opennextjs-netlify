@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.11.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.2...v5.11.3) (2025-06-17)
+
+
+### Bug Fixes
+
+* don't 404 on prefetches to fully static pages router pages when middleware is present ([#2957](https://github.com/opennextjs/opennextjs-netlify/issues/2957)) ([7af10ec](https://github.com/opennextjs/opennextjs-netlify/commit/7af10ec939e7a0767739b12d48867b3e4789a3fa))
+
 ## [5.11.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.1...v5.11.2) (2025-05-21)
 
 
