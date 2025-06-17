@@ -333,6 +333,7 @@ export const fixtureFactories = {
   pnpm: () => createE2EFixture('pnpm', { packageManger: 'pnpm' }),
   bun: () => createE2EFixture('simple', { packageManger: 'bun' }),
   middleware: () => createE2EFixture('middleware'),
+  middlewareI18n: () => createE2EFixture('middleware-i18n'),
   middlewareI18nExcludedPaths: () => createE2EFixture('middleware-i18n-excluded-paths'),
   middlewareOg: () => createE2EFixture('middleware-og'),
   middlewarePages: () => createE2EFixture('middleware-pages'),

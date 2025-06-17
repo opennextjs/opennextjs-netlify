@@ -8,6 +8,26 @@ export async function middleware(request) {
     return NextResponse.next()
   }
 
+  if (url.pathname.startsWith('/link/next')) {
+    return NextResponse.next({
+      headers: {
+        'x-middleware-test': 'link-next',
+      },
+    })
+  }
+
+  if (url.pathname.startsWith('/link/rewrite-me')) {
+    const rewriteUrl = new URL(
+      url.pathname.replace('/link/rewrite-me', '/link/rewrite-target'),
+      url,
+    )
+    return NextResponse.rewrite(rewriteUrl, {
+      headers: {
+        'x-middleware-test': 'link-rewrite',
+      },
+    })
+  }
+
   if (request.headers.get('x-prerender-revalidate')) {
     return NextResponse.next({
       headers: { 'x-middleware': 'hi' },
