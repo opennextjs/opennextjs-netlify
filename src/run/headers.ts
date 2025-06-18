@@ -135,6 +135,8 @@ export const setVaryHeaders = (
   }
 
   headers.set(`netlify-vary`, generateNetlifyVaryValues(netlifyVaryValues))
+  // ensure browser vary also respect required headers
+  headers.set('vary', netlifyVaryValues.header.join(','))
 }
 
 /**
