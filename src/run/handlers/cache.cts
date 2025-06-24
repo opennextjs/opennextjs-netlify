@@ -200,15 +200,28 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       try {
         const prerenderManifest = await this.getPrerenderManifest(this.options.serverDistDir)
         if (typeof cacheControl !== 'undefined') {
-          // instead of `revalidate` property, we might get `cacheControls` ( https://github.com/vercel/next.js/pull/76207 )
-          // then we need to keep track of revalidate values via SharedCacheControls
-          const { SharedCacheControls } = await import(
-            // @ts-expect-error supporting multiple next version, this module is not resolvable with currently used dev dependency
-            // eslint-disable-next-line import/no-unresolved, n/no-missing-import
-            'next/dist/server/lib/incremental-cache/shared-cache-controls.js'
-          )
-          const sharedCacheControls = new SharedCacheControls(prerenderManifest)
-          sharedCacheControls.set(key, cacheControl)
+          try {
+            // instead of `revalidate` property, we might get `cacheControls` ( https://github.com/vercel/next.js/pull/76207 )
+            // then we need to keep track of revalidate values via SharedCacheControls
+
+            // https://github.com/vercel/next.js/pull/80588 renamed shared-cache-controls module
+            const { SharedCacheControls } = await import(
+              // @ts-expect-error supporting multiple next version, this module is not resolvable with currently used dev dependency
+              // eslint-disable-next-line import/no-unresolved, n/no-missing-import
+              'next/dist/server/lib/incremental-cache/shared-cache-controls.external.js'
+            )
+            const sharedCacheControls = new SharedCacheControls(prerenderManifest)
+            sharedCacheControls.set(key, cacheControl)
+          } catch {
+            // attempting to use shared-cache-controls before https://github.com/vercel/next.js/pull/80588 was merged
+            const { SharedCacheControls } = await import(
+              // @ts-expect-error supporting multiple next version, this module is not resolvable with currently used dev dependency
+              // eslint-disable-next-line import/no-unresolved, n/no-missing-import
+              'next/dist/server/lib/incremental-cache/shared-cache-controls.js'
+            )
+            const sharedCacheControls = new SharedCacheControls(prerenderManifest)
+            sharedCacheControls.set(key, cacheControl)
+          }
         } else if (typeof revalidate === 'number' || revalidate === false) {
           // if we don't get cacheControls, but we still get revalidate, it should mean we are before
           // https://github.com/vercel/next.js/pull/76207

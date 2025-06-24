@@ -27,7 +27,8 @@ export async function getStaticProps({ params }) {
   }
 }
 
-export const getStaticPaths = () => {
+/** @type {import('next').GetStaticPaths} */
+export const getStaticPaths = ({ locales }) => {
   return {
     paths: [
       {
@@ -35,7 +36,7 @@ export const getStaticPaths = () => {
           slug: 'prerendered',
         },
       },
-    ],
+    ].flatMap((pathDescription) => locales.map((locale) => ({ ...pathDescription, locale }))),
     fallback: true,
   }
 }
