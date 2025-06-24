@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.11.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.3...v5.11.4) (2025-06-24)
+
+
+### Bug Fixes
+
+* handle shared-cache-controls rename ([#2974](https://github.com/opennextjs/opennextjs-netlify/issues/2974)) ([a4a03e1](https://github.com/opennextjs/opennextjs-netlify/commit/a4a03e179e019cc307ca63ef0e06d0e1d58a69e9))
+
 ## [5.11.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.2...v5.11.3) (2025-06-17)
 
 
