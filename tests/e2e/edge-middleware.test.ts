@@ -63,11 +63,13 @@ test.describe('json data', () => {
       describeLabel: 'NextResponse.next() -> getServerSideProps page',
       selector: 'NextResponse.next()#getServerSideProps',
       jsonPathMatcher: '/link/next-getserversideprops.json',
+      assertLocale: true,
     },
     {
       describeLabel: 'NextResponse.next() -> getStaticProps page',
       selector: 'NextResponse.next()#getStaticProps',
       jsonPathMatcher: '/link/next-getstaticprops.json',
+      assertLocale: true,
     },
     {
       describeLabel: 'NextResponse.next() -> fully static page',
@@ -78,11 +80,13 @@ test.describe('json data', () => {
       describeLabel: 'NextResponse.rewrite() -> getServerSideProps page',
       selector: 'NextResponse.rewrite()#getServerSideProps',
       jsonPathMatcher: '/link/rewrite-me-getserversideprops.json',
+      assertLocale: true,
     },
     {
       describeLabel: 'NextResponse.rewrite() -> getStaticProps page',
       selector: 'NextResponse.rewrite()#getStaticProps',
       jsonPathMatcher: '/link/rewrite-me-getstaticprops.json',
+      assertLocale: true,
     },
   ]
 
@@ -144,10 +148,22 @@ test.describe('json data', () => {
   test.describe('with 18n', () => {
     for (const testConfig of testConfigs) {
       test.describe(testConfig.describeLabel, () => {
-        for (const { localeLabel, pageWithLinksPathname } of [
-          { localeLabel: 'implicit default locale', pageWithLinksPathname: '/link' },
-          { localeLabel: 'explicit default locale', pageWithLinksPathname: '/en/link' },
-          { localeLabel: 'explicit non-default locale', pageWithLinksPathname: '/fr/link' },
+        for (const { localeLabel, pageWithLinksPathname, expectedLocale } of [
+          {
+            localeLabel: 'implicit default locale',
+            pageWithLinksPathname: '/link',
+            expectedLocale: 'en',
+          },
+          {
+            localeLabel: 'explicit default locale',
+            pageWithLinksPathname: '/en/link',
+            expectedLocale: 'en',
+          },
+          {
+            localeLabel: 'explicit non-default locale',
+            pageWithLinksPathname: '/fr/link',
+            expectedLocale: 'fr',
+          },
         ]) {
           test.describe(localeLabel, () => {
             test('json data fetch', async ({ middlewareI18n, page }) => {
@@ -189,6 +205,10 @@ test.describe('json data', () => {
 
               // we expect client navigation to work without browser reload
               expect(browserNavigationWorked).toBe(true)
+
+              if (testConfig.assertLocale) {
+                await expect(page.getByTestId('current-locale')).toHaveText(expectedLocale)
+              }
             })
           })
         }
