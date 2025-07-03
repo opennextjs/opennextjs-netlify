@@ -373,7 +373,11 @@ test.describe('RSC cache poisoning', () => {
   test('Middleware rewrite', async ({ page, middleware }) => {
     const prefetchResponsePromise = new Promise<Response>((resolve) => {
       page.on('response', (response) => {
-        if (response.url().includes('/test/rewrite-to-cached-page')) {
+        if (
+          (response.url().includes('/test/rewrite-to-cached-page') ||
+            response.url().includes('/caching-rewrite-target')) &&
+          response.status() === 200
+        ) {
           resolve(response)
         }
       })
@@ -400,7 +404,7 @@ test.describe('RSC cache poisoning', () => {
   test('Middleware redirect', async ({ page, middleware }) => {
     const prefetchResponsePromise = new Promise<Response>((resolve) => {
       page.on('response', (response) => {
-        if (response.url().includes('/caching-redirect-target')) {
+        if (response.url().includes('/caching-redirect-target') && response.status() === 200) {
           resolve(response)
         }
       })
