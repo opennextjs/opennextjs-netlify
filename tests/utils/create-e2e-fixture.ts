@@ -316,7 +316,10 @@ async function cleanup(dest: string, deployId?: string): Promise<void> {
 
 export const fixtureFactories = {
   simple: () => createE2EFixture('simple'),
-  helloWorldTurbopack: () => createE2EFixture('hello-world-turbopack'),
+  helloWorldTurbopack: () =>
+    createE2EFixture('hello-world-turbopack', {
+      buildCommand: 'next build --turbopack',
+    }),
   outputExport: () => createE2EFixture('output-export'),
   ouputExportPublishOut: () =>
     createE2EFixture('output-export', {
