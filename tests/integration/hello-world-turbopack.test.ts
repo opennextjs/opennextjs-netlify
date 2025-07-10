@@ -1,13 +1,13 @@
 import { load } from 'cheerio'
 import { getLogger } from 'lambda-local'
-import { cp } from 'node:fs/promises'
 import { HttpResponse, http, passthrough } from 'msw'
 import { setupServer } from 'msw/node'
 import { v4 } from 'uuid'
-import { Mock, afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
+import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const fsPromisesModule = (await importOriginal()) as typeof import('node:fs/promises')
@@ -61,12 +61,17 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-test<FixtureTestContext>('Test that the hello-world-turbopack next app is working', async (ctx) => {
-  await createFixture('hello-world-turbopack', ctx)
-  await runPlugin(ctx)
+// https://github.com/vercel/next.js/pull/77808 makes turbopack builds no longer gated only to canaries
+// allowing to run this test on both stable and canary versions of Next.js
+test.skipIf(!nextVersionSatisfies('>=15.3.0-canary.43'))<FixtureTestContext>(
+  'Test that the hello-world-turbopack next app is working',
+  async (ctx) => {
+    await createFixture('hello-world-turbopack', ctx)
+    await runPlugin(ctx)
 
-  // test the function call
-  const home = await invokeFunction(ctx)
-  expect(home.statusCode).toBe(200)
-  expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
-})
+    // test the function call
+    const home = await invokeFunction(ctx)
+    expect(home.statusCode).toBe(200)
+    expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
+  },
+)
