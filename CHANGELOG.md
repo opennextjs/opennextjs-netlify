@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.11.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.4...v5.11.5) (2025-07-10)
+
+
+### Bug Fixes
+
+* glob subdirectories in server/chunks to support turbopack builds ([#2987](https://github.com/opennextjs/opennextjs-netlify/issues/2987)) ([e7bf18f](https://github.com/opennextjs/opennextjs-netlify/commit/e7bf18fdb6e4d97189447cc6a7629e7cc5287bb0))
+
 ## [5.11.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.3...v5.11.4) (2025-06-24)
 
 
