@@ -100,7 +100,13 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
     const destDir = join(ctx.serverHandlerDir, nextFolder)
 
     const paths = await glob(
-      [`*`, `server/*`, `server/chunks/*`, `server/edge-chunks/*`, `server/+(app|pages)/**/*.js`],
+      [
+        `*`,
+        `server/*`,
+        `server/chunks/**/*`,
+        `server/edge-chunks/**/*`,
+        `server/+(app|pages)/**/*.js`,
+      ],
       {
         cwd: srcDir,
         extglob: true,

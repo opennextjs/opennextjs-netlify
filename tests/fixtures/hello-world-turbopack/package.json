@@ -1,0 +1,15 @@
+{
+  "name": "hello-world-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "next build --turbopack",
+    "dev": "next dev --turbopack",
+    "build": "next build --turbopack"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  }
+}
