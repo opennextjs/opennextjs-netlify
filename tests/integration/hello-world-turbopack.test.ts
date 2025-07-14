@@ -5,7 +5,7 @@ import { setupServer } from 'msw/node'
 import { v4 } from 'uuid'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
-import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
+import { createFixture, invokeEdgeFunction, invokeFunction, runPlugin } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
@@ -84,6 +84,23 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.43'))(
       const home = await invokeFunction(ctx, { url: '/edge-page' })
       expect(home.statusCode).toBe(200)
       expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
+    })
+
+    test<FixtureTestContext>('middleware is working', async (ctx) => {
+      await createFixture('hello-world-turbopack', ctx)
+      await runPlugin(ctx)
+
+      const pathname = '/middleware/test'
+
+      const response = await invokeEdgeFunction(ctx, {
+        functions: ['___netlify-edge-handler-middleware'],
+        url: pathname,
+      })
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        message: `Hello from middleware at ${pathname}`,
+      })
     })
   },
 )
