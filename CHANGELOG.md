@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.11.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.5...v5.11.6) (2025-07-14)
+
+
+### Bug Fixes
+
+* handle edge runtime pages and middleware for turbopack builds ([#3009](https://github.com/opennextjs/opennextjs-netlify/issues/3009)) ([42eeab8](https://github.com/opennextjs/opennextjs-netlify/commit/42eeab89b37d548f90f62391a47c2a11ef63f8d1))
+
 ## [5.11.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.4...v5.11.5) (2025-07-10)
 
 
