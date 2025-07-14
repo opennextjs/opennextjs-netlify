@@ -36,3 +36,8 @@ globalThis.require = function nextRuntimeMinimalRequireShim(name) {
 }
 
 var _ENTRIES = {}
+try {
+  // turbopack builds use self._ENTRIES not globalThis._ENTRIES
+  // so making sure both points to same object
+  self._ENTRIES = _ENTRIES
+} catch {}
