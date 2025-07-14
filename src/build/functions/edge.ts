@@ -150,10 +150,15 @@ const copyHandlerDependencies = async (
     const entrypoint = await readFile(join(srcDir, file), 'utf8')
     parts.push(`;// Concatenated file: ${file} \n`, entrypoint)
   }
-  const exports = `const middlewareEntryKey = Object.keys(_ENTRIES).find(entryKey => entryKey.startsWith("middleware_${name}")); export default _ENTRIES[middlewareEntryKey].default;`
+  parts.push(
+    `const middlewareEntryKey = Object.keys(_ENTRIES).find(entryKey => entryKey.startsWith("middleware_${name}"));`,
+    // turbopack entries are promises so we await here to get actual entry
+    // non-turbopack entries are already resolved, so await does not change anything
+    `export default await _ENTRIES[middlewareEntryKey].default;`,
+  )
   await mkdir(dirname(outputFile), { recursive: true })
 
-  await writeFile(outputFile, [...parts, exports].join('\n'))
+  await writeFile(outputFile, parts.join('\n'))
 }
 
 const createEdgeHandler = async (ctx: PluginContext, definition: NextDefinition): Promise<void> => {
