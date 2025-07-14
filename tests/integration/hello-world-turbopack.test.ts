@@ -3,7 +3,7 @@ import { getLogger } from 'lambda-local'
 import { HttpResponse, http, passthrough } from 'msw'
 import { setupServer } from 'msw/node'
 import { v4 } from 'uuid'
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
@@ -63,15 +63,27 @@ afterEach(() => {
 
 // https://github.com/vercel/next.js/pull/77808 makes turbopack builds no longer gated only to canaries
 // allowing to run this test on both stable and canary versions of Next.js
-test.skipIf(!nextVersionSatisfies('>=15.3.0-canary.43'))<FixtureTestContext>(
+describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.43'))(
   'Test that the hello-world-turbopack next app is working',
-  async (ctx) => {
-    await createFixture('hello-world-turbopack', ctx)
-    await runPlugin(ctx)
+  () => {
+    test<FixtureTestContext>('regular page is working', async (ctx) => {
+      await createFixture('hello-world-turbopack', ctx)
+      await runPlugin(ctx)
 
-    // test the function call
-    const home = await invokeFunction(ctx)
-    expect(home.statusCode).toBe(200)
-    expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
+      // test the function call
+      const home = await invokeFunction(ctx)
+      expect(home.statusCode).toBe(200)
+      expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
+    })
+
+    test<FixtureTestContext>('edge page is working', async (ctx) => {
+      await createFixture('hello-world-turbopack', ctx)
+      await runPlugin(ctx)
+
+      // test the function call
+      const home = await invokeFunction(ctx, { url: '/edge-page' })
+      expect(home.statusCode).toBe(200)
+      expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
+    })
   },
 )
