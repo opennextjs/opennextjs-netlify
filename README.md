@@ -2,6 +2,7 @@
 
 # Next.js Runtime
 
+[do not merge]
 <p align="center">
   <a aria-label="npm version" href="https://www.npmjs.com/package/@netlify/plugin-nextjs">
     <img alt="" src="https://img.shields.io/npm/v/@netlify/plugin-nextjs">
