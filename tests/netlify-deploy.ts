@@ -54,6 +54,8 @@ export class NextDeployInstance extends NextInstance {
       return
     }
 
+    let deployStartTime = Date.now()
+
     this._isCurrentlyDeploying = true
 
     const setupStartTime = Date.now()
@@ -72,11 +74,23 @@ export class NextDeployInstance extends NextInstance {
 
     const { runtimePackageName, runtimePackageTarballPath } = await packNextRuntime()
 
+    const handleOutput = (chunk) => {
+      const timestampPrefix = `[${new Date().toISOString()}] (+${((Date.now() - deployStartTime) / 1000).toFixed(3)}s) `
+
+      this._deployOutput +=
+        (this._deployOutput === '' || this._deployOutput.endsWith('\n') ? timestampPrefix : '') +
+        chunk.toString().replace(/\n(?=.)/gm, `\n${timestampPrefix}`)
+    }
+
     // install dependencies
-    await execa('npm', ['i', runtimePackageTarballPath, '--legacy-peer-deps'], {
+    const installResPromise = execa('npm', ['i', runtimePackageTarballPath, '--legacy-peer-deps'], {
       cwd: this.testDir,
-      stdio: 'inherit',
     })
+
+    installResPromise.stdout.on('data', handleOutput)
+    installResPromise.stderr.on('data', handleOutput)
+
+    await installResPromise
 
     if (fs.existsSync(nodeModulesBak)) {
       // move the contents of the fixture node_modules into the installed modules
@@ -117,7 +131,12 @@ export class NextDeployInstance extends NextInstance {
 
     // ensure project is linked
     try {
-      await execa('npx', ['netlify', 'status', '--json'])
+      const netlifyStatusPromise = execa('npx', ['netlify', 'status', '--json'])
+
+      netlifyStatusPromise.stdout.on('data', handleOutput)
+      netlifyStatusPromise.stderr.on('data', handleOutput)
+
+      await netlifyStatusPromise
     } catch (err) {
       if (err.message.includes("You don't appear to be in a folder that is linked to a site")) {
         throw new Error(`Site is not linked. Please set "NETLIFY_AUTH_TOKEN" and "NETLIFY_SITE_ID"`)
@@ -143,10 +162,6 @@ export class NextDeployInstance extends NextInstance {
         reject: false,
       },
     )
-
-    const handleOutput = (chunk) => {
-      this._deployOutput += chunk
-    }
 
     deployResPromise.stdout.on('data', handleOutput)
     deployResPromise.stderr.on('data', handleOutput)
@@ -184,7 +199,7 @@ export class NextDeployInstance extends NextInstance {
       }
     } catch (err) {
       require('console').error(err)
-      throw new Error(`Failed to parse deploy output: ${deployRes.stdout}`)
+      throw new Error(`Failed to parse deploy output: "${deployRes.stdout}"`)
     }
 
     this._buildId = (
