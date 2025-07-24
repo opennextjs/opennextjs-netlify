@@ -205,6 +205,7 @@ jobs:
           # one job may wait for deploys in other jobs (only one deploy may be in progress for
           # a given alias at a time), resulting in cascading timeouts.
           DEPLOY_ALIAS: vercel-next-e2e-${{ matrix.version_spec.selector }}-${{ matrix.group }}
+          NODE_OPTIONS: "--require /home/runner/work/opennextjs-netlify/opennextjs-netlify/opennextjs-netlify/skip-integrations.cjs"
         run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e
         working-directory: ${{ env.next-path }}
 
