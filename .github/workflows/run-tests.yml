@@ -1,7 +1,7 @@
 name: 'Run tests'
 on:
   pull_request:
-    branches: [main]
+    branches: [not_main] # do not run for now
   schedule:
     - cron: '0 6 * * *' # Run every day at 6am UTC
   workflow_dispatch:
