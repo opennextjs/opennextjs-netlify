@@ -27,7 +27,7 @@ env:
   # In older versions of Next.js both of these need to be set to enable junit reporting
   DATADOG_TRACE_NEXTJS_TEST: true
   DATADOG_API_KEY: foo
-  TEST_CONCURRENCY: 2
+  TEST_CONCURRENCY: 1
   NEXT_E2E_TEST_TIMEOUT: 300000
   NEXT_TELEMETRY_DISABLED: 1
   NEXT_SKIP_NATIVE_POSTINSTALL: 1
