@@ -78,7 +78,7 @@
     "msw": "^2.0.7",
     "netlify-cli": "22.2.2",
     "next": "^15.0.0-canary.28",
-    "next-with-cache-handler-v2": "npm:next@15.3.0-canary.13",
+    "next-with-cache-handler-v2": "npm:next@15.4.4",
     "os": "^0.1.2",
     "outdent": "^0.8.0",
     "p-limit": "^6.0.0",
