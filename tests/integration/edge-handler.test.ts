@@ -4,6 +4,7 @@ import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeEdgeFunction, runPlugin } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
 import { LocalServer } from '../utils/local-server.js'
+import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
@@ -626,3 +627,13 @@ describe('page router', () => {
     expect(bodyFr.nextUrlLocale).toBe('fr')
   })
 })
+
+test.skipIf(!nextVersionSatisfies('>=15.2.0'))<FixtureTestContext>(
+  'should throw an Not Supported error when node middleware is used',
+  async (ctx) => {
+    await createFixture('middleware-node', ctx)
+    await expect(runPlugin(ctx)).rejects.toThrow(
+      'Only Edge Runtime Middleware is supported. Node.js Middleware is not supported.',
+    )
+  },
+)
