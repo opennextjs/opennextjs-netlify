@@ -61,7 +61,7 @@
     "@opentelemetry/api": "^1.8.0",
     "@playwright/test": "^1.43.1",
     "@types/node": "^20.12.7",
-    "@types/picomatch": "^3.0.0",
+    "@types/picomatch": "^4.0.0",
     "@types/uuid": "^10.0.0",
     "@vercel/nft": "^0.29.0",
     "cheerio": "^1.0.0-rc.12",
