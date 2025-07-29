@@ -24,9 +24,16 @@ import {
   verifyPublishDir,
 } from './build/verification.js'
 
+const skipPlugin = process.env.NETLIFY_NEXT_PLUGIN_SKIP === 'true' || process.env.NETLIFY_NEXT_PLUGIN_SKIP === '1'
+const skipText = 'Skipping Next.js plugin due to NETLIFY_NEXT_PLUGIN_SKIP environment variable.'
 const tracer = wrapTracer(trace.getTracer('Next.js runtime'))
 
 export const onPreDev = async (options: NetlifyPluginOptions) => {
+  if (skipPlugin) {
+    console.warn(skipText)
+    return
+  }
+
   await tracer.withActiveSpan('onPreDev', async () => {
     const context = new PluginContext(options)
 
@@ -36,6 +43,11 @@ export const onPreDev = async (options: NetlifyPluginOptions) => {
 }
 
 export const onPreBuild = async (options: NetlifyPluginOptions) => {
+  if (skipPlugin) {
+    console.warn(skipText)
+    return
+  }
+
   await tracer.withActiveSpan('onPreBuild', async () => {
     // Enable Next.js standalone mode at build time
     process.env.NEXT_PRIVATE_STANDALONE = 'true'
@@ -53,6 +65,11 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
 }
 
 export const onBuild = async (options: NetlifyPluginOptions) => {
+  if (skipPlugin) {
+    console.warn(skipText)
+    return
+  }
+
   await tracer.withActiveSpan('onBuild', async (span) => {
     const ctx = new PluginContext(options)
 
@@ -86,12 +103,22 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
 }
 
 export const onPostBuild = async (options: NetlifyPluginOptions) => {
+  if (skipPlugin) {
+    console.warn(skipText)
+    return
+  }
+
   await tracer.withActiveSpan('onPostBuild', async () => {
     await publishStaticDir(new PluginContext(options))
   })
 }
 
 export const onSuccess = async () => {
+  if (skipPlugin) {
+    console.warn(skipText)
+    return
+  }
+
   await tracer.withActiveSpan('onSuccess', async () => {
     const prewarm = [process.env.DEPLOY_URL, process.env.DEPLOY_PRIME_URL, process.env.URL].filter(
       // If running locally then the deploy ID is a placeholder value. Filtering for `https://0--` removes it.
@@ -102,6 +129,11 @@ export const onSuccess = async () => {
 }
 
 export const onEnd = async (options: NetlifyPluginOptions) => {
+  if (skipPlugin) {
+    console.warn(skipText)
+    return
+  }
+
   await tracer.withActiveSpan('onEnd', async () => {
     await unpublishStaticDir(new PluginContext(options))
   })
