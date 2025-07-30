@@ -56,3 +56,7 @@ const getResponse = (request: NextRequest) => {
 
   return NextResponse.json({ error: 'Error' }, { status: 500 })
 }
+
+export const config = {
+  runtime: 'nodejs',
+}

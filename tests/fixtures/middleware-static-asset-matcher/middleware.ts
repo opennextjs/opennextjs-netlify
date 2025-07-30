@@ -4,4 +4,5 @@ export default function middleware() {
 
 export const config = {
   matcher: '/hello/world.txt',
+  runtime: 'nodejs',
 }
