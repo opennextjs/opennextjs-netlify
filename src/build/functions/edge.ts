@@ -273,6 +273,21 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
     await mkdir(dirname(dummyChunkPath), { recursive: true })
     await writeFile(dummyChunkPath, '')
 
+    // there is also `@opentelemetry/api` require that fails esbuild due to nothing matching,
+    // next is try/catching it and fallback to bundled version of otel package in case of errors
+    const otelApiPath = join(
+      fakeNodeModulePath,
+      'node_modules',
+      '@opentelemetry',
+      'api',
+      'index.js',
+    )
+    await mkdir(dirname(otelApiPath), { recursive: true })
+    await writeFile(
+      otelApiPath,
+      `throw new Error('this is dummy to satisfy esbuild used for npm compat using fake module')`,
+    )
+
     // await writeHandlerFile(ctx, definition)
 
     const nextConfig = ctx.buildConfig
