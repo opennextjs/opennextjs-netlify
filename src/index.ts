@@ -24,7 +24,8 @@ import {
   verifyPublishDir,
 } from './build/verification.js'
 
-const skipPlugin = process.env.NETLIFY_NEXT_PLUGIN_SKIP === 'true' || process.env.NETLIFY_NEXT_PLUGIN_SKIP === '1'
+const skipPlugin =
+  process.env.NETLIFY_NEXT_PLUGIN_SKIP === 'true' || process.env.NETLIFY_NEXT_PLUGIN_SKIP === '1'
 const skipText = 'Skipping Next.js plugin due to NETLIFY_NEXT_PLUGIN_SKIP environment variable.'
 const tracer = wrapTracer(trace.getTracer('Next.js runtime'))
 
