@@ -194,11 +194,170 @@ export const clearStaleEdgeHandlers = async (ctx: PluginContext) => {
 }
 
 export const createEdgeHandlers = async (ctx: PluginContext) => {
+  // Edge middleware
   const nextManifest = await ctx.getMiddlewareManifest()
+  // Node middleware
+  const functionsConfigManifest = await ctx.getFunctionsConfigManifest()
+
   const nextDefinitions = [...Object.values(nextManifest.middleware)]
   await Promise.all(nextDefinitions.map((def) => createEdgeHandler(ctx, def)))
 
   const netlifyDefinitions = nextDefinitions.flatMap((def) => buildHandlerDefinition(ctx, def))
+
+  if (functionsConfigManifest?.functions?.['/_middleware']) {
+    const middlewareDefinition = functionsConfigManifest?.functions?.['/_middleware']
+    const entry = 'server/middleware.js'
+    const nft = `${entry}.nft.json`
+    const name = 'node-middleware'
+
+    // await copyHandlerDependencies(ctx, definition)
+    const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
+    // const destDir = join(ctx.edgeFunctionsDir, getHandlerName({ name }))
+
+    const fakeNodeModuleName = 'fake-module-with-middleware'
+
+    const fakeNodeModulePath = ctx.resolveFromPackagePath(join('node_modules', fakeNodeModuleName))
+
+    const nftFilesPath = join(ctx.nextDistDir, nft)
+    const nftManifest = JSON.parse(await readFile(nftFilesPath, 'utf8'))
+
+    const files: string[] = nftManifest.files.map((file: string) => join('server', file))
+    files.push(entry)
+
+    // files are relative to location of middleware entrypoint
+    // we need to capture all of them
+    // they might be going to parent directories, so first we check how many directories we need to go up
+    const maxDirsUp = files.reduce((max, file) => {
+      let dirsUp = 0
+      for (const part of file.split('/')) {
+        if (part === '..') {
+          dirsUp += 1
+        } else {
+          break
+        }
+      }
+      return Math.max(max, dirsUp)
+    }, 0)
+
+    let prefixPath = ''
+    for (let nestedIndex = 1; nestedIndex <= maxDirsUp; nestedIndex++) {
+      // TODO: ideally we preserve the original directory structure
+      // this is just hack to use arbitrary computed names to speed up hooking things up
+      prefixPath += `nested-${nestedIndex}/`
+    }
+
+    for (const file of files) {
+      const srcPath = join(srcDir, file)
+      const destPath = join(fakeNodeModulePath, prefixPath, file)
+
+      await mkdir(dirname(destPath), { recursive: true })
+
+      if (file === entry) {
+        const content = await readFile(srcPath, 'utf8')
+        await writeFile(
+          destPath,
+          // Next.js needs to be set on global even if it's possible to just require it
+          // so somewhat similar to existing shim we have for edge runtime
+          `globalThis.AsyncLocalStorage = require('node:async_hooks').AsyncLocalStorage;\n${content}`,
+        )
+      } else {
+        await cp(srcPath, destPath, { force: true })
+      }
+    }
+
+    await writeFile(join(fakeNodeModulePath, 'package.json'), JSON.stringify({ type: 'commonjs' }))
+
+    // there is `/chunks/**/*` require coming from webpack-runtime that fails esbuild due to nothing matching,
+    // so this ensure something does
+    const dummyChunkPath = join(fakeNodeModulePath, prefixPath, 'server', 'chunks', 'dummy.js')
+    await mkdir(dirname(dummyChunkPath), { recursive: true })
+    await writeFile(dummyChunkPath, '')
+
+    // await writeHandlerFile(ctx, definition)
+
+    const nextConfig = ctx.buildConfig
+    const handlerName = getHandlerName({ name })
+    const handlerDirectory = join(ctx.edgeFunctionsDir, handlerName)
+    const handlerRuntimeDirectory = join(handlerDirectory, 'edge-runtime')
+
+    // Copying the runtime files. These are the compatibility layer between
+    // Netlify Edge Functions and the Next.js edge runtime.
+    await copyRuntime(ctx, handlerDirectory)
+
+    // Writing a file with the matchers that should trigger this function. We'll
+    // read this file from the function at runtime.
+    await writeFile(
+      join(handlerRuntimeDirectory, 'matchers.json'),
+      JSON.stringify(middlewareDefinition.matchers ?? []),
+    )
+
+    // The config is needed by the edge function to match and normalize URLs. To
+    // avoid shipping and parsing a large file at runtime, let's strip it down to
+    // just the properties that the edge function actually needs.
+    const minimalNextConfig = {
+      basePath: nextConfig.basePath,
+      i18n: nextConfig.i18n,
+      trailingSlash: nextConfig.trailingSlash,
+      skipMiddlewareUrlNormalize: nextConfig.skipMiddlewareUrlNormalize,
+    }
+
+    await writeFile(
+      join(handlerRuntimeDirectory, 'next.config.json'),
+      JSON.stringify(minimalNextConfig),
+    )
+
+    const htmlRewriterWasm = await readFile(
+      join(
+        ctx.pluginDir,
+        'edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm',
+      ),
+    )
+
+    // Writing the function entry file. It wraps the middleware code with the
+    // compatibility layer mentioned above.
+    await writeFile(
+      join(handlerDirectory, `${handlerName}.js`),
+      `
+    import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
+    import { handleMiddleware } from './edge-runtime/middleware.ts';
+
+    import * as handlerMod from '${fakeNodeModuleName}/${prefixPath}${entry}';
+
+    const handler = handlerMod.default || handlerMod;
+
+    await htmlRewriterInit({ module_or_path: Uint8Array.from(${JSON.stringify([
+      ...htmlRewriterWasm,
+    ])}) });
+
+    export default (req, context) => {
+      return handleMiddleware(req, context, handler);
+    };
+    `,
+    )
+
+    // buildHandlerDefinition(ctx, def)
+    const netlifyDefinitions: Manifest['functions'] = augmentMatchers(
+      middlewareDefinition.matchers ?? [],
+      ctx,
+    ).map((matcher) => {
+      return {
+        function: getHandlerName({ name }),
+        name: `Next.js Node Middleware Handler`,
+        pattern: matcher.regexp,
+        cache: undefined,
+        generator: `${ctx.pluginName}@${ctx.pluginVersion}`,
+      }
+    })
+
+    const netlifyManifest: Manifest = {
+      version: 1,
+      functions: netlifyDefinitions,
+    }
+    await writeEdgeManifest(ctx, netlifyManifest)
+
+    return
+  }
+
   const netlifyManifest: Manifest = {
     version: 1,
     functions: netlifyDefinitions,

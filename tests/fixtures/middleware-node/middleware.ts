@@ -1,7 +1,8 @@
-import type { NextRequest } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
+import { join } from 'path'
 
-export async function middleware(request: NextRequest) {
-  console.log('Node.js Middleware request:', request.method, request.nextUrl.pathname)
+export default async function middleware(req: NextRequest) {
+  return NextResponse.json({ message: 'Hello, world!', joined: join('a', 'b') })
 }
 
 export const config = {

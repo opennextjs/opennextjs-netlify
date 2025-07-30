@@ -133,7 +133,13 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         }
 
         if (path === 'server/functions-config-manifest.json') {
-          await verifyFunctionsConfigManifest(join(srcDir, path))
+          try {
+            await replaceFunctionsConfigManifest(srcPath, destPath)
+          } catch (error) {
+            throw new Error('Could not patch functions config manifest file', { cause: error })
+          }
+
+          return
         }
 
         await cp(srcPath, destPath, { recursive: true, force: true })
@@ -381,16 +387,41 @@ const replaceMiddlewareManifest = async (sourcePath: string, destPath: string) =
   await writeFile(destPath, newData)
 }
 
-const verifyFunctionsConfigManifest = async (sourcePath: string) => {
+// similar to the middleware manifest, we need to patch the functions config manifest to disable
+// the middleware that is defined in the functions config manifest. This is needed to avoid running
+// the middleware in the server handler, while still allowing next server to enable some middleware
+// specific handling such as _next/data normalization ( https://github.com/vercel/next.js/blob/7bb72e508572237fe0d4aac5418546d4b4b3a363/packages/next/src/server/lib/router-utils/resolve-routes.ts#L395 )
+const replaceFunctionsConfigManifest = async (sourcePath: string, destPath: string) => {
   const data = await readFile(sourcePath, 'utf8')
   const manifest = JSON.parse(data) as FunctionsConfigManifest
 
   // https://github.com/vercel/next.js/blob/8367faedd61501025299e92d43a28393c7bb50e2/packages/next/src/build/index.ts#L2465
   // Node.js Middleware has hardcoded /_middleware path
-  if (manifest.functions['/_middleware']) {
-    throw new Error(
-      'Only Edge Runtime Middleware is supported. Node.js Middleware is not supported.',
-    )
+  if (manifest?.functions?.['/_middleware']?.matchers) {
+    const newManifest = {
+      ...manifest,
+      functions: {
+        ...manifest.functions,
+        '/_middleware': {
+          ...manifest.functions['/_middleware'],
+          matchers: manifest.functions['/_middleware'].matchers.map((matcher) => {
+            return {
+              ...matcher,
+              // matcher that won't match on anything
+              // this is meant to disable actually running middleware in the server handler,
+              // while still allowing next server to enable some middleware specific handling
+              // such as _next/data normalization ( https://github.com/vercel/next.js/blob/7bb72e508572237fe0d4aac5418546d4b4b3a363/packages/next/src/server/lib/router-utils/resolve-routes.ts#L395 )
+              regexp: '(?!.*)',
+            }
+          }),
+        },
+      },
+    }
+    const newData = JSON.stringify(newManifest)
+
+    await writeFile(destPath, newData)
+  } else {
+    await cp(sourcePath, destPath, { recursive: true, force: true })
   }
 }
 
