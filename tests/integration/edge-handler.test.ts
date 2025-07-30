@@ -628,12 +628,13 @@ describe('page router', () => {
   })
 })
 
-test.skipIf(!nextVersionSatisfies('>=15.2.0'))<FixtureTestContext>(
-  'should throw an Not Supported error when node middleware is used',
-  async (ctx) => {
-    await createFixture('middleware-node', ctx)
-    await expect(runPlugin(ctx)).rejects.toThrow(
-      'Only Edge Runtime Middleware is supported. Node.js Middleware is not supported.',
-    )
-  },
-)
+// this is now actually deploying
+// test.skipIf(!nextVersionSatisfies('>=15.2.0'))<FixtureTestContext>(
+//   'should throw an Not Supported error when node middleware is used',
+//   async (ctx) => {
+//     await createFixture('middleware-node', ctx)
+//     await expect(runPlugin(ctx)).rejects.toThrow(
+//       'Only Edge Runtime Middleware is supported. Node.js Middleware is not supported.',
+//     )
+//   },
+// )
