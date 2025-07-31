@@ -32,7 +32,8 @@ import { BLOB_TOKEN } from './constants.mjs'
 import { type FixtureTestContext } from './contexts.js'
 import { setNextVersionInFixture } from './next-version-helpers.mjs'
 
-const bootstrapURL = 'https://edge.netlify.com/bootstrap/index-combined.ts'
+const bootstrapURL =
+  'https://6877afcf20679a00086bab1c--edge.netlify.com/bootstrap/index-combined.ts'
 const actualCwd = await vi.importActual<typeof import('process')>('process').then((p) => p.cwd())
 const eszipHelper = join(actualCwd, 'tools/deno/eszip.ts')
 
