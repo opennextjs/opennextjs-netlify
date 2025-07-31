@@ -9,7 +9,7 @@ describe('skew protection', () => {
     ctx = new FixtureTestContext({
       name: 'skew-protection',
       env: {
-        VERCEL_SKEW_PROTECTION_ENABLED: '1',
+        NEXT_SKEW_PROTECTION_ENABLED: '1',
         NETLIFY_DEPLOY_ID: 'test-deploy-123',
       },
     })

@@ -70,7 +70,7 @@ The `PluginContext` class (`src/build/plugin-context.ts`) centralizes build conf
 
 ### Skew Protection
 
-When `VERCEL_SKEW_PROTECTION_ENABLED=1` is set, the plugin automatically:
+When `NEXT_SKEW_PROTECTION_ENABLED=1` is set, the plugin automatically:
 
 1. **Sets deployment ID**: Maps `NETLIFY_DEPLOY_ID` to `VERCEL_DEPLOYMENT_ID` for Next.js compatibility
 2. **Creates edge function**: Generates a skew protection edge function at `___netlify-skew-protection`
@@ -105,7 +105,7 @@ Extensive test fixtures cover scenarios like:
 - `NETLIFY_NEXT_PLUGIN_SKIP` - Skip plugin execution entirely
 - `NEXT_PRIVATE_STANDALONE` - Enabled automatically for builds
 - `IS_LOCAL` - Indicates local development vs deployment
-- `VERCEL_SKEW_PROTECTION_ENABLED` - Enable Next.js skew protection (set to '1')
+- `NEXT_SKEW_PROTECTION_ENABLED` - Enable Next.js skew protection (set to '1')
 - `VERCEL_DEPLOYMENT_ID` - Set automatically from `NETLIFY_DEPLOY_ID` when skew protection is enabled
 
 ## Build Tools

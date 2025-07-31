@@ -214,7 +214,7 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
   const edgeHandlerPromises = nextDefinitions.map((def) => createEdgeHandler(ctx, def))
   
   // Create skew protection handler if enabled
-  if (process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1') {
+  if (process.env.NEXT_SKEW_PROTECTION_ENABLED === '1') {
     edgeHandlerPromises.push(createSkewProtectionHandler(ctx))
   }
   
@@ -223,7 +223,7 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
   const netlifyDefinitions = nextDefinitions.flatMap((def) => buildHandlerDefinition(ctx, def))
   
   // Add skew protection handler to manifest if enabled
-  if (process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1') {
+  if (process.env.NEXT_SKEW_PROTECTION_ENABLED === '1') {
     const skewProtectionDefinition: ManifestFunction = {
       function: SKEW_PROTECTION_HANDLER_NAME,
       name: 'Next.js Skew Protection Handler',
