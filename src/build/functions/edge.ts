@@ -218,7 +218,7 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
 
     const fakeNodeModulePath = ctx.resolveFromPackagePath(join('node_modules', fakeNodeModuleName))
 
-    const nftFilesPath = join(ctx.nextDistDir, nft)
+    const nftFilesPath = join(process.cwd(), ctx.nextDistDir, nft)
     const nftManifest = JSON.parse(await readFile(nftFilesPath, 'utf8'))
 
     const files: string[] = nftManifest.files.map((file: string) => join('server', file))
