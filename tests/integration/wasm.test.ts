@@ -3,7 +3,14 @@ import { platform } from 'node:process'
 import { v4 } from 'uuid'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
-import { createFixture, invokeEdgeFunction, invokeFunction, runPlugin } from '../utils/fixture.js'
+import {
+  createFixture,
+  EDGE_MIDDLEWARE_FUNCTION_NAME,
+  EDGE_MIDDLEWARE_SRC_FUNCTION_NAME,
+  invokeEdgeFunction,
+  invokeFunction,
+  runPlugin,
+} from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
 import { LocalServer } from '../utils/local-server.js'
 
@@ -23,8 +30,8 @@ beforeEach<FixtureTestContext>(async (ctx) => {
 })
 
 describe.each([
-  { fixture: 'wasm', edgeHandlerFunction: '___netlify-edge-handler-middleware' },
-  { fixture: 'wasm-src', edgeHandlerFunction: '___netlify-edge-handler-src-middleware' },
+  { fixture: 'wasm', edgeHandlerFunction: EDGE_MIDDLEWARE_FUNCTION_NAME },
+  { fixture: 'wasm-src', edgeHandlerFunction: EDGE_MIDDLEWARE_SRC_FUNCTION_NAME },
 ])('$fixture', ({ fixture, edgeHandlerFunction }) => {
   beforeEach<FixtureTestContext>(async (ctx) => {
     // set for each test a new deployID and siteID

@@ -1,9 +1,16 @@
 import { v4 } from 'uuid'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
-import { createFixture, invokeEdgeFunction, runPlugin } from '../utils/fixture.js'
+import {
+  createFixture,
+  EDGE_MIDDLEWARE_FUNCTION_NAME,
+  EDGE_MIDDLEWARE_SRC_FUNCTION_NAME,
+  invokeEdgeFunction,
+  runPlugin,
+} from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
 import { LocalServer } from '../utils/local-server.js'
+import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
@@ -29,7 +36,7 @@ test<FixtureTestContext>('should add request/response headers', async (ctx) => {
   ctx.cleanup?.push(() => origin.stop())
 
   const response = await invokeEdgeFunction(ctx, {
-    functions: ['___netlify-edge-handler-middleware'],
+    functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
     origin,
     url: '/test/next',
   })
@@ -57,7 +64,7 @@ test<FixtureTestContext>('should add request/response headers when using src dir
   ctx.cleanup?.push(() => origin.stop())
 
   const response = await invokeEdgeFunction(ctx, {
-    functions: ['___netlify-edge-handler-src-middleware'],
+    functions: [EDGE_MIDDLEWARE_SRC_FUNCTION_NAME],
     origin,
     url: '/test/next',
   })
@@ -77,7 +84,7 @@ describe('redirect', () => {
 
     const origin = new LocalServer()
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       redirect: 'manual',
       url: '/test/redirect',
@@ -100,7 +107,7 @@ describe('redirect', () => {
 
     const origin = new LocalServer()
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       redirect: 'manual',
       url: '/test/redirect-with-headers',
@@ -139,7 +146,7 @@ describe('rewrite', () => {
     ctx.cleanup?.push(() => origin.stop())
 
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/test/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
     })
@@ -166,7 +173,7 @@ describe('rewrite', () => {
     ctx.cleanup?.push(() => origin.stop())
 
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/test/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
       redirect: 'manual',
@@ -195,7 +202,7 @@ describe("aborts middleware execution when the matcher conditions don't match th
     ctx.cleanup?.push(() => origin.stop())
 
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: '/_next/data',
     })
@@ -222,7 +229,7 @@ describe("aborts middleware execution when the matcher conditions don't match th
 
     // Request 1: Middleware should run because we're not sending the header.
     const response1 = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: '/foo',
     })
@@ -237,7 +244,7 @@ describe("aborts middleware execution when the matcher conditions don't match th
       headers: {
         'x-custom-header': 'custom-value',
       },
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: '/foo',
     })
@@ -263,7 +270,7 @@ describe("aborts middleware execution when the matcher conditions don't match th
 
     for (const path of ['/hello', '/en/hello', '/nl/hello', '/nl/about']) {
       const response = await invokeEdgeFunction(ctx, {
-        functions: ['___netlify-edge-handler-middleware'],
+        functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
         origin,
         url: path,
       })
@@ -277,7 +284,7 @@ describe("aborts middleware execution when the matcher conditions don't match th
 
     for (const path of ['/invalid/hello', '/hello/invalid', '/about', '/en/about']) {
       const response = await invokeEdgeFunction(ctx, {
-        functions: ['___netlify-edge-handler-middleware'],
+        functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
         origin,
         url: path,
       })
@@ -298,7 +305,7 @@ describe('should run middleware on data requests', () => {
 
     const origin = new LocalServer()
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       redirect: 'manual',
       url: '/_next/data/dJvEyLV8MW7CBLFf0Ecbk/test/redirect-with-headers.json',
@@ -322,7 +329,7 @@ describe('should run middleware on data requests', () => {
 
     const origin = new LocalServer()
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       redirect: 'manual',
       url: '/_next/data/dJvEyLV8MW7CBLFf0Ecbk/test/redirect-with-headers.json',
@@ -356,7 +363,7 @@ describe('page router', () => {
     })
     ctx.cleanup?.push(() => origin.stop())
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/api/edge-headers`,
     })
@@ -378,7 +385,7 @@ describe('page router', () => {
     })
     ctx.cleanup?.push(() => origin.stop())
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       headers: {
         'x-nextjs-data': '1',
       },
@@ -407,7 +414,7 @@ describe('page router', () => {
     })
     ctx.cleanup?.push(() => origin.stop())
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/_next/static/build-id/_devMiddlewareManifest.json?foo=1`,
     })
@@ -433,7 +440,7 @@ describe('page router', () => {
     })
     ctx.cleanup?.push(() => origin.stop())
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       headers: {
         'x-nextjs-data': '1',
       },
@@ -461,7 +468,7 @@ describe('page router', () => {
     })
     ctx.cleanup?.push(() => origin.stop())
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       headers: {
         'x-nextjs-data': '1',
       },
@@ -490,7 +497,7 @@ describe('page router', () => {
     })
     ctx.cleanup?.push(() => origin.stop())
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/fr/old-home`,
       redirect: 'manual',
@@ -514,7 +521,7 @@ describe('page router', () => {
     })
     ctx.cleanup?.push(() => origin.stop())
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/fr/redirect-to-same-page-but-default-locale`,
       redirect: 'manual',
@@ -539,7 +546,7 @@ describe('page router', () => {
     ctx.cleanup?.push(() => origin.stop())
 
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/json`,
     })
@@ -551,7 +558,7 @@ describe('page router', () => {
     expect(body.nextUrlLocale).toBe('en')
 
     const responseEn = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/en/json`,
     })
@@ -563,7 +570,7 @@ describe('page router', () => {
     expect(bodyEn.nextUrlLocale).toBe('en')
 
     const responseFr = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/fr/json`,
     })
@@ -590,7 +597,7 @@ describe('page router', () => {
     ctx.cleanup?.push(() => origin.stop())
 
     const response = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/json`,
     })
@@ -602,7 +609,7 @@ describe('page router', () => {
     expect(body.nextUrlLocale).toBe('en')
 
     const responseEn = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/en/json`,
     })
@@ -614,7 +621,7 @@ describe('page router', () => {
     expect(bodyEn.nextUrlLocale).toBe('en')
 
     const responseFr = await invokeEdgeFunction(ctx, {
-      functions: ['___netlify-edge-handler-middleware'],
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
       origin,
       url: `/fr/json`,
     })
@@ -626,3 +633,14 @@ describe('page router', () => {
     expect(bodyFr.nextUrlLocale).toBe('fr')
   })
 })
+
+// this is now actually deploying
+// test.skipIf(!nextVersionSatisfies('>=15.2.0'))<FixtureTestContext>(
+//   'should throw an Not Supported error when node middleware is used',
+//   async (ctx) => {
+//     await createFixture('middleware-node', ctx)
+//     await expect(runPlugin(ctx)).rejects.toThrow(
+//       'Only Edge Runtime Middleware is supported. Node.js Middleware is not supported.',
+//     )
+//   },
+// )

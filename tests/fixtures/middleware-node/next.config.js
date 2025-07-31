@@ -4,11 +4,12 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    nodeMiddleware: true,
+  },
   webpack: (config) => {
-    // this is a trigger to generate multiple `.next/server/middleware-[hash].js` files instead of
-    // single `.next/server/middleware.js` file
-    // config.optimization.splitChunks.maxSize = 100_000
-
+    // disable minification for easier inspection of produced build output
+    config.optimization.minimize = false
     return config
   },
 }
