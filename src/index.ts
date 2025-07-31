@@ -52,6 +52,19 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
   await tracer.withActiveSpan('onPreBuild', async () => {
     // Enable Next.js standalone mode at build time
     process.env.NEXT_PRIVATE_STANDALONE = 'true'
+    
+    // Set up skew protection if enabled
+    if (process.env.VERCEL_SKEW_PROTECTION_ENABLED === '1') {
+      // Use Netlify's deploy ID as the deployment ID for Next.js
+      const deployId = process.env.NETLIFY_DEPLOY_ID
+      if (deployId) {
+        process.env.VERCEL_DEPLOYMENT_ID = deployId
+        console.log('[Skew Protection] Enabled with deployment ID:', deployId)
+      } else {
+        console.warn('[Skew Protection] VERCEL_SKEW_PROTECTION_ENABLED is set but NETLIFY_DEPLOY_ID is not available')
+      }
+    }
+    
     const ctx = new PluginContext(options)
     if (options.constants.IS_LOCAL) {
       // Only clear directory if we are running locally as then we might have stale functions from previous
