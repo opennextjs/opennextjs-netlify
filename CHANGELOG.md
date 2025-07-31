@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.12.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.6...v5.12.0) (2025-07-31)
+
+
+### Features
+
+* restore NETLIFY_NEXT_PLUGIN_SKIP ([#3017](https://github.com/opennextjs/opennextjs-netlify/issues/3017)) ([0b51c47](https://github.com/opennextjs/opennextjs-netlify/commit/0b51c4741ee82a230987122c222a14415f65dfd9))
+
 ## [5.11.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.5...v5.11.6) (2025-07-14)
 
 
