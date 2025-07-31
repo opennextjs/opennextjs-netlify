@@ -137,7 +137,7 @@ export class NextDeployInstance extends NextInstance {
 
     const deployResPromise = execa(
       'npx',
-      ['netlify', 'deploy', '--build', '--message', deployTitle ?? '', '--alias', deployAlias],
+      ['netlify', 'deploy', '--message', deployTitle ?? '', '--alias', deployAlias],
       {
         cwd: this.testDir,
         reject: false,
