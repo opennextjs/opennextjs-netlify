@@ -5,7 +5,13 @@ import { setupServer } from 'msw/node'
 import { v4 } from 'uuid'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
-import { createFixture, invokeEdgeFunction, invokeFunction, runPlugin } from '../utils/fixture.js'
+import {
+  createFixture,
+  EDGE_MIDDLEWARE_FUNCTION_NAME,
+  invokeEdgeFunction,
+  invokeFunction,
+  runPlugin,
+} from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
@@ -93,7 +99,7 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.43'))(
       const pathname = '/middleware/test'
 
       const response = await invokeEdgeFunction(ctx, {
-        functions: ['___netlify-edge-handler-middleware'],
+        functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
         url: pathname,
       })
 
