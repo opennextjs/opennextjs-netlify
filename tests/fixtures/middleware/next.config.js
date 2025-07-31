@@ -11,6 +11,8 @@ const nextConfig = {
 
     return config
   },
+  // https://github.com/vercel/next.js/issues/81864
+  outputFileTracingRoot: __dirname,
 }
 
 module.exports = nextConfig

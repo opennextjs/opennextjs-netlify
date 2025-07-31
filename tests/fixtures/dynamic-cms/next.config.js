@@ -9,6 +9,8 @@ const nextConfig = {
     defaultLocale: 'en',
   },
   generateBuildId: () => 'build-id',
+  // https://github.com/vercel/next.js/issues/81864
+  outputFileTracingRoot: __dirname,
 }
 
 module.exports = nextConfig

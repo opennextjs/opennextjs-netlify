@@ -7,4 +7,6 @@ module.exports = {
     locales: ['en', 'fr'],
     defaultLocale: 'en',
   },
+  // https://github.com/vercel/next.js/issues/81864
+  outputFileTracingRoot: __dirname,
 }
