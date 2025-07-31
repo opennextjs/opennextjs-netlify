@@ -38,33 +38,32 @@ export async function vendorDeno({
   }
 
   console.log(`📦 Vendoring Deno modules for '${vendorSource}' into '${vendorDest}'...`)
-  // --output=${vendorDest}
-  await execaCommand(`deno vendor ${vendorSource}  --force`, {
+  await execaCommand(`deno --allow-import ${vendorSource}`, {
     cwd,
   })
 
-  if (wasmFilesToDownload.length !== 0) {
-    console.log(`⬇️ Downloading wasm files...`)
+  // if (wasmFilesToDownload.length !== 0) {
+  //   console.log(`⬇️ Downloading wasm files...`)
 
-    // deno vendor doesn't work well with wasm files
-    // see https://github.com/denoland/deno/issues/14123
-    // to workaround this we copy the wasm files manually
-    // (note Deno 2 allows to vendor wasm files, but it also require modules to import them and not fetch and instantiate them
-    // se being able to drop downloading is dependent on implementation of wasm handling in external modules as well)
-    await Promise.all(
-      wasmFilesToDownload.map(async (urlString) => {
-        const url = new URL(urlString)
+  //   // deno vendor doesn't work well with wasm files
+  //   // see https://github.com/denoland/deno/issues/14123
+  //   // to workaround this we copy the wasm files manually
+  //   // (note Deno 2 allows to vendor wasm files, but it also require modules to import them and not fetch and instantiate them
+  //   // so being able to drop downloading is dependent on implementation of wasm handling in external modules as well)
+  //   await Promise.all(
+  //     wasmFilesToDownload.map(async (urlString) => {
+  //       const url = new URL(urlString)
 
-        const destination = join(vendorDest, url.hostname, url.pathname)
+  //       const destination = join(vendorDest, url.hostname, url.pathname)
 
-        const res = await fetch(url)
-        if (!res.ok)
-          throw new Error(`Failed to fetch .wasm file to vendor. Response status: ${res.status}`)
-        const fileStream = createWriteStream(destination, { flags: 'wx' })
-        await finished(Readable.fromWeb(res.body).pipe(fileStream))
-      }),
-    )
-  }
+  //       const res = await fetch(url)
+  //       if (!res.ok)
+  //         throw new Error(`Failed to fetch .wasm file to vendor. Response status: ${res.status}`)
+  //       const fileStream = createWriteStream(destination, { flags: 'wx' })
+  //       await finished(Readable.fromWeb(res.body).pipe(fileStream))
+  //     }),
+  //   )
+  // }
 
   console.log(`✅ Vendored Deno modules for '${vendorSource}' into '${vendorDest}'`)
 }
