@@ -8,11 +8,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: v2.x.x
+          deno-version: v2.2.4
+
       - name: Vendor Deno modules
         run: deno --allow-import edge-runtime/vendor.ts
+
       - name: Test
         run: deno test -A edge-runtime/

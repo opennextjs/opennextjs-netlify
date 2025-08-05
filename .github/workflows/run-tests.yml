@@ -151,7 +151,7 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/edge-bundler/blob/e55f825bd985d3c92e21d1b765d71e70d5628fba/node/bridge.ts#L17
-          deno-version: v2.3.1
+          deno-version: v2.2.4
       - name: 'Install dependencies'
         run: npm ci
       - name: 'Build'
