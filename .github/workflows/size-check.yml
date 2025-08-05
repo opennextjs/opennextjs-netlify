@@ -31,7 +31,7 @@ jobs:
         run: npm ci
 
       - name: Package size report
-        uses: pkg-size/action@v1
+        uses: pieh/pkg-size-action@develop
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
