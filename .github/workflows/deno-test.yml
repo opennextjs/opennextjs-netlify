@@ -25,7 +25,7 @@ jobs:
         run: npm ci
 
       - name: Vendor Deno modules
-        run: deno --allow-import edge-runtime/vendor.ts
+        run: deno --allow-import --vendor edge-runtime/vendor.ts
 
       - name: Test
         run: deno test -A edge-runtime/

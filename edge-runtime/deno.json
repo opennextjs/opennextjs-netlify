@@ -6,6 +6,5 @@
   },
   "imports": {
     "@netlify/edge-functions": "https://edge.netlify.com/v1/index.ts"
-  },
-  "vendor": true
+  }
 }

@@ -34,11 +34,11 @@ export async function vendorDeno({
   if (initEmptyDenoJson) {
     const denoJsonPath = join(cwd, 'deno.json')
     console.log(`🧹 Generating clean '${denoJsonPath}`)
-    await writeFile(denoJsonPath, '{ "vendor": true }')
+    await writeFile(denoJsonPath, '{}')
   }
 
   console.log(`📦 Vendoring Deno modules for '${vendorSource}' into '${vendorDest}'...`)
-  await execaCommand(`deno --allow-import ${vendorSource}`, {
+  await execaCommand(`deno --allow-import --vendor ${vendorSource}`, {
     cwd,
   })
 

@@ -1,7 +1,7 @@
 import type { Context } from '@netlify/edge-functions'
 
-import type { ElementHandlers } from 'https://deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
-import { getCookies } from 'https://deno.land/x/std@0.175.0/http/cookie.ts'
+import type { ElementHandlers } from '../vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
+import { getCookies } from '../vendor/deno.land/std@0.175.0/http/cookie.ts'
 
 type NextDataTransform = <T>(data: T) => T
 
