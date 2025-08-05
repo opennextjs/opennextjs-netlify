@@ -1,8 +1,5 @@
 import type { Context } from '@netlify/edge-functions'
-import {
-  HTMLRewriter,
-  type TextChunk,
-} from '../../vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
+import { HTMLRewriter, type TextChunk } from 'https://deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
 
 import { updateModifiedHeaders } from './headers.ts'
 import type { StructuredLogger } from './logging.ts'
