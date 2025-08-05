@@ -49,7 +49,7 @@ export async function vendorDeno({
     // see https://github.com/denoland/deno/issues/14123
     // to workaround this we copy the wasm files manually
     // (note Deno 2 allows to vendor wasm files, but it also require modules to import them and not fetch and instantiate them
-    // se being able to drop downloading is dependent on implementation of wasm handling in external modules as well)
+    // so being able to drop downloading is dependent on implementation of wasm handling in external modules as well)
     await Promise.all(
       wasmFilesToDownload.map(async (urlString) => {
         const url = new URL(urlString)
