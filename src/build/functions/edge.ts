@@ -214,9 +214,9 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
     const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
     // const destDir = join(ctx.edgeFunctionsDir, getHandlerName({ name }))
 
-    const fakeNodeModuleName = 'fake-module-with-middleware'
+    // const fakeNodeModuleName = 'fake-module-with-middleware'
 
-    const fakeNodeModulePath = ctx.resolveFromPackagePath(join('node_modules', fakeNodeModuleName))
+    // const fakeNodeModulePath = ctx.resolveFromPackagePath(join('node_modules', fakeNodeModuleName))
 
     const nftFilesPath = join(process.cwd(), ctx.nextDistDir, nft)
     const nftManifest = JSON.parse(await readFile(nftFilesPath, 'utf8'))
@@ -246,47 +246,53 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
       prefixPath += `nested-${nestedIndex}/`
     }
 
+    let virtualModules = ''
     for (const file of files) {
       const srcPath = join(srcDir, file)
-      const destPath = join(fakeNodeModulePath, prefixPath, file)
 
-      await mkdir(dirname(destPath), { recursive: true })
+      const content = await readFile(srcPath, 'utf8')
 
-      if (file === entry) {
-        const content = await readFile(srcPath, 'utf8')
-        await writeFile(
-          destPath,
-          // Next.js needs to be set on global even if it's possible to just require it
-          // so somewhat similar to existing shim we have for edge runtime
-          `globalThis.AsyncLocalStorage = require('node:async_hooks').AsyncLocalStorage;\n${content}`,
-        )
-      } else {
-        await cp(srcPath, destPath, { force: true })
-      }
+      virtualModules += `virtualModules.set(${JSON.stringify(join(prefixPath, file))}, ${JSON.stringify(content)});\n`
+
+      // const destPath = join(fakeNodeModulePath, prefixPath, file)
+
+      // await mkdir(dirname(destPath), { recursive: true })
+
+      // if (file === entry) {
+      //   const content = await readFile(srcPath, 'utf8')
+      //   await writeFile(
+      //     destPath,
+      //     // Next.js needs to be set on global even if it's possible to just require it
+      //     // so somewhat similar to existing shim we have for edge runtime
+      //     `globalThis.AsyncLocalStorage = require('node:async_hooks').AsyncLocalStorage;\n${content}`,
+      //   )
+      // } else {
+      //   await cp(srcPath, destPath, { force: true })
+      // }
     }
 
-    await writeFile(join(fakeNodeModulePath, 'package.json'), JSON.stringify({ type: 'commonjs' }))
+    // await writeFile(join(fakeNodeModulePath, 'package.json'), JSON.stringify({ type: 'commonjs' }))
 
     // there is `/chunks/**/*` require coming from webpack-runtime that fails esbuild due to nothing matching,
     // so this ensure something does
-    const dummyChunkPath = join(fakeNodeModulePath, prefixPath, 'server', 'chunks', 'dummy.js')
-    await mkdir(dirname(dummyChunkPath), { recursive: true })
-    await writeFile(dummyChunkPath, '')
+    // const dummyChunkPath = join(fakeNodeModulePath, prefixPath, 'server', 'chunks', 'dummy.js')
+    // await mkdir(dirname(dummyChunkPath), { recursive: true })
+    // await writeFile(dummyChunkPath, '')
 
     // there is also `@opentelemetry/api` require that fails esbuild due to nothing matching,
     // next is try/catching it and fallback to bundled version of otel package in case of errors
-    const otelApiPath = join(
-      fakeNodeModulePath,
-      'node_modules',
-      '@opentelemetry',
-      'api',
-      'index.js',
-    )
-    await mkdir(dirname(otelApiPath), { recursive: true })
-    await writeFile(
-      otelApiPath,
-      `throw new Error('this is dummy to satisfy esbuild used for npm compat using fake module')`,
-    )
+    // const otelApiPath = join(
+    //   fakeNodeModulePath,
+    //   'node_modules',
+    //   '@opentelemetry',
+    //   'api',
+    //   'index.js',
+    // )
+    // await mkdir(dirname(otelApiPath), { recursive: true })
+    // await writeFile(
+    //   otelApiPath,
+    //   `throw new Error('this is dummy to satisfy esbuild used for npm compat using fake module')`,
+    // )
 
     // await writeHandlerFile(ctx, definition)
 
@@ -333,11 +339,23 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
     await writeFile(
       join(handlerDirectory, `${handlerName}.js`),
       `
+    import { createRequire } from "node:module";
     import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
     import { handleMiddleware } from './edge-runtime/middleware.ts';
+    import { registerCJSModules } from "./edge-runtime/lib/cjs.ts";
+    import { AsyncLocalStorage } from 'node:async_hooks';
 
-    import * as handlerMod from '${fakeNodeModuleName}/${prefixPath}${entry}';
+    globalThis.AsyncLocalStorage = AsyncLocalStorage;
 
+    // needed for path.relative and path.resolve to work
+    Deno.cwd = () => ''
+
+    const virtualModules = new Map();
+    ${virtualModules}
+    registerCJSModules(import.meta.url, virtualModules);
+
+    const require = createRequire(import.meta.url);
+    const handlerMod = require("./${prefixPath}/${entry}");
     const handler = handlerMod.default || handlerMod;
 
     await htmlRewriterInit({ module_or_path: Uint8Array.from(${JSON.stringify([
