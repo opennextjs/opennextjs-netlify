@@ -70,6 +70,15 @@ export const getBlobEntries = async (ctx: FixtureTestContext) => {
   return blobs
 }
 
+export const getFrameworksAPIBlobEntries = async (ctx: FixtureTestContext) => {
+  const blobDir = join(ctx.cwd, '.netlify', 'v1', 'blobs', 'deploy')
+  const files = await glob('**/*', {
+    dot: true,
+    cwd: blobDir,
+  })
+  return files.map((key) => ({ key, etag: '', last_modified: '', size: 0 }))
+}
+
 export function getBlobServerGets(ctx: FixtureTestContext, predicate?: (key: string) => boolean) {
   const isString = (arg: unknown): arg is string => typeof arg === 'string'
   return ctx.blobServerGetSpy.mock.calls

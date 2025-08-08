@@ -16,6 +16,13 @@ import type { PagesManifest } from 'next/dist/build/webpack/plugins/pages-manife
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import { satisfies } from 'semver'
 
+import {
+  getFrameworksAPIBlobsDir,
+  getFrameworksAPIEdgeFunctionsDir,
+  getFrameworksAPIFunctionsDir,
+  shouldUseFrameworksAPI,
+} from './helpers/deployment.js'
+
 const MODULE_DIR = fileURLToPath(new URL('.', import.meta.url))
 const PLUGIN_DIR = join(MODULE_DIR, '../..')
 const DEFAULT_PUBLISH_DIR = '.next'
@@ -142,11 +149,19 @@ export class PluginContext {
    * default: `.netlify/blobs/deploy`
    */
   get blobDir(): string {
+    if (this.shouldUseFrameworksAPI) {
+      return this.resolveFromPackagePath(getFrameworksAPIBlobsDir())
+    }
+
     if (this.useRegionalBlobs) {
       return this.resolveFromPackagePath('.netlify/deploy/v1/blobs/deploy')
     }
 
     return this.resolveFromPackagePath('.netlify/blobs/deploy')
+  }
+
+  get shouldUseFrameworksAPI(): boolean {
+    return shouldUseFrameworksAPI(this.buildVersion)
   }
 
   get buildVersion(): string {
@@ -164,6 +179,9 @@ export class PluginContext {
    * `.netlify/functions-internal`
    */
   get serverFunctionsDir(): string {
+    if (this.shouldUseFrameworksAPI) {
+      return this.resolveFromPackagePath(getFrameworksAPIFunctionsDir())
+    }
     return this.resolveFromPackagePath('.netlify/functions-internal')
   }
 
@@ -195,6 +213,9 @@ export class PluginContext {
    * `.netlify/edge-functions`
    */
   get edgeFunctionsDir(): string {
+    if (this.shouldUseFrameworksAPI) {
+      return this.resolveFromPackagePath(getFrameworksAPIEdgeFunctionsDir())
+    }
     return this.resolveFromPackagePath('.netlify/edge-functions')
   }
 

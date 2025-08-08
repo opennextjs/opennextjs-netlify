@@ -8,11 +8,6 @@ import { pathToRegexp } from 'path-to-regexp'
 
 import { EDGE_HANDLER_NAME, PluginContext } from '../plugin-context.js'
 
-const writeEdgeManifest = async (ctx: PluginContext, manifest: Manifest) => {
-  await mkdir(ctx.edgeFunctionsDir, { recursive: true })
-  await writeFile(join(ctx.edgeFunctionsDir, 'manifest.json'), JSON.stringify(manifest, null, 2))
-}
-
 const copyRuntime = async (ctx: PluginContext, handlerDirectory: string): Promise<void> => {
   const files = await glob('edge-runtime/**/*', {
     cwd: ctx.pluginDir,
@@ -63,7 +58,12 @@ const augmentMatchers = (
   })
 }
 
-const writeHandlerFile = async (ctx: PluginContext, { matchers, name }: NextDefinition) => {
+const writeHandlerFile = async (
+  ctx: PluginContext,
+  definition: NextDefinition,
+  { isFrameworksAPI }: { isFrameworksAPI: boolean },
+) => {
+  const { name, page } = definition
   const nextConfig = ctx.buildConfig
   const handlerName = getHandlerName({ name })
   const handlerDirectory = join(ctx.edgeFunctionsDir, handlerName)
@@ -75,7 +75,12 @@ const writeHandlerFile = async (ctx: PluginContext, { matchers, name }: NextDefi
 
   // Writing a file with the matchers that should trigger this function. We'll
   // read this file from the function at runtime.
-  await writeFile(join(handlerRuntimeDirectory, 'matchers.json'), JSON.stringify(matchers))
+  if (!isFrameworksAPI) {
+    await writeFile(
+      join(handlerRuntimeDirectory, 'matchers.json'),
+      JSON.stringify(definition.matchers),
+    )
+  }
 
   // The config is needed by the edge function to match and normalize URLs. To
   // avoid shipping and parsing a large file at runtime, let's strip it down to
@@ -99,22 +104,37 @@ const writeHandlerFile = async (ctx: PluginContext, { matchers, name }: NextDefi
     ),
   )
 
+  let handlerFileContents = `
+  import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
+  import { handleMiddleware } from './edge-runtime/middleware.ts';
+  import handler from './server/${name}.js';
+
+  await htmlRewriterInit({ module_or_path: Uint8Array.from(${JSON.stringify([
+    ...htmlRewriterWasm,
+  ])}) });
+
+  export default (req, context) => handleMiddleware(req, context, handler);
+  `
+
+  if (isFrameworksAPI) {
+    const augmentedMatchers = augmentMatchers(definition.matchers, ctx)
+
+    const config = {
+      path: augmentedMatchers.map((matcher) => matcher.regexp),
+      // TODO: this is not correct, we need to handle excluded paths
+      excludedPath: [],
+      name: name.endsWith('middleware')
+        ? 'Next.js Middleware Handler'
+        : `Next.js Edge Handler: ${page}`,
+      generator: `${ctx.pluginName}@${ctx.pluginVersion}`,
+      cache: name.endsWith('middleware') ? undefined : 'manual',
+    }
+    handlerFileContents += `\nexport const config = ${JSON.stringify(config, null, 2)}`
+  }
+
   // Writing the function entry file. It wraps the middleware code with the
   // compatibility layer mentioned above.
-  await writeFile(
-    join(handlerDirectory, `${handlerName}.js`),
-    `
-    import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
-    import { handleMiddleware } from './edge-runtime/middleware.ts';
-    import handler from './server/${name}.js';
-
-    await htmlRewriterInit({ module_or_path: Uint8Array.from(${JSON.stringify([
-      ...htmlRewriterWasm,
-    ])}) });
-
-    export default (req, context) => handleMiddleware(req, context, handler);
-    `,
-  )
+  await writeFile(join(handlerDirectory, `${handlerName}.js`), handlerFileContents)
 }
 
 const copyHandlerDependencies = async (
@@ -161,33 +181,17 @@ const copyHandlerDependencies = async (
   await writeFile(outputFile, parts.join('\n'))
 }
 
-const createEdgeHandler = async (ctx: PluginContext, definition: NextDefinition): Promise<void> => {
+const createEdgeHandler = async (
+  ctx: PluginContext,
+  definition: NextDefinition,
+  { isFrameworksAPI }: { isFrameworksAPI: boolean },
+): Promise<void> => {
   await copyHandlerDependencies(ctx, definition)
-  await writeHandlerFile(ctx, definition)
+  await writeHandlerFile(ctx, definition, { isFrameworksAPI })
 }
 
 const getHandlerName = ({ name }: Pick<NextDefinition, 'name'>): string =>
   `${EDGE_HANDLER_NAME}-${name.replace(/\W/g, '-')}`
-
-const buildHandlerDefinition = (
-  ctx: PluginContext,
-  { name, matchers, page }: NextDefinition,
-): Array<ManifestFunction> => {
-  const functionHandlerName = getHandlerName({ name })
-  const functionName = name.endsWith('middleware')
-    ? 'Next.js Middleware Handler'
-    : `Next.js Edge Handler: ${page}`
-  const cache = name.endsWith('middleware') ? undefined : ('manual' as const)
-  const generator = `${ctx.pluginName}@${ctx.pluginVersion}`
-
-  return augmentMatchers(matchers, ctx).map((matcher) => ({
-    function: functionHandlerName,
-    name: functionName,
-    pattern: matcher.regexp,
-    cache,
-    generator,
-  }))
-}
 
 export const clearStaleEdgeHandlers = async (ctx: PluginContext) => {
   await rm(ctx.edgeFunctionsDir, { recursive: true, force: true })
@@ -196,12 +200,36 @@ export const clearStaleEdgeHandlers = async (ctx: PluginContext) => {
 export const createEdgeHandlers = async (ctx: PluginContext) => {
   const nextManifest = await ctx.getMiddlewareManifest()
   const nextDefinitions = [...Object.values(nextManifest.middleware)]
-  await Promise.all(nextDefinitions.map((def) => createEdgeHandler(ctx, def)))
+  const isFrameworksAPI = ctx.shouldUseFrameworksAPI
 
-  const netlifyDefinitions = nextDefinitions.flatMap((def) => buildHandlerDefinition(ctx, def))
-  const netlifyManifest: Manifest = {
-    version: 1,
-    functions: netlifyDefinitions,
+  await Promise.all(nextDefinitions.map((def) => createEdgeHandler(ctx, def, { isFrameworksAPI })))
+
+  if (!isFrameworksAPI) {
+    const netlifyDefinitions = nextDefinitions.flatMap((def) => {
+      const { name, matchers, page } = def
+      const functionHandlerName = getHandlerName({ name })
+      const functionName = name.endsWith('middleware')
+        ? 'Next.js Middleware Handler'
+        : `Next.js Edge Handler: ${page}`
+      const cache = name.endsWith('middleware') ? undefined : ('manual' as const)
+      const generator = `${ctx.pluginName}@${ctx.pluginVersion}`
+
+      return augmentMatchers(matchers, ctx).map((matcher) => ({
+        function: functionHandlerName,
+        name: functionName,
+        pattern: matcher.regexp,
+        cache,
+        generator,
+      }))
+    })
+    const netlifyManifest: Manifest = {
+      version: 1,
+      functions: netlifyDefinitions,
+    }
+    await mkdir(ctx.edgeFunctionsDir, { recursive: true })
+    await writeFile(
+      join(ctx.edgeFunctionsDir, 'manifest.json'),
+      JSON.stringify(netlifyManifest, null, 2),
+    )
   }
-  await writeEdgeManifest(ctx, netlifyManifest)
 }

@@ -76,24 +76,6 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
   })
 }
 
-const writeHandlerManifest = async (ctx: PluginContext) => {
-  await writeFile(
-    join(ctx.serverHandlerRootDir, `${SERVER_HANDLER_NAME}.json`),
-    JSON.stringify({
-      config: {
-        name: 'Next.js Server Handler',
-        generator: `${ctx.pluginName}@${ctx.pluginVersion}`,
-        nodeBundler: 'none',
-        // the folders can vary in monorepos based on the folder structure of the user so we have to glob all
-        includedFiles: ['**'],
-        includedFilesBasePath: ctx.serverHandlerRootDir,
-      },
-      version: 1,
-    }),
-    'utf-8',
-  )
-}
-
 const applyTemplateVariables = (template: string, variables: Record<string, string>) => {
   return Object.entries(variables).reduce((acc, [key, value]) => {
     return acc.replaceAll(key, value)
@@ -107,6 +89,23 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
   const templateVariables: Record<string, string> = {
     '{{useRegionalBlobs}}': ctx.useRegionalBlobs.toString(),
   }
+
+  if (ctx.shouldUseFrameworksAPI) {
+    const includedFiles = [
+      posixJoin(relative(process.cwd(), ctx.serverHandlerRootDir), '**'),
+      '!**/node_modules/@aws-sdk/client-s3/dist-es/runtimeConfig.browser.js',
+      '!**/node_modules/@aws-sdk/client-s3/dist-es/runtimeConfig.shared.js',
+      '!**/node_modules/@aws-sdk/client-s3/dist-es/runtimeConfig.js',
+    ]
+    templateVariables[
+      '{{handlerConfig}}'
+    ] = `export const config = { name: "Next.js Server Handler", generator: "${
+      ctx.pluginName
+    }@${ctx.pluginVersion}", includedFiles: ${JSON.stringify(includedFiles)}, nodeBundler: "none" };`
+  } else {
+    templateVariables['{{handlerConfig}}'] = ''
+  }
+
   // In this case it is a monorepo and we need to use a own template for it
   // as we have to change the process working directory
   if (ctx.relativeAppDir.length !== 0) {
@@ -143,7 +142,6 @@ export const createServerHandler = async (ctx: PluginContext) => {
     await copyNextServerCode(ctx)
     await copyNextDependencies(ctx)
     await copyHandlerDependencies(ctx)
-    await writeHandlerManifest(ctx)
     await writeHandlerFile(ctx)
 
     await verifyHandlerDirStructure(ctx)
