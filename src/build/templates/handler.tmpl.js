@@ -40,7 +40,4 @@ export default async function handler(req, context) {
   return handlerResponse
 }
 
-export const config = {
-  path: '/*',
-  preferStatic: true,
-}
+{{handlerConfig}}
