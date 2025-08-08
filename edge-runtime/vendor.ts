@@ -14,3 +14,11 @@ import 'https://deno.land/x/path_to_regexp@v6.2.1/index.ts'
 import 'https://deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
 
 import 'https://v1-7-0--edge-utils.netlify.app/logger/mod.ts'
+
+// Types
+import 'https://deno.land/std@0.175.0/node/_global.d.ts'
+import 'https://deno.land/std@0.175.0/node/_events.d.ts'
+import 'https://deno.land/std@0.175.0/node/_stream.d.ts'
+import 'https://deno.land/std@0.175.0/node/internal/buffer.d.ts'
+import 'https://deno.land/std@0.175.0/types.d.ts'
+import 'https://deno.land/x/htmlrewriter@v1.0.0/src/types.d.ts'
