@@ -34,7 +34,10 @@ import {
   getBlobEntries,
   startMockBlobStore,
 } from '../utils/helpers.js'
-import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
+import {
+  nextVersionSatisfies,
+  shouldHaveAppRouterNotFoundInPrerenderManifest,
+} from '../utils/next-version-helpers.mjs'
 
 const mockedCp = cp as Mock<(typeof import('node:fs/promises'))['cp']>
 
@@ -95,26 +98,29 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
   await runPlugin(ctx)
   // check if the blob entries where successful set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual([
-    '/404',
-    '/api/cached-permanent',
-    '/api/cached-revalidate',
-    '/config-redirect',
-    '/config-redirect/dest',
-    '/config-rewrite',
-    '/config-rewrite/dest',
-    '/image/local',
-    '/image/migration-from-v4-runtime',
-    '/image/remote-domain',
-    '/image/remote-pattern-1',
-    '/image/remote-pattern-2',
-    '/index',
-    '/other',
-    '/route-resolves-to-not-found',
-    '404.html',
-    '500.html',
-    'fully-static.html',
-  ])
+  expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
+    [
+      '/404',
+      shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+      '/api/cached-permanent',
+      '/api/cached-revalidate',
+      '/config-redirect',
+      '/config-redirect/dest',
+      '/config-rewrite',
+      '/config-rewrite/dest',
+      '/image/local',
+      '/image/migration-from-v4-runtime',
+      '/image/remote-domain',
+      '/image/remote-pattern-1',
+      '/image/remote-pattern-2',
+      '/index',
+      '/other',
+      '/route-resolves-to-not-found',
+      '404.html',
+      '500.html',
+      'fully-static.html',
+    ].filter(Boolean),
+  )
 
   // test the function call
   const home = await invokeFunction(ctx)
@@ -385,12 +391,15 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
     await runPlugin(ctx)
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual([
-      '/404',
-      '/index',
-      '404.html',
-      '500.html',
-    ])
+    expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
+      [
+        '/404',
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+        '/index',
+        '404.html',
+        '500.html',
+      ].filter(Boolean),
+    )
 
     // test the function call
     const home = await invokeFunction(ctx)
