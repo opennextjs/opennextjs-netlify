@@ -100,14 +100,14 @@ jobs:
 
     steps:
       - name: checkout Next.js repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: ${{ env.NEXT_REPO }}
           path: ${{ env.next-path }}
           ref: ${{ matrix.version_spec.tag }}
 
       - name: checkout runtime repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ${{ env.runtime-path }}
 
@@ -231,7 +231,7 @@ jobs:
 
     steps:
       - name: checkout runtime repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Deno
         uses: denoland/setup-deno@v1
