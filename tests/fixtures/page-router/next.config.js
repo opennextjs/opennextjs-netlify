@@ -4,6 +4,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  outputFileTracingRoot: __dirname,
   generateBuildId: () => 'build-id',
 }
 

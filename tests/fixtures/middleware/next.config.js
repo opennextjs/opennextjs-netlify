@@ -11,6 +11,7 @@ const nextConfig = {
 
     return config
   },
+  outputFileTracingRoot: __dirname,
 }
 
 module.exports = nextConfig
