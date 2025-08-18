@@ -7,4 +7,5 @@ module.exports = {
     locales: ['en', 'fr'],
     defaultLocale: 'en',
   },
+  outputFileTracingRoot: __dirname,
 }

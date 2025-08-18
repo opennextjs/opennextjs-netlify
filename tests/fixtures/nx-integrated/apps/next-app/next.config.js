@@ -1,3 +1,4 @@
+const { join } = require('node:path')
 const { composePlugins, withNx } = require('@nx/next')
 
 /**
@@ -9,6 +10,7 @@ const nextConfig = {
     // See: https://github.com/gregberge/svgr
     svgr: false,
   },
+  outputFileTracingRoot: join(__dirname, '..', '..'),
 }
 
 const plugins = [
