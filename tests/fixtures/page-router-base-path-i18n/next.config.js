@@ -10,6 +10,7 @@ const nextConfig = {
     locales: ['en', 'fr', 'de'],
     defaultLocale: 'en',
   },
+  outputFileTracingRoot: __dirname,
 }
 
 module.exports = nextConfig

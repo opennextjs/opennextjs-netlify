@@ -1,0 +1,13 @@
+diff --git a/test/lib/e2e-utils/index.ts b/test/lib/e2e-utils/index.ts
+index 182d2b7cc1..18abab2eb6 100644
+--- a/test/lib/e2e-utils/index.ts
++++ b/test/lib/e2e-utils/index.ts
+@@ -5,7 +5,7 @@ import { PHASE_DEVELOPMENT_SERVER } from 'next/constants'
+ import { NextInstance, NextInstanceOpts } from '../next-modes/base'
+ import { NextDevInstance } from '../next-modes/next-dev'
+ import { NextStartInstance } from '../next-modes/next-start'
+-import { NextDeployInstance } from '../next-modes/next-deploy'
++import { NextDeployInstance } from '../next-modes/netlify-deploy'
+ import { shouldUseTurbopack } from '../next-test-utils'
+ 
+ export type { NextInstance }

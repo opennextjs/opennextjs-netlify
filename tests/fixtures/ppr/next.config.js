@@ -7,6 +7,7 @@ const nextConfig = {
   experimental: {
     ppr: true,
   },
+  outputFileTracingRoot: __dirname,
 }
 
 module.exports = nextConfig
