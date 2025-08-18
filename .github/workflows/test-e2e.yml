@@ -146,7 +146,7 @@ jobs:
       - name: patch Next.js
         run: |
           cp ../${{ env.runtime-path }}/tests/netlify-deploy.ts test/lib/next-modes/
-          git apply ../${{ env.runtime-path }}/tests/e2e-utils.patch || git apply ../${{ env.runtime-path }}/tests/e2e-utils-v2.patch
+          git apply ../${{ env.runtime-path }}/tests/e2e-utils.patch || git apply ../${{ env.runtime-path }}/tests/e2e-utils-v2.patch || git apply ../${{ env.runtime-path }}/tests/e2e-utils-v3.patch
         working-directory: ${{ env.next-path }}
 
       - name: install Next.js
