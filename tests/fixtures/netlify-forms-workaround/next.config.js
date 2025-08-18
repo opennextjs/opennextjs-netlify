@@ -5,6 +5,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   generateBuildId: () => 'build-id',
+  outputFileTracingRoot: __dirname,
 }
 
 module.exports = nextConfig
