@@ -15,7 +15,7 @@ export NEXT_TEST_MODE=deploy
 export RUNTIME_DIR=$(pwd)
 cp tests/netlify-deploy.ts ../next.js/test/lib/next-modes/netlify-deploy.ts
 cd ../next.js/
-git apply $RUNTIME_DIR/tests/e2e-utils.patch || git apply $RUNTIME_DIR/tests/e2e-utils-v2.patch
+git apply $RUNTIME_DIR/tests/e2e-utils.patch || git apply $RUNTIME_DIR/tests/e2e-utils-v2.patch || git apply $RUNTIME_DIR/tests/e2e-utils-v3.patch
 node run-tests.js --type e2e --debug --test-pattern $1
 git checkout -- test/lib/e2e-utils.ts
 
