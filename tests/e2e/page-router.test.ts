@@ -158,9 +158,11 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
         const fallbackWasServed =
           useFallback && headers1['cache-status'].includes('"Next.js"; fwd=miss')
         if (!fallbackWasServed) {
-          expect(headers1['netlify-cache-tag']).toBe(`_n_t_${encodeURI(pagePath).toLowerCase()}`)
+          expect(headers1['debug-netlify-cache-tag']).toBe(
+            `_n_t_${encodeURI(pagePath).toLowerCase()}`,
+          )
         }
-        expect(headers1['netlify-cdn-cache-control']).toBe(
+        expect(headers1['debug-netlify-cdn-cache-control']).toBe(
           fallbackWasServed
             ? // fallback should not be cached
               nextVersionSatisfies('>=15.4.0-canary.95')
@@ -199,8 +201,10 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
         const headers1Json = response1Json?.headers() || {}
         expect(response1Json?.status()).toBe(200)
         expect(headers1Json['x-nextjs-cache']).toBeUndefined()
-        expect(headers1Json['netlify-cache-tag']).toBe(`_n_t_${encodeURI(pagePath).toLowerCase()}`)
-        expect(headers1Json['netlify-cdn-cache-control']).toBe(
+        expect(headers1Json['debug-netlify-cache-tag']).toBe(
+          `_n_t_${encodeURI(pagePath).toLowerCase()}`,
+        )
+        expect(headers1Json['debug-netlify-cdn-cache-control']).toBe(
           nextVersionSatisfies('>=15.0.0-canary.187')
             ? 's-maxage=31536000, durable'
             : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -227,7 +231,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
           // as we reuse cached response
           expect(headers2['cache-status']).toMatch(/"Next.js"; hit/m)
         }
-        expect(headers2['netlify-cdn-cache-control']).toBe(
+        expect(headers2['debug-netlify-cdn-cache-control']).toBe(
           nextVersionSatisfies('>=15.0.0-canary.187')
             ? 's-maxage=31536000, durable'
             : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -260,7 +264,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
           // as we reuse cached response
           expect(headers2Json['cache-status']).toMatch(/"Next.js"; hit/m)
         }
-        expect(headers2Json['netlify-cdn-cache-control']).toBe(
+        expect(headers2Json['debug-netlify-cdn-cache-control']).toBe(
           nextVersionSatisfies('>=15.0.0-canary.187')
             ? 's-maxage=31536000, durable'
             : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -317,7 +321,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
         const headers3Json = response3Json?.headers() || {}
         expect(response3Json?.status()).toBe(200)
         expect(headers3Json['x-nextjs-cache']).toBeUndefined()
-        expect(headers3Json['netlify-cdn-cache-control']).toBe(
+        expect(headers3Json['debug-netlify-cdn-cache-control']).toBe(
           nextVersionSatisfies('>=15.0.0-canary.187')
             ? 's-maxage=31536000, durable'
             : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -407,7 +411,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     expect(response1?.headers()['cache-status']).toMatch(
       /"Netlify (Edge|Durable)"; fwd=(uri-miss(; stored)?|miss)/m,
     )
-    expect(response1?.headers()['netlify-cdn-cache-control']).toMatch(
+    expect(response1?.headers()['debug-netlify-cdn-cache-control']).toMatch(
       /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
     )
 
@@ -423,7 +427,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     expect(response2?.headers()['cache-status']).toMatch(
       /("Netlify Edge"; hit; fwd=stale|"Netlify Durable"; hit; ttl=-[0-9]+)/m,
     )
-    expect(response2?.headers()['netlify-cdn-cache-control']).toMatch(
+    expect(response2?.headers()['debug-netlify-cdn-cache-control']).toMatch(
       /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
     )
 
@@ -442,7 +446,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
       // hit, without being followed by ';fwd=stale' for edge or negative TTL for durable, optionally with fwd=stale
       /("Netlify Edge"; hit(?!; fwd=stale)|"Netlify Durable"; hit(?!; ttl=-[0-9]+))/m,
     )
-    expect(response3?.headers()['netlify-cdn-cache-control']).toMatch(
+    expect(response3?.headers()['debug-netlify-cdn-cache-control']).toMatch(
       /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
     )
 
@@ -471,7 +475,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that
     // it would not
     const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
-    expect(headers['netlify-cdn-cache-control']).toBe(
+    expect(headers['debug-netlify-cdn-cache-control']).toBe(
       (shouldHavePrivateDirective ? 'private, ' : '') +
         'no-cache, no-store, max-age=0, must-revalidate, durable',
     )
@@ -491,7 +495,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
 
     expect(await page.textContent('p')).toBe('Custom 404 page')
 
-    expect(headers['netlify-cdn-cache-control']).toBe(
+    expect(headers['debug-netlify-cdn-cache-control']).toBe(
       nextVersionSatisfies('>=15.0.0-canary.187')
         ? 's-maxage=31536000, durable'
         : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -538,7 +542,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const response = await page.goto(new URL('static/fully-static', pageRouter.url).href)
     const headers = response?.headers() || {}
 
-    expect(headers['netlify-cdn-cache-control']).toBe('max-age=31536000, durable')
+    expect(headers['debug-netlify-cdn-cache-control']).toBe('max-age=31536000, durable')
     expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
   })
 
@@ -606,7 +610,9 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     )
 
     expect(response?.status()).toEqual(200)
-    expect(response?.headers()['netlify-cdn-cache-control'] ?? '').not.toMatch(/(s-maxage|max-age)/)
+    expect(response?.headers()['debug-netlify-cdn-cache-control'] ?? '').not.toMatch(
+      /(s-maxage|max-age)/,
+    )
   })
 })
 
@@ -726,11 +732,11 @@ test.describe('Page Router with basePath and i18n', () => {
             useFallback && headers1ImplicitLocale['cache-status'].includes('"Next.js"; fwd=miss')
 
           if (!fallbackWasServedImplicitLocale) {
-            expect(headers1ImplicitLocale['netlify-cache-tag']).toBe(
+            expect(headers1ImplicitLocale['debug-netlify-cache-tag']).toBe(
               `_n_t_/en${encodeURI(pagePath).toLowerCase()}`,
             )
           }
-          expect(headers1ImplicitLocale['netlify-cdn-cache-control']).toBe(
+          expect(headers1ImplicitLocale['debug-netlify-cdn-cache-control']).toBe(
             fallbackWasServedImplicitLocale
               ? // fallback should not be cached
                 nextVersionSatisfies('>=15.4.0-canary.95')
@@ -770,12 +776,12 @@ test.describe('Page Router with basePath and i18n', () => {
 
           const fallbackWasServedExplicitLocale =
             useFallback && headers1ExplicitLocale['cache-status'].includes('"Next.js"; fwd=miss')
-          expect(headers1ExplicitLocale['netlify-cache-tag']).toBe(
+          expect(headers1ExplicitLocale['debug-netlify-cache-tag']).toBe(
             fallbackWasServedExplicitLocale
               ? undefined
               : `_n_t_/en${encodeURI(pagePath).toLowerCase()}`,
           )
-          expect(headers1ExplicitLocale['netlify-cdn-cache-control']).toBe(
+          expect(headers1ExplicitLocale['debug-netlify-cdn-cache-control']).toBe(
             fallbackWasServedExplicitLocale
               ? undefined
               : nextVersionSatisfies('>=15.0.0-canary.187')
@@ -815,10 +821,10 @@ test.describe('Page Router with basePath and i18n', () => {
           const headers1Json = response1Json?.headers() || {}
           expect(response1Json?.status()).toBe(200)
           expect(headers1Json['x-nextjs-cache']).toBeUndefined()
-          expect(headers1Json['netlify-cache-tag']).toBe(
+          expect(headers1Json['debug-netlify-cache-tag']).toBe(
             `_n_t_/en${encodeURI(pagePath).toLowerCase()}`,
           )
-          expect(headers1Json['netlify-cdn-cache-control']).toBe(
+          expect(headers1Json['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -848,7 +854,7 @@ test.describe('Page Router with basePath and i18n', () => {
             // as we reuse cached response
             expect(headers2ImplicitLocale['cache-status']).toMatch(/"Next.js"; hit/m)
           }
-          expect(headers2ImplicitLocale['netlify-cdn-cache-control']).toBe(
+          expect(headers2ImplicitLocale['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -880,7 +886,7 @@ test.describe('Page Router with basePath and i18n', () => {
             // as we reuse cached response
             expect(headers2ExplicitLocale['cache-status']).toMatch(/"Next.js"; hit/m)
           }
-          expect(headers2ExplicitLocale['netlify-cdn-cache-control']).toBe(
+          expect(headers2ExplicitLocale['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -913,7 +919,7 @@ test.describe('Page Router with basePath and i18n', () => {
             // as we reuse cached response
             expect(headers2Json['cache-status']).toMatch(/"Next.js"; hit/m)
           }
-          expect(headers2Json['netlify-cdn-cache-control']).toBe(
+          expect(headers2Json['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -1009,7 +1015,7 @@ test.describe('Page Router with basePath and i18n', () => {
             // as we reuse cached response
             expect(headers3Json['cache-status']).toMatch(/"Next.js"; hit/m)
           }
-          expect(headers3Json['netlify-cdn-cache-control']).toBe(
+          expect(headers3Json['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -1100,7 +1106,7 @@ test.describe('Page Router with basePath and i18n', () => {
           const headers4Json = response4Json?.headers() || {}
           expect(response4Json?.status()).toBe(200)
           expect(headers4Json['x-nextjs-cache']).toBeUndefined()
-          expect(headers4Json['netlify-cdn-cache-control']).toBe(
+          expect(headers4Json['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -1151,11 +1157,11 @@ test.describe('Page Router with basePath and i18n', () => {
           const fallbackWasServed =
             useFallback && headers1['cache-status'].includes('"Next.js"; fwd=miss')
           if (!fallbackWasServed) {
-            expect(headers1['netlify-cache-tag']).toBe(
+            expect(headers1['debug-netlify-cache-tag']).toBe(
               `_n_t_/de${encodeURI(pagePath).toLowerCase()}`,
             )
           }
-          expect(headers1['netlify-cdn-cache-control']).toBe(
+          expect(headers1['debug-netlify-cdn-cache-control']).toBe(
             fallbackWasServed
               ? // fallback should not be cached
                 nextVersionSatisfies('>=15.4.0-canary.95')
@@ -1195,10 +1201,10 @@ test.describe('Page Router with basePath and i18n', () => {
           const headers1Json = response1Json?.headers() || {}
           expect(response1Json?.status()).toBe(200)
           expect(headers1Json['x-nextjs-cache']).toBeUndefined()
-          expect(headers1Json['netlify-cache-tag']).toBe(
+          expect(headers1Json['debug-netlify-cache-tag']).toBe(
             `_n_t_/de${encodeURI(pagePath).toLowerCase()}`,
           )
-          expect(headers1Json['netlify-cdn-cache-control']).toBe(
+          expect(headers1Json['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -1228,7 +1234,7 @@ test.describe('Page Router with basePath and i18n', () => {
             // as we reuse cached response
             expect(headers2['cache-status']).toMatch(/"Next.js"; hit/m)
           }
-          expect(headers2['netlify-cdn-cache-control']).toBe(
+          expect(headers2['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -1262,7 +1268,7 @@ test.describe('Page Router with basePath and i18n', () => {
             // as we reuse cached response
             expect(headers2Json['cache-status']).toMatch(/"Next.js"; hit/m)
           }
-          expect(headers2Json['netlify-cdn-cache-control']).toBe(
+          expect(headers2Json['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -1331,7 +1337,7 @@ test.describe('Page Router with basePath and i18n', () => {
             // as we reuse cached response
             expect(headers3Json['cache-status']).toMatch(/"Next.js"; hit/m)
           }
-          expect(headers3Json['netlify-cdn-cache-control']).toBe(
+          expect(headers3Json['debug-netlify-cdn-cache-control']).toBe(
             nextVersionSatisfies('>=15.0.0-canary.187')
               ? 's-maxage=31536000, durable'
               : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -1357,7 +1363,7 @@ test.describe('Page Router with basePath and i18n', () => {
     // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
     // after that 404 pages would have `private` directive, before that it would not
     const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
-    expect(headers['netlify-cdn-cache-control']).toBe(
+    expect(headers['debug-netlify-cdn-cache-control']).toBe(
       (shouldHavePrivateDirective ? 'private, ' : '') +
         'no-cache, no-store, max-age=0, must-revalidate, durable',
     )
@@ -1377,7 +1383,7 @@ test.describe('Page Router with basePath and i18n', () => {
 
     expect(await page.textContent('p')).toBe('Custom 404 page')
 
-    expect(headers['netlify-cdn-cache-control']).toBe(
+    expect(headers['debug-netlify-cdn-cache-control']).toBe(
       nextVersionSatisfies('>=15.0.0-canary.187')
         ? 's-maxage=31536000, durable'
         : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
