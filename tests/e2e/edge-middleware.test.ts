@@ -1,32 +1,74 @@
 import { expect, Response } from '@playwright/test'
-import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
+import { hasNodeMiddlewareSupport, nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 import { getImageSize } from 'next/dist/server/image-optimizer.js'
+import type { Fixture } from '../utils/create-e2e-fixture.js'
 
 type ExtendedWindow = Window & {
   didReload?: boolean
 }
 
-test('Runs edge middleware', async ({ page, middleware }) => {
-  await page.goto(`${middleware.url}/test/redirect`)
+for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
+  {
+    expectedRuntime: 'edge-runtime',
+    label: 'Edge runtime middleware',
+    testWithSwitchableMiddlewareRuntime: test.extend<{}, { edgeOrNodeMiddleware: Fixture }>({
+      edgeOrNodeMiddleware: [
+        async ({ middleware }, use) => {
+          await use(middleware)
+        },
+        {
+          scope: 'worker',
+        },
+      ],
+    }),
+  },
+  hasNodeMiddlewareSupport()
+    ? {
+        expectedRuntime: 'node',
+        label: 'Node.js runtime middleware',
+        testWithSwitchableMiddlewareRuntime: test.extend<{}, { edgeOrNodeMiddleware: Fixture }>({
+          edgeOrNodeMiddleware: [
+            async ({ middlewareNode }, use) => {
+              await use(middlewareNode)
+            },
+            {
+              scope: 'worker',
+            },
+          ],
+        }),
+      }
+    : undefined,
+].filter(function isDefined<T>(argument: T | undefined): argument is T {
+  return typeof argument !== 'undefined'
+})) {
+  const test = testWithSwitchableMiddlewareRuntime
 
-  await expect(page).toHaveTitle('Simple Next App')
+  test.describe(label, () => {
+    test('Runs middleware', async ({ page, edgeOrNodeMiddleware }) => {
+      const res = await page.goto(`${edgeOrNodeMiddleware.url}/test/redirect`)
 
-  const h1 = page.locator('h1')
-  await expect(h1).toHaveText('Other')
-})
+      await expect(page).toHaveTitle('Simple Next App')
 
-test('Does not run edge middleware at the origin', async ({ page, middleware }) => {
-  const res = await page.goto(`${middleware.url}/test/next`)
+      const h1 = page.locator('h1')
+      await expect(h1).toHaveText('Other')
+    })
 
-  expect(await res?.headerValue('x-deno')).toBeTruthy()
-  expect(await res?.headerValue('x-node')).toBeNull()
+    test('Does not run middleware at the origin', async ({ page, edgeOrNodeMiddleware }) => {
+      const res = await page.goto(`${edgeOrNodeMiddleware.url}/test/next`)
 
-  await expect(page).toHaveTitle('Simple Next App')
+      expect(await res?.headerValue('x-deno')).toBeTruthy()
+      expect(await res?.headerValue('x-node')).toBeNull()
 
-  const h1 = page.locator('h1')
-  await expect(h1).toHaveText('Message from middleware: hello')
-})
+      await expect(page).toHaveTitle('Simple Next App')
+
+      const h1 = page.locator('h1')
+      await expect(h1).toHaveText('Message from middleware: hello')
+
+      expect(await res?.headerValue('x-runtime')).toEqual(expectedRuntime)
+    })
+  })
+}
 
 test('does not run middleware again for rewrite target', async ({ page, middleware }) => {
   const direct = await page.goto(`${middleware.url}/test/rewrite-target`)

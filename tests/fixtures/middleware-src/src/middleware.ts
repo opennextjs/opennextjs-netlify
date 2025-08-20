@@ -28,5 +28,4 @@ const getResponse = (request: NextRequest) => {
 
 export const config = {
   matcher: '/test/:path*',
-  runtime: 'nodejs',
 }

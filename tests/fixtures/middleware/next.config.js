@@ -1,8 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  distDir: process.env.NEXT_RUNTIME_MIDDLEWARE === 'nodejs' ? '.next-node-middleware' : '.next',
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  experimental: {
+    nodeMiddleware: true,
   },
   webpack: (config) => {
     // this is a trigger to generate multiple `.next/server/middleware-[hash].js` files instead of

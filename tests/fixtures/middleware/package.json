@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstall": "next build",
+    "postinstallz": "npm run build",
     "dev": "next dev",
-    "build": "next build"
+    "build": "node ../../utils/build-variants.mjs"
   },
   "dependencies": {
     "@aws-amplify/adapter-nextjs": "^1.0.18",

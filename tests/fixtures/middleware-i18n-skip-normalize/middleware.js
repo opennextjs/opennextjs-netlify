@@ -89,7 +89,3 @@ export async function middleware(request) {
     })
   }
 }
-
-export const config = {
-  runtime: 'nodejs',
-}

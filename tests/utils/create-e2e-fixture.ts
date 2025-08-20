@@ -314,6 +314,10 @@ async function cleanup(dest: string, deployId?: string): Promise<void> {
   await Promise.allSettled([deleteDeploy(deployId), rm(dest, { recursive: true, force: true })])
 }
 
+function getBuildFixtureVariantCommand(variantName: string) {
+  return `node ${fileURLToPath(new URL(`./build-variants.mjs`, import.meta.url))} ${variantName}`
+}
+
 export const fixtureFactories = {
   simple: () => createE2EFixture('simple'),
   helloWorldTurbopack: () =>
@@ -337,6 +341,11 @@ export const fixtureFactories = {
   pnpm: () => createE2EFixture('pnpm', { packageManger: 'pnpm' }),
   bun: () => createE2EFixture('simple', { packageManger: 'bun' }),
   middleware: () => createE2EFixture('middleware'),
+  middlewareNode: () =>
+    createE2EFixture('middleware', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
   middlewareI18n: () => createE2EFixture('middleware-i18n'),
   middlewareI18nExcludedPaths: () => createE2EFixture('middleware-i18n-excluded-paths'),
   middlewareOg: () => createE2EFixture('middleware-og'),

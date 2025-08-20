@@ -123,7 +123,3 @@ const params = (url) => {
   }
   return result
 }
-
-export const config = {
-  runtime: 'nodejs',
-}

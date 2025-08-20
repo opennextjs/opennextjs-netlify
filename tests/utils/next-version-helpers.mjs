@@ -38,6 +38,10 @@ export function shouldHaveAppRouterNotFoundInPrerenderManifest() {
   return nextVersionSatisfies('>=15.4.2-canary.33') && isNextCanary()
 }
 
+export function hasNodeMiddlewareSupport() {
+  return nextVersionSatisfies('>=15.2.0') && isNextCanary()
+}
+
 /**
  * Check if current next version requires React 19
  * @param {string} version Next version

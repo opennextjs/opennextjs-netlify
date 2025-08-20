@@ -1,0 +1,20 @@
+{
+  "node-middleware": {
+    "files": {
+      "middleware.ts": "middleware-node.ts"
+    },
+    "env": {
+      "NEXT_RUNTIME_MIDDLEWARE": "nodejs"
+    },
+    "test": {
+      "dependencies": {
+        "next": [
+          {
+            "versionConstraint": ">=15.2.0",
+            "canaryOnly": true
+          }
+        ]
+      }
+    }
+  }
+}

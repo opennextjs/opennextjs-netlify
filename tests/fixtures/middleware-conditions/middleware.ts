@@ -23,5 +23,4 @@ export const config = {
       locale: false,
     },
   ],
-  runtime: 'nodejs',
 }

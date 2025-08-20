@@ -5,12 +5,13 @@ import {
   createFixture,
   EDGE_MIDDLEWARE_FUNCTION_NAME,
   EDGE_MIDDLEWARE_SRC_FUNCTION_NAME,
+  NODE_MIDDLEWARE_FUNCTION_NAME,
   invokeEdgeFunction,
   runPlugin,
 } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
 import { LocalServer } from '../utils/local-server.js'
-import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
+import { hasNodeMiddlewareSupport } from '../utils/next-version-helpers.mjs'
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
@@ -21,33 +22,169 @@ beforeEach<FixtureTestContext>(async (ctx) => {
   await startMockBlobStore(ctx)
 })
 
-test<FixtureTestContext>('should add request/response headers', async (ctx) => {
-  await createFixture('middleware', ctx)
-  await runPlugin(ctx)
+for (const { edgeFunctionName, expectedRuntime, label, runPluginConstants } of [
+  {
+    edgeFunctionName: EDGE_MIDDLEWARE_FUNCTION_NAME,
+    expectedRuntime: 'edge-runtime',
+    label: 'Edge runtime middleware',
+  },
+  hasNodeMiddlewareSupport()
+    ? {
+        edgeFunctionName: NODE_MIDDLEWARE_FUNCTION_NAME,
+        expectedRuntime: 'node',
+        label: 'Node.js runtime middleware',
+        runPluginConstants: { PUBLISH_DIR: '.next-node-middleware' },
+      }
+    : undefined,
+].filter(function isDefined<T>(argument: T | undefined): argument is T {
+  return typeof argument !== 'undefined'
+})) {
+  describe(label, () => {
+    test<FixtureTestContext>('should add request/response headers', async (ctx) => {
+      await createFixture('middleware', ctx)
+      await runPlugin(ctx, runPluginConstants)
 
-  const origin = await LocalServer.run(async (req, res) => {
-    expect(req.url).toBe('/test/next')
-    expect(req.headers['x-hello-from-middleware-req']).toBe('hello')
+      const origin = await LocalServer.run(async (req, res) => {
+        expect(req.url).toBe('/test/next')
+        expect(req.headers['x-hello-from-middleware-req']).toBe('hello')
 
-    res.write('Hello from origin!')
-    res.end()
+        res.write('Hello from origin!')
+        res.end()
+      })
+
+      ctx.cleanup?.push(() => origin.stop())
+
+      const response = await invokeEdgeFunction(ctx, {
+        functions: [edgeFunctionName],
+        origin,
+        url: '/test/next',
+      })
+      const text = await response.text()
+
+      expect(text).toBe('Hello from origin!')
+      expect(response.status).toBe(200)
+      expect(
+        response.headers.get('x-hello-from-middleware-res'),
+        'added a response header',
+      ).toEqual('hello')
+      expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      expect(origin.calls).toBe(1)
+    })
+
+    describe('redirect', () => {
+      test<FixtureTestContext>('should return a redirect response', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const origin = new LocalServer()
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionName],
+          origin,
+          redirect: 'manual',
+          url: '/test/redirect',
+        })
+
+        ctx.cleanup?.push(() => origin.stop())
+
+        expect(response.status).toBe(307)
+        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(
+          new URL(response.headers.get('location') as string).pathname,
+          'redirected to the correct path',
+        ).toEqual('/other')
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+        expect(origin.calls).toBe(0)
+      })
+
+      test<FixtureTestContext>('should return a redirect response with additional headers', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const origin = new LocalServer()
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionName],
+          origin,
+          redirect: 'manual',
+          url: '/test/redirect-with-headers',
+        })
+
+        ctx.cleanup?.push(() => origin.stop())
+
+        expect(response.status).toBe(307)
+        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(
+          new URL(response.headers.get('location') as string).pathname,
+          'redirected to the correct path',
+        ).toEqual('/other')
+        expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+        expect(origin.calls).toBe(0)
+      })
+    })
+
+    describe('rewrite', () => {
+      test<FixtureTestContext>('should rewrite to an external URL', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const external = await LocalServer.run(async (req, res) => {
+          const url = new URL(req.url ?? '', 'http://localhost')
+
+          expect(url.pathname).toBe('/some-path')
+          expect(url.searchParams.get('from')).toBe('middleware')
+
+          res.write('Hello from external host!')
+          res.end()
+        })
+        ctx.cleanup?.push(() => external.stop())
+
+        const origin = new LocalServer()
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionName],
+          origin,
+          url: `/test/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
+        })
+
+        expect(await response.text()).toBe('Hello from external host!')
+        expect(response.status).toBe(200)
+        expect(external.calls).toBe(1)
+        expect(origin.calls).toBe(0)
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+
+      test<FixtureTestContext>('rewriting to external URL that redirects should return said redirect', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const external = await LocalServer.run(async (req, res) => {
+          res.writeHead(302, {
+            location: 'http://example.com/redirected',
+          })
+          res.end()
+        })
+        ctx.cleanup?.push(() => external.stop())
+
+        const origin = new LocalServer()
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionName],
+          origin,
+          url: `/test/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
+          redirect: 'manual',
+        })
+
+        expect(await response.text()).toBe('')
+
+        expect(response.status).toBe(302)
+        expect(response.headers.get('location')).toBe('http://example.com/redirected')
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+    })
   })
-
-  ctx.cleanup?.push(() => origin.stop())
-
-  const response = await invokeEdgeFunction(ctx, {
-    functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-    origin,
-    url: '/test/next',
-  })
-
-  expect(await response.text()).toBe('Hello from origin!')
-  expect(response.status).toBe(200)
-  expect(response.headers.get('x-hello-from-middleware-res'), 'added a response header').toEqual(
-    'hello',
-  )
-  expect(origin.calls).toBe(1)
-})
+}
 
 test<FixtureTestContext>('should add request/response headers when using src dir', async (ctx) => {
   await createFixture('middleware-src', ctx)
@@ -75,115 +212,6 @@ test<FixtureTestContext>('should add request/response headers when using src dir
     'hello',
   )
   expect(origin.calls).toBe(1)
-})
-
-describe('redirect', () => {
-  test<FixtureTestContext>('should return a redirect response', async (ctx) => {
-    await createFixture('middleware', ctx)
-    await runPlugin(ctx)
-
-    const origin = new LocalServer()
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      redirect: 'manual',
-      url: '/test/redirect',
-    })
-
-    ctx.cleanup?.push(() => origin.stop())
-
-    expect(response.status).toBe(307)
-    expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
-    expect(
-      new URL(response.headers.get('location') as string).pathname,
-      'redirected to the correct path',
-    ).toEqual('/other')
-    expect(origin.calls).toBe(0)
-  })
-
-  test<FixtureTestContext>('should return a redirect response with additional headers', async (ctx) => {
-    await createFixture('middleware', ctx)
-    await runPlugin(ctx)
-
-    const origin = new LocalServer()
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      redirect: 'manual',
-      url: '/test/redirect-with-headers',
-    })
-
-    ctx.cleanup?.push(() => origin.stop())
-
-    expect(response.status).toBe(307)
-    expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
-    expect(
-      new URL(response.headers.get('location') as string).pathname,
-      'redirected to the correct path',
-    ).toEqual('/other')
-    expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
-    expect(origin.calls).toBe(0)
-  })
-})
-
-describe('rewrite', () => {
-  test<FixtureTestContext>('should rewrite to an external URL', async (ctx) => {
-    await createFixture('middleware', ctx)
-    await runPlugin(ctx)
-
-    const external = await LocalServer.run(async (req, res) => {
-      const url = new URL(req.url ?? '', 'http://localhost')
-
-      expect(url.pathname).toBe('/some-path')
-      expect(url.searchParams.get('from')).toBe('middleware')
-
-      res.write('Hello from external host!')
-      res.end()
-    })
-    ctx.cleanup?.push(() => external.stop())
-
-    const origin = new LocalServer()
-    ctx.cleanup?.push(() => origin.stop())
-
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/test/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
-    })
-
-    expect(await response.text()).toBe('Hello from external host!')
-    expect(response.status).toBe(200)
-    expect(external.calls).toBe(1)
-    expect(origin.calls).toBe(0)
-  })
-
-  test<FixtureTestContext>('rewriting to external URL that redirects should return said redirect', async (ctx) => {
-    await createFixture('middleware', ctx)
-    await runPlugin(ctx)
-
-    const external = await LocalServer.run(async (req, res) => {
-      res.writeHead(302, {
-        location: 'http://example.com/redirected',
-      })
-      res.end()
-    })
-    ctx.cleanup?.push(() => external.stop())
-
-    const origin = new LocalServer()
-    ctx.cleanup?.push(() => origin.stop())
-
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/test/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
-      redirect: 'manual',
-    })
-
-    expect(await response.text()).toBe('')
-
-    expect(response.status).toBe(302)
-    expect(response.headers.get('location')).toBe('http://example.com/redirected')
-  })
 })
 
 describe("aborts middleware execution when the matcher conditions don't match the request", () => {
@@ -633,14 +661,3 @@ describe('page router', () => {
     expect(bodyFr.nextUrlLocale).toBe('fr')
   })
 })
-
-// this is now actually deploying
-// test.skipIf(!nextVersionSatisfies('>=15.2.0'))<FixtureTestContext>(
-//   'should throw an Not Supported error when node middleware is used',
-//   async (ctx) => {
-//     await createFixture('middleware-node', ctx)
-//     await expect(runPlugin(ctx)).rejects.toThrow(
-//       'Only Edge Runtime Middleware is supported. Node.js Middleware is not supported.',
-//     )
-//   },
-// )
