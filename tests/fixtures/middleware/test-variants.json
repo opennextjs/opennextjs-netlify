@@ -12,6 +12,9 @@
           {
             "versionConstraint": ">=15.2.0",
             "canaryOnly": true
+          },
+          {
+            "versionConstraint": ">=15.5.0"
           }
         ]
       }
