@@ -29,13 +29,17 @@ function seedCJSModuleCacheAndReturnTarget(matchedModule: RegisteredModule, pare
   require.cache[filename] = mod
 
   const wrappedSource = `(function (exports, require, module, __filename, __dirname) { ${source}\n});`
-  const compiled = vm.runInThisContext(wrappedSource, {
-    filename,
-    lineOffset: 0,
-    displayErrors: true,
-  })
-  compiled(mod.exports, createRequire(pathToFileURL(filename)), mod, filename, dirname(filename))
-  mod.loaded = matchedModule.loaded = true
+  try {
+    const compiled = vm.runInThisContext(wrappedSource, {
+      filename,
+      lineOffset: 0,
+      displayErrors: true,
+    })
+    compiled(mod.exports, createRequire(pathToFileURL(filename)), mod, filename, dirname(filename))
+    mod.loaded = matchedModule.loaded = true
+  } catch (error) {
+    throw new Error(`Failed to compile CJS module: ${filename}`, { cause: error })
+  }
 
   return filename
 }
