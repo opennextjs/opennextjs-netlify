@@ -33,9 +33,9 @@ export function isNextCanary() {
 export function shouldHaveAppRouterNotFoundInPrerenderManifest() {
   // https://github.com/vercel/next.js/pull/82199
 
-  // The canary versions are out of band, as there stable/latest patch versions higher than base of canary versions
-  // and change was not backported to stable versions
-  return nextVersionSatisfies('>=15.4.2-canary.33') && isNextCanary()
+  // The canary versions are out of band, as there stable/latest patch versions higher than base of canary versions without
+  // the change included
+  return nextVersionSatisfies(isNextCanary() ? '>=15.4.2-canary.33' : '>=15.5.0')
 }
 
 export function hasNodeMiddlewareSupport() {
