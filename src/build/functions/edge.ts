@@ -343,8 +343,10 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
     import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
     import { handleMiddleware } from './edge-runtime/middleware.ts';
     import { registerCJSModules } from "./edge-runtime/lib/cjs.ts";
+    import process from 'node:process'
     import { AsyncLocalStorage } from 'node:async_hooks';
 
+    globalThis.process = process
     globalThis.AsyncLocalStorage = AsyncLocalStorage;
 
     // needed for path.relative and path.resolve to work
