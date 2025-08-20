@@ -389,7 +389,10 @@ const verifyFunctionsConfigManifest = async (sourcePath: string) => {
   // Node.js Middleware has hardcoded /_middleware path
   if (manifest.functions['/_middleware']) {
     throw new Error(
-      'Only Edge Runtime Middleware is supported. Node.js Middleware is not supported.',
+      'Node.js middleware is not yet supported.\n\n' +
+        'Future @netlify/plugin-nextjs release will support node middleware with following limitations:\n' +
+        ' - usage of C++ Addons (https://nodejs.org/api/addons.html) not supported (for example `bcrypt` npm module will not be supported, but `bcryptjs` will be supported),\n' +
+        ' - usage of Filesystem (https://nodejs.org/api/fs.html) not supported.',
     )
   }
 }

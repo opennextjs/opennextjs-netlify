@@ -632,8 +632,18 @@ test.skipIf(!nextVersionSatisfies('>=15.2.0'))<FixtureTestContext>(
   'should throw an Not Supported error when node middleware is used',
   async (ctx) => {
     await createFixture('middleware-node', ctx)
-    await expect(runPlugin(ctx)).rejects.toThrow(
-      'Only Edge Runtime Middleware is supported. Node.js Middleware is not supported.',
+
+    const runPluginPromise = runPlugin(ctx)
+
+    await expect(runPluginPromise).rejects.toThrow('Node.js middleware is not yet supported.')
+    await expect(runPluginPromise).rejects.toThrow(
+      'Future @netlify/plugin-nextjs release will support node middleware with following limitations:',
+    )
+    await expect(runPluginPromise).rejects.toThrow(
+      ' - usage of C++ Addons (https://nodejs.org/api/addons.html) not supported (for example `bcrypt` npm module will not be supported, but `bcryptjs` will be supported)',
+    )
+    await expect(runPluginPromise).rejects.toThrow(
+      ' - usage of Filesystem (https://nodejs.org/api/fs.html) not supported',
     )
   },
 )
