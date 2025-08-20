@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.12.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.12.0...v5.12.1) (2025-08-20)
+
+
+### Bug Fixes
+
+* fail build/deploy when using not yet unsupported Node.js Midleware ([#3016](https://github.com/opennextjs/opennextjs-netlify/issues/3016)) ([8c86b77](https://github.com/opennextjs/opennextjs-netlify/commit/8c86b77864f150f86e8d029bb9479df67356ce8b))
+
 ## [5.12.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.11.6...v5.12.0) (2025-07-31)
 
 
