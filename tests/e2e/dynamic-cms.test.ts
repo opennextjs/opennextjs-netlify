@@ -60,8 +60,8 @@ test.describe('Dynamic CMS', () => {
         expect(headers1['cache-status']).toMatch(
           /"Next.js"; fwd=miss\s*(,|\n)\s*"Netlify Durable"; fwd=uri-miss; stored\s*(, |\n)\s*"Netlify Edge"; fwd=miss/,
         )
-        expect(headers1['netlify-cache-tag']).toEqual(expectedCacheTag)
-        expect(headers1['netlify-cdn-cache-control']).toMatch(
+        expect(headers1['debug-netlify-cache-tag']).toEqual(expectedCacheTag)
+        expect(headers1['debug-netlify-cdn-cache-control']).toMatch(
           /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/,
         )
 
@@ -79,8 +79,8 @@ test.describe('Dynamic CMS', () => {
         expect(headers2['cache-status']).toMatch(
           /"Next.js"; hit\s*(,|\n)\s*"Netlify Durable"; fwd=stale; ttl=[0-9]+; stored\s*(,|\n)\s*"Netlify Edge"; fwd=(stale|miss)/,
         )
-        expect(headers2['netlify-cache-tag']).toEqual(expectedCacheTag)
-        expect(headers2['netlify-cdn-cache-control']).toMatch(
+        expect(headers2['debug-netlify-cache-tag']).toEqual(expectedCacheTag)
+        expect(headers2['debug-netlify-cdn-cache-control']).toMatch(
           /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/,
         )
 
@@ -98,8 +98,8 @@ test.describe('Dynamic CMS', () => {
         expect(headers3['cache-status']).toMatch(
           /"Next.js"; fwd=miss\s*(,|\n)\s*"Netlify Durable"; fwd=stale; ttl=[0-9]+; stored\s*(,|\n)\s*"Netlify Edge"; fwd=(stale|miss)/,
         )
-        expect(headers3['netlify-cache-tag']).toEqual(expectedCacheTag)
-        expect(headers3['netlify-cdn-cache-control']).toMatch(
+        expect(headers3['debug-netlify-cache-tag']).toEqual(expectedCacheTag)
+        expect(headers3['debug-netlify-cdn-cache-control']).toMatch(
           /s-maxage=31536000,( stale-while-revalidate=31536000,)? durable/,
         )
       })

@@ -237,7 +237,7 @@ test('requesting a non existing page route that needs to be fetched from the blo
     '<14.2.4 || >=14.2.10 <15.0.0-canary.24 || ^15.0.0-canary.147',
   )
 
-  expect(headers['netlify-cdn-cache-control']).toBe(
+  expect(headers['debug-netlify-cdn-cache-control']).toBe(
     (shouldHavePrivateDirective ? 'private, ' : '') +
       'no-cache, no-store, max-age=0, must-revalidate, durable',
   )
@@ -256,7 +256,7 @@ test('requesting a non existing page route that needs to be fetched from the blo
 
   expect(await page.textContent('h1')).toBe('404 Not Found')
 
-  expect(headers['netlify-cdn-cache-control']).toBe(
+  expect(headers['debug-netlify-cdn-cache-control']).toBe(
     nextVersionSatisfies('>=15.0.0-canary.187')
       ? 's-maxage=31536000, durable'
       : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -302,13 +302,15 @@ test.describe('RSC cache poisoning', () => {
 
     // ensure prefetch respond with RSC data
     expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
-    expect(prefetchResponse.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(prefetchResponse.headers()['debug-netlify-cdn-cache-control']).toMatch(
+      /s-maxage=31536000/,
+    )
 
     const htmlResponse = await page.goto(`${simple.url}/config-rewrite/source`)
 
     // ensure we get HTML response
     expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
-    expect(htmlResponse?.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
   })
 
   test('Next.config.js redirect', async ({ page, simple }) => {
@@ -329,12 +331,14 @@ test.describe('RSC cache poisoning', () => {
 
     // ensure prefetch respond with RSC data
     expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
-    expect(prefetchResponse.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(prefetchResponse.headers()['debug-netlify-cdn-cache-control']).toMatch(
+      /s-maxage=31536000/,
+    )
 
     const htmlResponse = await page.goto(`${simple.url}/config-rewrite/source`)
 
     // ensure we get HTML response
     expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
-    expect(htmlResponse?.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
   })
 })

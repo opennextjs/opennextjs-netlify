@@ -90,7 +90,7 @@ test.describe('app router on-demand revalidation', () => {
       const headers1 = response1?.headers() || {}
       expect(response1?.status()).toBe(200)
       expect(headers1['x-nextjs-cache']).toBeUndefined()
-      expect(headers1['netlify-cdn-cache-control']).toBe(
+      expect(headers1['debug-netlify-cdn-cache-control']).toBe(
         nextVersionSatisfies('>=15.0.0-canary.187')
           ? 's-maxage=31536000, durable'
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -120,7 +120,7 @@ test.describe('app router on-demand revalidation', () => {
         // as we reuse cached response
         expect(headers2['cache-status']).toMatch(/"Next.js"; hit/m)
       }
-      expect(headers2['netlify-cdn-cache-control']).toBe(
+      expect(headers2['debug-netlify-cdn-cache-control']).toBe(
         nextVersionSatisfies('>=15.0.0-canary.187')
           ? 's-maxage=31536000, durable'
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -152,7 +152,7 @@ test.describe('app router on-demand revalidation', () => {
       const headers3 = response3?.headers() || {}
       expect(response3?.status()).toBe(200)
       expect(headers3?.['x-nextjs-cache']).toBeUndefined()
-      expect(headers3['netlify-cdn-cache-control']).toBe(
+      expect(headers3['debug-netlify-cdn-cache-control']).toBe(
         nextVersionSatisfies('>=15.0.0-canary.187')
           ? 's-maxage=31536000, durable'
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
@@ -181,7 +181,7 @@ test.describe('app router on-demand revalidation', () => {
         // as we reuse cached response
         expect(headers4['cache-status']).toMatch(/"Next.js"; hit/m)
       }
-      expect(headers4['netlify-cdn-cache-control']).toBe(
+      expect(headers4['debug-netlify-cdn-cache-control']).toBe(
         nextVersionSatisfies('>=15.0.0-canary.187')
           ? 's-maxage=31536000, durable'
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',

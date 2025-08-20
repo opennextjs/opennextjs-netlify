@@ -9,6 +9,7 @@ const nextConfig = {
     defaultLocale: 'en',
   },
   generateBuildId: () => 'build-id',
+  outputFileTracingRoot: __dirname,
 }
 
 module.exports = nextConfig

@@ -3,6 +3,7 @@ import { assert, vi } from 'vitest'
 import { type NetlifyPluginConstants, type NetlifyPluginOptions } from '@netlify/build'
 import { resolveConfig as resolveNetlifyConfig } from '@netlify/config'
 import { bundle, serve } from '@netlify/edge-bundler'
+import { getURL as getBootstrapURL } from '@netlify/edge-functions-bootstrap/version'
 import { zipFunctions } from '@netlify/zip-it-and-ship-it'
 import { execaCommand } from 'execa'
 import getPort from 'get-port'
@@ -32,7 +33,7 @@ import { BLOB_TOKEN } from './constants.mjs'
 import { type FixtureTestContext } from './contexts.js'
 import { setNextVersionInFixture } from './next-version-helpers.mjs'
 
-const bootstrapURL = 'https://edge.netlify.com/bootstrap/index-combined.ts'
+const bootstrapURL = await getBootstrapURL()
 const actualCwd = await vi.importActual<typeof import('process')>('process').then((p) => p.cwd())
 const eszipHelper = join(actualCwd, 'tools/deno/eszip.ts')
 

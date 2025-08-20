@@ -1,3 +1,5 @@
+const { join } = require('node:path')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -5,6 +7,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   transpilePackages: ['@repo/ui'],
+  outputFileTracingRoot: join(__dirname, '..', '..'),
 }
 
 module.exports = nextConfig
