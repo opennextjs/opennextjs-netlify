@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  distDir: process.env.NEXT_RUNTIME_MIDDLEWARE === 'nodejs' ? '.next-node-middleware' : '.next',
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   eslint: {
     ignoreDuringBuilds: true,
   },

@@ -1,10 +1,8 @@
 {
   "node-middleware": {
+    "distDir": ".next-node-middleware",
     "files": {
       "middleware.ts": "middleware-node.ts"
-    },
-    "env": {
-      "NEXT_RUNTIME_MIDDLEWARE": "nodejs"
     },
     "test": {
       "dependencies": {

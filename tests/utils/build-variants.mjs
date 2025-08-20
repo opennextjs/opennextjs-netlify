@@ -28,6 +28,7 @@ import { satisfies } from 'semver'
  * @property {Record<string,string>} [env] environment variables to set
  * @property {VariantTest} [test] check if version constraints for variant are met
  * @property {string} [buildCommand] command to run
+ * @property {string} [distDir] directory to output build artifacts (will be set as )
  */
 
 /** @type {Record<string, VariantDescription>} */
@@ -85,6 +86,14 @@ function satisfiesConstraint(version, constraint, canaryOnly) {
   return true
 }
 
+/** @type {(() => Promise<void>)[]} */
+let cleanupTasks = []
+
+async function runCleanup() {
+  await Promise.all(cleanupTasks.map((task) => task()))
+  cleanupTasks = []
+}
+
 for (const variantToBuild of variantsToBuild) {
   const variant = variants[variantToBuild]
 
@@ -102,17 +111,18 @@ for (const variantToBuild of variantsToBuild) {
           )
 
     if (!constraintsSatisfied) {
-      console.log(
+      console.warn(
         `[build-variants] Skipping ${variantToBuild} variant because next version (${version}) or canary status (${version.includes('-canary') ? 'is canary' : 'not canary'}) does not satisfy version constraint:\n${JSON.stringify(nextCondition, null, 2)}`,
       )
       continue
     }
   }
 
-  console.log(`[build-variants] Building ${variantToBuild} variant`)
-
-  /** @type {(() => Promise<void>)[]} */
-  const cleanupTasks = []
+  const buildCommand = variant.buildCommand ?? 'next build'
+  const distDir = variant.distDir ?? '.next'
+  console.warn(
+    `[build-variants] Building ${variantToBuild} variant with \`${buildCommand}\` to \`${distDir}\``,
+  )
 
   for (const [target, source] of Object.entries(variant.files ?? {})) {
     const targetBackup = `${target}.bak`
@@ -129,16 +139,16 @@ for (const variantToBuild of variantsToBuild) {
     })
   }
 
-  const result = await execaCommand(variant.buildCommand ?? 'next build', {
+  const result = await execaCommand(buildCommand, {
     env: {
       ...process.env,
       ...variant.env,
+      NEXT_DIST_DIR: distDir,
     },
     stdio: 'inherit',
   })
 
-  // cleanup
-  await Promise.all(cleanupTasks.map((task) => task()))
+  await runCleanup()
 
   if (result.exitCode !== 0) {
     throw new Error(`[build-variants] Failed to build ${variantToBuild} variant`)
