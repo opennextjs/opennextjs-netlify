@@ -434,13 +434,15 @@ test.describe('RSC cache poisoning', () => {
 
     // ensure prefetch respond with RSC data
     expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
-    expect(prefetchResponse.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(prefetchResponse.headers()['debug-netlify-cdn-cache-control']).toMatch(
+      /s-maxage=31536000/,
+    )
 
     const htmlResponse = await page.goto(`${middleware.url}/test/rewrite-to-cached-page`)
 
     // ensure we get HTML response
     expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
-    expect(htmlResponse?.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
   })
 
   test('Middleware redirect', async ({ page, middleware }) => {
@@ -461,12 +463,14 @@ test.describe('RSC cache poisoning', () => {
 
     // ensure prefetch respond with RSC data
     expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
-    expect(prefetchResponse.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(prefetchResponse.headers()['debug-netlify-cdn-cache-control']).toMatch(
+      /s-maxage=31536000/,
+    )
 
     const htmlResponse = await page.goto(`${middleware.url}/test/redirect-to-cached-page`)
 
     // ensure we get HTML response
     expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
-    expect(htmlResponse?.headers()['netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
   })
 })

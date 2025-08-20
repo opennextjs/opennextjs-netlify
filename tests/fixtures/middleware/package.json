@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstallz": "npm run build",
+    "postinstall": "npm run build",
     "dev": "next dev",
     "build": "node ../../utils/build-variants.mjs"
   },

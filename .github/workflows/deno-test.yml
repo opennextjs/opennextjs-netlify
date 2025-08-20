@@ -8,11 +8,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: 'Install Node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.x.x
+          deno-version: v2.2.4
+
+      - name: 'Install dependencies'
+        run: npm ci
+
       - name: Vendor Deno modules
-        run: deno vendor edge-runtime/vendor.ts --output=edge-runtime/vendor --force
+        run: deno --allow-import --vendor edge-runtime/vendor.ts
+
       - name: Test
         run: deno test -A edge-runtime/
