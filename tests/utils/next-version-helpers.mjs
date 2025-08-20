@@ -39,7 +39,7 @@ export function shouldHaveAppRouterNotFoundInPrerenderManifest() {
 }
 
 export function hasNodeMiddlewareSupport() {
-  return nextVersionSatisfies('>=15.2.0') && isNextCanary()
+  return nextVersionSatisfies(isNextCanary() ? '>=15.2.0' : '>=15.5.0')
 }
 
 /**
