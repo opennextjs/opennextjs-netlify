@@ -22,15 +22,23 @@ beforeEach<FixtureTestContext>(async (ctx) => {
   await startMockBlobStore(ctx)
 })
 
-for (const { edgeFunctionName, expectedRuntime, label, runPluginConstants } of [
+for (const {
+  edgeFunctionNameRoot,
+  edgeFunctionNameSrc,
+  expectedRuntime,
+  label,
+  runPluginConstants,
+} of [
   {
-    edgeFunctionName: EDGE_MIDDLEWARE_FUNCTION_NAME,
+    edgeFunctionNameRoot: EDGE_MIDDLEWARE_FUNCTION_NAME,
+    edgeFunctionNameSrc: EDGE_MIDDLEWARE_SRC_FUNCTION_NAME,
     expectedRuntime: 'edge-runtime',
     label: 'Edge runtime middleware',
   },
   hasNodeMiddlewareSupport()
     ? {
-        edgeFunctionName: NODE_MIDDLEWARE_FUNCTION_NAME,
+        edgeFunctionNameRoot: NODE_MIDDLEWARE_FUNCTION_NAME,
+        edgeFunctionNameSrc: NODE_MIDDLEWARE_FUNCTION_NAME,
         expectedRuntime: 'node',
         label: 'Node.js runtime middleware',
         runPluginConstants: { PUBLISH_DIR: '.next-node-middleware' },
@@ -55,13 +63,45 @@ for (const { edgeFunctionName, expectedRuntime, label, runPluginConstants } of [
       ctx.cleanup?.push(() => origin.stop())
 
       const response = await invokeEdgeFunction(ctx, {
-        functions: [edgeFunctionName],
+        functions: [edgeFunctionNameRoot],
         origin,
         url: '/test/next',
       })
       const text = await response.text()
 
       expect(text).toBe('Hello from origin!')
+      expect(response.status).toBe(200)
+      expect(
+        response.headers.get('x-hello-from-middleware-res'),
+        'added a response header',
+      ).toEqual('hello')
+      expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      expect(origin.calls).toBe(1)
+    })
+
+    test.only<FixtureTestContext>('should add request/response headers when using src dir', async (ctx) => {
+      await createFixture('middleware-src', ctx)
+      await runPlugin(ctx, runPluginConstants)
+
+      const origin = await LocalServer.run(async (req, res) => {
+        expect(req.url).toBe('/test/next')
+        expect(req.headers['x-hello-from-middleware-req']).toBe('hello')
+
+        res.write('Hello from origin!')
+        res.end()
+      })
+
+      ctx.cleanup?.push(() => origin.stop())
+
+      const response = await invokeEdgeFunction(ctx, {
+        functions: [edgeFunctionNameSrc],
+        origin,
+        url: '/test/next',
+      })
+
+      console.log(response)
+
+      expect(await response.text()).toBe('Hello from origin!')
       expect(response.status).toBe(200)
       expect(
         response.headers.get('x-hello-from-middleware-res'),
@@ -78,7 +118,7 @@ for (const { edgeFunctionName, expectedRuntime, label, runPluginConstants } of [
 
         const origin = new LocalServer()
         const response = await invokeEdgeFunction(ctx, {
-          functions: [edgeFunctionName],
+          functions: [edgeFunctionNameRoot],
           origin,
           redirect: 'manual',
           url: '/test/redirect',
@@ -102,7 +142,7 @@ for (const { edgeFunctionName, expectedRuntime, label, runPluginConstants } of [
 
         const origin = new LocalServer()
         const response = await invokeEdgeFunction(ctx, {
-          functions: [edgeFunctionName],
+          functions: [edgeFunctionNameRoot],
           origin,
           redirect: 'manual',
           url: '/test/redirect-with-headers',
@@ -142,7 +182,7 @@ for (const { edgeFunctionName, expectedRuntime, label, runPluginConstants } of [
         ctx.cleanup?.push(() => origin.stop())
 
         const response = await invokeEdgeFunction(ctx, {
-          functions: [edgeFunctionName],
+          functions: [edgeFunctionNameRoot],
           origin,
           url: `/test/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
         })
@@ -170,7 +210,7 @@ for (const { edgeFunctionName, expectedRuntime, label, runPluginConstants } of [
         ctx.cleanup?.push(() => origin.stop())
 
         const response = await invokeEdgeFunction(ctx, {
-          functions: [edgeFunctionName],
+          functions: [edgeFunctionNameRoot],
           origin,
           url: `/test/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
           redirect: 'manual',
@@ -185,34 +225,6 @@ for (const { edgeFunctionName, expectedRuntime, label, runPluginConstants } of [
     })
   })
 }
-
-test<FixtureTestContext>('should add request/response headers when using src dir', async (ctx) => {
-  await createFixture('middleware-src', ctx)
-  await runPlugin(ctx)
-
-  const origin = await LocalServer.run(async (req, res) => {
-    expect(req.url).toBe('/test/next')
-    expect(req.headers['x-hello-from-middleware-req']).toBe('hello')
-
-    res.write('Hello from origin!')
-    res.end()
-  })
-
-  ctx.cleanup?.push(() => origin.stop())
-
-  const response = await invokeEdgeFunction(ctx, {
-    functions: [EDGE_MIDDLEWARE_SRC_FUNCTION_NAME],
-    origin,
-    url: '/test/next',
-  })
-
-  expect(await response.text()).toBe('Hello from origin!')
-  expect(response.status).toBe(200)
-  expect(response.headers.get('x-hello-from-middleware-res'), 'added a response header').toEqual(
-    'hello',
-  )
-  expect(origin.calls).toBe(1)
-})
 
 describe("aborts middleware execution when the matcher conditions don't match the request", () => {
   test<FixtureTestContext>('when the path is excluded', async (ctx) => {
