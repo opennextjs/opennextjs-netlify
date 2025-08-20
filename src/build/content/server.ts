@@ -17,6 +17,7 @@ import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
 import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
+import type { FunctionsConfigManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
 import { prerelease, satisfies, lt as semverLowerThan, lte as semverLowerThanOrEqual } from 'semver'
 
 import type { RunConfig } from '../../run/config.js'
@@ -129,6 +130,10 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
           }
 
           return
+        }
+
+        if (path === 'server/functions-config-manifest.json') {
+          await verifyFunctionsConfigManifest(join(srcDir, path))
         }
 
         await cp(srcPath, destPath, { recursive: true, force: true })
@@ -374,6 +379,22 @@ const replaceMiddlewareManifest = async (sourcePath: string, destPath: string) =
   const newData = JSON.stringify(newManifest)
 
   await writeFile(destPath, newData)
+}
+
+const verifyFunctionsConfigManifest = async (sourcePath: string) => {
+  const data = await readFile(sourcePath, 'utf8')
+  const manifest = JSON.parse(data) as FunctionsConfigManifest
+
+  // https://github.com/vercel/next.js/blob/8367faedd61501025299e92d43a28393c7bb50e2/packages/next/src/build/index.ts#L2465
+  // Node.js Middleware has hardcoded /_middleware path
+  if (manifest.functions['/_middleware']) {
+    throw new Error(
+      'Node.js middleware is not yet supported.\n\n' +
+        'Future @netlify/plugin-nextjs release will support node middleware with following limitations:\n' +
+        ' - usage of C++ Addons (https://nodejs.org/api/addons.html) not supported (for example `bcrypt` npm module will not be supported, but `bcryptjs` will be supported),\n' +
+        ' - usage of Filesystem (https://nodejs.org/api/fs.html) not supported.',
+    )
+  }
 }
 
 export const verifyHandlerDirStructure = async (ctx: PluginContext) => {
