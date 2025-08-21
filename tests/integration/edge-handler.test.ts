@@ -99,8 +99,6 @@ for (const {
         url: '/test/next',
       })
 
-      console.log(response)
-
       expect(await response.text()).toBe('Hello from origin!')
       expect(response.status).toBe(200)
       expect(
