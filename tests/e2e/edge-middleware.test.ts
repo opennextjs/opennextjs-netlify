@@ -11,6 +11,7 @@ type ExtendedWindow = Window & {
 type ExtendedFixtures = {
   edgeOrNodeMiddleware: Fixture
   edgeOrNodeMiddlewarePages: Fixture
+  edgeOrNodeMiddlewareI18n: Fixture
 }
 
 for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
@@ -29,6 +30,14 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
       edgeOrNodeMiddlewarePages: [
         async ({ middlewarePages }, use) => {
           await use(middlewarePages)
+        },
+        {
+          scope: 'worker',
+        },
+      ],
+      edgeOrNodeMiddlewareI18n: [
+        async ({ middlewareI18n }, use) => {
+          await use(middlewareI18n)
         },
         {
           scope: 'worker',
@@ -57,6 +66,14 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
               scope: 'worker',
             },
           ],
+          edgeOrNodeMiddlewareI18n: [
+            async ({ middlewareI18nNode }, use) => {
+              await use(middlewareI18nNode)
+            },
+            {
+              scope: 'worker',
+            },
+          ],
         }),
       }
     : undefined,
@@ -73,6 +90,8 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
 
       const h1 = page.locator('h1')
       await expect(h1).toHaveText('Other')
+
+      expect(await res?.headerValue('x-runtime')).toEqual(expectedRuntime)
     })
 
     test('Does not run middleware at the origin', async ({ page, edgeOrNodeMiddleware }) => {
@@ -101,12 +120,15 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
       expect(await rewritten?.headerValue('x-added-rewrite-target')).toBeNull()
       const h1 = page.locator('h1')
       await expect(h1).toHaveText('Hello rewrite')
+
+      expect(await direct?.headerValue('x-runtime')).toEqual(expectedRuntime)
     })
 
     test('Supports CJS dependencies in Edge Middleware', async ({ page, edgeOrNodeMiddleware }) => {
       const res = await page.goto(`${edgeOrNodeMiddleware.url}/test/next`)
 
       expect(await res?.headerValue('x-cjs-module-works')).toEqual('true')
+      expect(await res?.headerValue('x-runtime')).toEqual(expectedRuntime)
     })
 
     if (expectedRuntime !== 'node') {
@@ -212,62 +234,67 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
           })
         }
       })
-      if (expectedRuntime !== 'node') {
-        test.describe('with 18n', () => {
-          for (const testConfig of testConfigs) {
-            test.describe(testConfig.describeLabel, () => {
-              for (const { localeLabel, pageWithLinksPathname } of [
-                { localeLabel: 'implicit default locale', pageWithLinksPathname: '/link' },
-                { localeLabel: 'explicit default locale', pageWithLinksPathname: '/en/link' },
-                { localeLabel: 'explicit non-default locale', pageWithLinksPathname: '/fr/link' },
-              ]) {
-                test.describe(localeLabel, () => {
-                  test('json data fetch', async ({ middlewareI18n, page }) => {
-                    const dataFetchPromise = new Promise<Response>((resolve) => {
-                      page.on('response', (response) => {
-                        if (response.url().includes(testConfig.jsonPathMatcher)) {
-                          resolve(response)
-                        }
-                      })
+
+      test.describe('with 18n', () => {
+        for (const testConfig of testConfigs) {
+          test.describe(testConfig.describeLabel, () => {
+            for (const { localeLabel, pageWithLinksPathname } of [
+              { localeLabel: 'implicit default locale', pageWithLinksPathname: '/link' },
+              { localeLabel: 'explicit default locale', pageWithLinksPathname: '/en/link' },
+              { localeLabel: 'explicit non-default locale', pageWithLinksPathname: '/fr/link' },
+            ]) {
+              test.describe(localeLabel, () => {
+                test('json data fetch', async ({ edgeOrNodeMiddlewareI18n, page }) => {
+                  const dataFetchPromise = new Promise<Response>((resolve) => {
+                    page.on('response', (response) => {
+                      if (response.url().includes(testConfig.jsonPathMatcher)) {
+                        resolve(response)
+                      }
                     })
-
-                    await page.goto(`${middlewareI18n.url}${pageWithLinksPathname}`)
-
-                    await page.hover(`[data-link="${testConfig.selector}"]`)
-
-                    const dataResponse = await dataFetchPromise
-
-                    expect(dataResponse.ok()).toBe(true)
                   })
 
-                  test('navigation', async ({ middlewareI18n, page }) => {
-                    await page.goto(`${middlewareI18n.url}${pageWithLinksPathname}`)
+                  const pageResponse = await page.goto(
+                    `${edgeOrNodeMiddlewareI18n.url}${pageWithLinksPathname}`,
+                  )
+                  expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
 
-                    await page.evaluate(() => {
-                      // set some value to window to check later if browser did reload and lost this state
-                      ;(window as ExtendedWindow).didReload = false
-                    })
+                  await page.hover(`[data-link="${testConfig.selector}"]`)
 
-                    await page.click(`[data-link="${testConfig.selector}"]`)
+                  const dataResponse = await dataFetchPromise
 
-                    // wait for page to be rendered
-                    await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
-
-                    // check if browser navigation worked by checking if state was preserved
-                    const browserNavigationWorked =
-                      (await page.evaluate(() => {
-                        return (window as ExtendedWindow).didReload
-                      })) === false
-
-                    // we expect client navigation to work without browser reload
-                    expect(browserNavigationWorked).toBe(true)
-                  })
+                  expect(dataResponse.ok()).toBe(true)
                 })
-              }
-            })
-          }
-        })
-      }
+
+                test('navigation', async ({ edgeOrNodeMiddlewareI18n, page }) => {
+                  const pageResponse = await page.goto(
+                    `${edgeOrNodeMiddlewareI18n.url}${pageWithLinksPathname}`,
+                  )
+                  expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+
+                  await page.evaluate(() => {
+                    // set some value to window to check later if browser did reload and lost this state
+                    ;(window as ExtendedWindow).didReload = false
+                  })
+
+                  await page.click(`[data-link="${testConfig.selector}"]`)
+
+                  // wait for page to be rendered
+                  await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
+
+                  // check if browser navigation worked by checking if state was preserved
+                  const browserNavigationWorked =
+                    (await page.evaluate(() => {
+                      return (window as ExtendedWindow).didReload
+                    })) === false
+
+                  // we expect client navigation to work without browser reload
+                  expect(browserNavigationWorked).toBe(true)
+                })
+              })
+            }
+          })
+        }
+      })
     })
 
     if (expectedRuntime !== 'node') {
