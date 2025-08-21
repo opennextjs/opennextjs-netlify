@@ -469,22 +469,6 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
     })
 
     if (expectedRuntime !== 'node') {
-      test("requests with x-middleware-subrequest don't skip middleware (GHSA-f82v-jwr5-mffw)", async ({
-        middlewareSubrequestVuln,
-      }) => {
-        const response = await fetch(`${middlewareSubrequestVuln.url}`, {
-          headers: {
-            'x-middleware-subrequest': 'middleware:middleware:middleware:middleware:middleware',
-          },
-        })
-
-        // middleware was not skipped
-        expect(response.headers.get('x-test-used-middleware')).toBe('true')
-
-        // ensure we are testing version before the fix for self hosted
-        expect(response.headers.get('x-test-used-next-version')).toBe('15.2.2')
-      })
-
       test('requests with different encoding than matcher match anyway', async ({
         middlewareStaticAssetMatcher,
       }) => {
@@ -568,3 +552,20 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
     })
   })
 }
+
+// this test is using pinned next version that doesn't support node middleware
+test("requests with x-middleware-subrequest don't skip middleware (GHSA-f82v-jwr5-mffw)", async ({
+  middlewareSubrequestVuln,
+}) => {
+  const response = await fetch(`${middlewareSubrequestVuln.url}`, {
+    headers: {
+      'x-middleware-subrequest': 'middleware:middleware:middleware:middleware:middleware',
+    },
+  })
+
+  // middleware was not skipped
+  expect(response.headers.get('x-test-used-middleware')).toBe('true')
+
+  // ensure we are testing version before the fix for self hosted
+  expect(response.headers.get('x-test-used-next-version')).toBe('15.2.2')
+})
