@@ -350,6 +350,11 @@ export const fixtureFactories = {
   middlewareI18nExcludedPaths: () => createE2EFixture('middleware-i18n-excluded-paths'),
   middlewareOg: () => createE2EFixture('middleware-og'),
   middlewarePages: () => createE2EFixture('middleware-pages'),
+  middlewarePagesNode: () =>
+    createE2EFixture('middleware-pages', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
   middlewareStaticAssetMatcher: () => createE2EFixture('middleware-static-asset-matcher'),
   middlewareSubrequestVuln: () => createE2EFixture('middleware-subrequest-vuln'),
   pageRouter: () => createE2EFixture('page-router'),

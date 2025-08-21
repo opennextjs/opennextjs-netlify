@@ -389,294 +389,308 @@ for (const {
         expect(origin.calls).toBe(0)
       })
     })
+
+    describe('page router', () => {
+      test<FixtureTestContext>('edge api routes should work with middleware', async (ctx) => {
+        await createFixture('middleware-pages', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/api/edge-headers`,
+        })
+        const res = await response.json()
+        expect(res.url).toBe('/api/edge-headers')
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+      test<FixtureTestContext>('middleware should rewrite data requests', async (ctx) => {
+        await createFixture('middleware-pages', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          headers: {
+            'x-nextjs-data': '1',
+          },
+          origin,
+          url: `/_next/data/build-id/ssr-page.json`,
+        })
+        const res = await response.json()
+        const url = new URL(res.url, 'http://n/')
+        expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
+        expect(res.headers['x-nextjs-data']).toBe('1')
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-nextjs-rewrite')).toBe('/ssr-page-2/')
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+
+      test<FixtureTestContext>('middleware should leave non-data requests untouched', async (ctx) => {
+        await createFixture('middleware-pages', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/_next/static/build-id/_devMiddlewareManifest.json?foo=1`,
+        })
+        const res = await response.json()
+        const url = new URL(res.url, 'http://n/')
+        expect(url.pathname).toBe('/_next/static/build-id/_devMiddlewareManifest.json')
+        expect(url.search).toBe('?foo=1')
+        expect(res.headers['x-nextjs-data']).toBeUndefined()
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+
+      test<FixtureTestContext>('should NOT rewrite un-rewritten data requests to page route', async (ctx) => {
+        await createFixture('middleware-pages', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          headers: {
+            'x-nextjs-data': '1',
+          },
+          origin,
+          url: `/_next/data/build-id/ssg/hello.json`,
+        })
+        const res = await response.json()
+        const url = new URL(res.url, 'http://n/')
+        expect(url.pathname).toBe('/_next/data/build-id/ssg/hello.json')
+        expect(res.headers['x-nextjs-data']).toBe('1')
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+
+      test<FixtureTestContext>('should preserve query params in rewritten data requests', async (ctx) => {
+        await createFixture('middleware-pages', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          headers: {
+            'x-nextjs-data': '1',
+          },
+          origin,
+          url: `/_next/data/build-id/blog/first.json?slug=first`,
+        })
+        const res = await response.json()
+        const url = new URL(res.url, 'http://n/')
+        expect(url.pathname).toBe('/_next/data/build-id/blog/first.json')
+        expect(url.searchParams.get('slug')).toBe('first')
+        expect(res.headers['x-nextjs-data']).toBe('1')
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+
+      test<FixtureTestContext>('should preserve locale in redirects', async (ctx) => {
+        await createFixture('middleware-i18n', ctx)
+        await runPlugin(ctx)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+          origin,
+          url: `/fr/old-home`,
+          redirect: 'manual',
+        })
+        const url = new URL(response.headers.get('location') ?? '', 'http://n/')
+        expect(url.pathname).toBe('/fr/new-home')
+        expect(response.status).toBe(302)
+      })
+
+      test.skipIf(expectedRuntime === 'node')<FixtureTestContext>(
+        'should support redirects to default locale without changing path',
+        async (ctx) => {
+          await createFixture('middleware-i18n', ctx)
+          await runPlugin(ctx)
+          const origin = await LocalServer.run(async (req, res) => {
+            res.write(
+              JSON.stringify({
+                url: req.url,
+                headers: req.headers,
+              }),
+            )
+            res.end()
+          })
+          ctx.cleanup?.push(() => origin.stop())
+          const response = await invokeEdgeFunction(ctx, {
+            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+            origin,
+            url: `/fr/redirect-to-same-page-but-default-locale`,
+            redirect: 'manual',
+          })
+          const url = new URL(response.headers.get('location') ?? '', 'http://n/')
+          expect(url.pathname).toBe('/redirect-to-same-page-but-default-locale')
+          expect(response.status).toBe(302)
+        },
+      )
+
+      test.skipIf(expectedRuntime === 'node')<FixtureTestContext>(
+        'should preserve locale in request.nextUrl',
+        async (ctx) => {
+          await createFixture('middleware-i18n', ctx)
+          await runPlugin(ctx)
+          const origin = await LocalServer.run(async (req, res) => {
+            res.write(
+              JSON.stringify({
+                url: req.url,
+                headers: req.headers,
+              }),
+            )
+            res.end()
+          })
+          ctx.cleanup?.push(() => origin.stop())
+
+          const response = await invokeEdgeFunction(ctx, {
+            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+            origin,
+            url: `/json`,
+          })
+          expect(response.status).toBe(200)
+          const body = await response.json()
+
+          expect(body.requestUrlPathname).toBe('/json')
+          expect(body.nextUrlPathname).toBe('/json')
+          expect(body.nextUrlLocale).toBe('en')
+
+          const responseEn = await invokeEdgeFunction(ctx, {
+            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+            origin,
+            url: `/en/json`,
+          })
+          expect(responseEn.status).toBe(200)
+          const bodyEn = await responseEn.json()
+
+          expect(bodyEn.requestUrlPathname).toBe('/json')
+          expect(bodyEn.nextUrlPathname).toBe('/json')
+          expect(bodyEn.nextUrlLocale).toBe('en')
+
+          const responseFr = await invokeEdgeFunction(ctx, {
+            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+            origin,
+            url: `/fr/json`,
+          })
+          expect(responseFr.status).toBe(200)
+          const bodyFr = await responseFr.json()
+
+          expect(bodyFr.requestUrlPathname).toBe('/fr/json')
+          expect(bodyFr.nextUrlPathname).toBe('/json')
+          expect(bodyFr.nextUrlLocale).toBe('fr')
+        },
+      )
+
+      test.skipIf(expectedRuntime === 'node')<FixtureTestContext>(
+        'should preserve locale in request.nextUrl with skipMiddlewareUrlNormalize',
+        async (ctx) => {
+          await createFixture('middleware-i18n-skip-normalize', ctx)
+          await runPlugin(ctx)
+          const origin = await LocalServer.run(async (req, res) => {
+            res.write(
+              JSON.stringify({
+                url: req.url,
+                headers: req.headers,
+              }),
+            )
+            res.end()
+          })
+          ctx.cleanup?.push(() => origin.stop())
+
+          const response = await invokeEdgeFunction(ctx, {
+            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+            origin,
+            url: `/json`,
+          })
+          expect(response.status).toBe(200)
+          const body = await response.json()
+
+          expect(body.requestUrlPathname).toBe('/json')
+          expect(body.nextUrlPathname).toBe('/json')
+          expect(body.nextUrlLocale).toBe('en')
+
+          const responseEn = await invokeEdgeFunction(ctx, {
+            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+            origin,
+            url: `/en/json`,
+          })
+          expect(responseEn.status).toBe(200)
+          const bodyEn = await responseEn.json()
+
+          expect(bodyEn.requestUrlPathname).toBe('/en/json')
+          expect(bodyEn.nextUrlPathname).toBe('/json')
+          expect(bodyEn.nextUrlLocale).toBe('en')
+
+          const responseFr = await invokeEdgeFunction(ctx, {
+            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+            origin,
+            url: `/fr/json`,
+          })
+          expect(responseFr.status).toBe(200)
+          const bodyFr = await responseFr.json()
+
+          expect(bodyFr.requestUrlPathname).toBe('/fr/json')
+          expect(bodyFr.nextUrlPathname).toBe('/json')
+          expect(bodyFr.nextUrlLocale).toBe('fr')
+        },
+      )
+    })
   })
 }
-
-describe('page router', () => {
-  test<FixtureTestContext>('edge api routes should work with middleware', async (ctx) => {
-    await createFixture('middleware-pages', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/api/edge-headers`,
-    })
-    const res = await response.json()
-    expect(res.url).toBe('/api/edge-headers')
-    expect(response.status).toBe(200)
-  })
-  test<FixtureTestContext>('middleware should rewrite data requests', async (ctx) => {
-    await createFixture('middleware-pages', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      headers: {
-        'x-nextjs-data': '1',
-      },
-      origin,
-      url: `/_next/data/build-id/ssr-page.json`,
-    })
-    const res = await response.json()
-    const url = new URL(res.url, 'http://n/')
-    expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
-    expect(res.headers['x-nextjs-data']).toBe('1')
-    expect(response.headers.get('x-nextjs-rewrite')).toBe('/ssr-page-2/')
-    expect(response.status).toBe(200)
-  })
-
-  test<FixtureTestContext>('middleware should leave non-data requests untouched', async (ctx) => {
-    await createFixture('middleware-pages', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/_next/static/build-id/_devMiddlewareManifest.json?foo=1`,
-    })
-    const res = await response.json()
-    const url = new URL(res.url, 'http://n/')
-    expect(url.pathname).toBe('/_next/static/build-id/_devMiddlewareManifest.json')
-    expect(url.search).toBe('?foo=1')
-    expect(res.headers['x-nextjs-data']).toBeUndefined()
-    expect(response.status).toBe(200)
-  })
-
-  test<FixtureTestContext>('should NOT rewrite un-rewritten data requests to page route', async (ctx) => {
-    await createFixture('middleware-pages', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      headers: {
-        'x-nextjs-data': '1',
-      },
-      origin,
-      url: `/_next/data/build-id/ssg/hello.json`,
-    })
-    const res = await response.json()
-    const url = new URL(res.url, 'http://n/')
-    expect(url.pathname).toBe('/_next/data/build-id/ssg/hello.json')
-    expect(res.headers['x-nextjs-data']).toBe('1')
-    expect(response.status).toBe(200)
-  })
-
-  test<FixtureTestContext>('should preserve query params in rewritten data requests', async (ctx) => {
-    await createFixture('middleware-pages', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      headers: {
-        'x-nextjs-data': '1',
-      },
-      origin,
-      url: `/_next/data/build-id/blog/first.json?slug=first`,
-    })
-    const res = await response.json()
-    const url = new URL(res.url, 'http://n/')
-    expect(url.pathname).toBe('/_next/data/build-id/blog/first.json')
-    expect(url.searchParams.get('slug')).toBe('first')
-    expect(res.headers['x-nextjs-data']).toBe('1')
-    expect(response.status).toBe(200)
-  })
-
-  test<FixtureTestContext>('should preserve locale in redirects', async (ctx) => {
-    await createFixture('middleware-i18n', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/fr/old-home`,
-      redirect: 'manual',
-    })
-    const url = new URL(response.headers.get('location') ?? '', 'http://n/')
-    expect(url.pathname).toBe('/fr/new-home')
-    expect(response.status).toBe(302)
-  })
-
-  test<FixtureTestContext>('should support redirects to default locale without changing path', async (ctx) => {
-    await createFixture('middleware-i18n', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/fr/redirect-to-same-page-but-default-locale`,
-      redirect: 'manual',
-    })
-    const url = new URL(response.headers.get('location') ?? '', 'http://n/')
-    expect(url.pathname).toBe('/redirect-to-same-page-but-default-locale')
-    expect(response.status).toBe(302)
-  })
-
-  test<FixtureTestContext>('should preserve locale in request.nextUrl', async (ctx) => {
-    await createFixture('middleware-i18n', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/json`,
-    })
-    expect(response.status).toBe(200)
-    const body = await response.json()
-
-    expect(body.requestUrlPathname).toBe('/json')
-    expect(body.nextUrlPathname).toBe('/json')
-    expect(body.nextUrlLocale).toBe('en')
-
-    const responseEn = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/en/json`,
-    })
-    expect(responseEn.status).toBe(200)
-    const bodyEn = await responseEn.json()
-
-    expect(bodyEn.requestUrlPathname).toBe('/json')
-    expect(bodyEn.nextUrlPathname).toBe('/json')
-    expect(bodyEn.nextUrlLocale).toBe('en')
-
-    const responseFr = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/fr/json`,
-    })
-    expect(responseFr.status).toBe(200)
-    const bodyFr = await responseFr.json()
-
-    expect(bodyFr.requestUrlPathname).toBe('/fr/json')
-    expect(bodyFr.nextUrlPathname).toBe('/json')
-    expect(bodyFr.nextUrlLocale).toBe('fr')
-  })
-
-  test<FixtureTestContext>('should preserve locale in request.nextUrl with skipMiddlewareUrlNormalize', async (ctx) => {
-    await createFixture('middleware-i18n-skip-normalize', ctx)
-    await runPlugin(ctx)
-    const origin = await LocalServer.run(async (req, res) => {
-      res.write(
-        JSON.stringify({
-          url: req.url,
-          headers: req.headers,
-        }),
-      )
-      res.end()
-    })
-    ctx.cleanup?.push(() => origin.stop())
-
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/json`,
-    })
-    expect(response.status).toBe(200)
-    const body = await response.json()
-
-    expect(body.requestUrlPathname).toBe('/json')
-    expect(body.nextUrlPathname).toBe('/json')
-    expect(body.nextUrlLocale).toBe('en')
-
-    const responseEn = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/en/json`,
-    })
-    expect(responseEn.status).toBe(200)
-    const bodyEn = await responseEn.json()
-
-    expect(bodyEn.requestUrlPathname).toBe('/en/json')
-    expect(bodyEn.nextUrlPathname).toBe('/json')
-    expect(bodyEn.nextUrlLocale).toBe('en')
-
-    const responseFr = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      origin,
-      url: `/fr/json`,
-    })
-    expect(responseFr.status).toBe(200)
-    const bodyFr = await responseFr.json()
-
-    expect(bodyFr.requestUrlPathname).toBe('/fr/json')
-    expect(bodyFr.nextUrlPathname).toBe('/json')
-    expect(bodyFr.nextUrlLocale).toBe('fr')
-  })
-})
 
 // test.skipIf(!nextVersionSatisfies('>=15.2.0'))<FixtureTestContext>(
 //   'should throw an Not Supported error when node middleware is used',

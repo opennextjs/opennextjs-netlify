@@ -8,14 +8,27 @@ type ExtendedWindow = Window & {
   didReload?: boolean
 }
 
+type ExtendedFixtures = {
+  edgeOrNodeMiddleware: Fixture
+  edgeOrNodeMiddlewarePages: Fixture
+}
+
 for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
   {
     expectedRuntime: 'edge-runtime',
     label: 'Edge runtime middleware',
-    testWithSwitchableMiddlewareRuntime: test.extend<{}, { edgeOrNodeMiddleware: Fixture }>({
+    testWithSwitchableMiddlewareRuntime: test.extend<{}, ExtendedFixtures>({
       edgeOrNodeMiddleware: [
         async ({ middleware }, use) => {
           await use(middleware)
+        },
+        {
+          scope: 'worker',
+        },
+      ],
+      edgeOrNodeMiddlewarePages: [
+        async ({ middlewarePages }, use) => {
+          await use(middlewarePages)
         },
         {
           scope: 'worker',
@@ -27,10 +40,18 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
     ? {
         expectedRuntime: 'node',
         label: 'Node.js runtime middleware',
-        testWithSwitchableMiddlewareRuntime: test.extend<{}, { edgeOrNodeMiddleware: Fixture }>({
+        testWithSwitchableMiddlewareRuntime: test.extend<{}, ExtendedFixtures>({
           edgeOrNodeMiddleware: [
             async ({ middlewareNode }, use) => {
               await use(middlewareNode)
+            },
+            {
+              scope: 'worker',
+            },
+          ],
+          edgeOrNodeMiddlewarePages: [
+            async ({ middlewarePagesNode }, use) => {
+              await use(middlewarePagesNode)
             },
             {
               scope: 'worker',
@@ -103,91 +124,95 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
         const size = await getImageSize(Buffer.from(imageBuffer), 'png')
         expect([size.width, size.height]).toEqual([1200, 630])
       })
+    }
 
-      test.describe('json data', () => {
-        const testConfigs = [
-          {
-            describeLabel: 'NextResponse.next() -> getServerSideProps page',
-            selector: 'NextResponse.next()#getServerSideProps',
-            jsonPathMatcher: '/link/next-getserversideprops.json',
-          },
-          {
-            describeLabel: 'NextResponse.next() -> getStaticProps page',
-            selector: 'NextResponse.next()#getStaticProps',
-            jsonPathMatcher: '/link/next-getstaticprops.json',
-          },
-          {
-            describeLabel: 'NextResponse.next() -> fully static page',
-            selector: 'NextResponse.next()#fullyStatic',
-            jsonPathMatcher: '/link/next-fullystatic.json',
-          },
-          {
-            describeLabel: 'NextResponse.rewrite() -> getServerSideProps page',
-            selector: 'NextResponse.rewrite()#getServerSideProps',
-            jsonPathMatcher: '/link/rewrite-me-getserversideprops.json',
-          },
-          {
-            describeLabel: 'NextResponse.rewrite() -> getStaticProps page',
-            selector: 'NextResponse.rewrite()#getStaticProps',
-            jsonPathMatcher: '/link/rewrite-me-getstaticprops.json',
-          },
-        ]
+    test.describe('json data', () => {
+      const testConfigs = [
+        {
+          describeLabel: 'NextResponse.next() -> getServerSideProps page',
+          selector: 'NextResponse.next()#getServerSideProps',
+          jsonPathMatcher: '/link/next-getserversideprops.json',
+        },
+        {
+          describeLabel: 'NextResponse.next() -> getStaticProps page',
+          selector: 'NextResponse.next()#getStaticProps',
+          jsonPathMatcher: '/link/next-getstaticprops.json',
+        },
+        {
+          describeLabel: 'NextResponse.next() -> fully static page',
+          selector: 'NextResponse.next()#fullyStatic',
+          jsonPathMatcher: '/link/next-fullystatic.json',
+        },
+        {
+          describeLabel: 'NextResponse.rewrite() -> getServerSideProps page',
+          selector: 'NextResponse.rewrite()#getServerSideProps',
+          jsonPathMatcher: '/link/rewrite-me-getserversideprops.json',
+        },
+        {
+          describeLabel: 'NextResponse.rewrite() -> getStaticProps page',
+          selector: 'NextResponse.rewrite()#getStaticProps',
+          jsonPathMatcher: '/link/rewrite-me-getstaticprops.json',
+        },
+      ]
 
-        // Linking to static pages reloads on rewrite for versions below 14
-        if (nextVersionSatisfies('>=14.0.0')) {
-          testConfigs.push({
-            describeLabel: 'NextResponse.rewrite() -> fully static page',
-            selector: 'NextResponse.rewrite()#fullyStatic',
-            jsonPathMatcher: '/link/rewrite-me-fullystatic.json',
+      // Linking to static pages reloads on rewrite for versions below 14
+      if (nextVersionSatisfies('>=14.0.0')) {
+        testConfigs.push({
+          describeLabel: 'NextResponse.rewrite() -> fully static page',
+          selector: 'NextResponse.rewrite()#fullyStatic',
+          jsonPathMatcher: '/link/rewrite-me-fullystatic.json',
+        })
+      }
+
+      test.describe('no 18n', () => {
+        for (const testConfig of testConfigs) {
+          test.describe(testConfig.describeLabel, () => {
+            test('json data fetch', async ({ edgeOrNodeMiddlewarePages, page }) => {
+              const dataFetchPromise = new Promise<Response>((resolve) => {
+                page.on('response', (response) => {
+                  if (response.url().includes(testConfig.jsonPathMatcher)) {
+                    resolve(response)
+                  }
+                })
+              })
+
+              const pageResponse = await page.goto(`${edgeOrNodeMiddlewarePages.url}/link`)
+              expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+
+              await page.hover(`[data-link="${testConfig.selector}"]`)
+
+              const dataResponse = await dataFetchPromise
+
+              expect(dataResponse.ok()).toBe(true)
+            })
+
+            test('navigation', async ({ edgeOrNodeMiddlewarePages, page }) => {
+              const pageResponse = await page.goto(`${edgeOrNodeMiddlewarePages.url}/link`)
+              expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+
+              await page.evaluate(() => {
+                // set some value to window to check later if browser did reload and lost this state
+                ;(window as ExtendedWindow).didReload = false
+              })
+
+              await page.click(`[data-link="${testConfig.selector}"]`)
+
+              // wait for page to be rendered
+              await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
+
+              // check if browser navigation worked by checking if state was preserved
+              const browserNavigationWorked =
+                (await page.evaluate(() => {
+                  return (window as ExtendedWindow).didReload
+                })) === false
+
+              // we expect client navigation to work without browser reload
+              expect(browserNavigationWorked).toBe(true)
+            })
           })
         }
-
-        test.describe('no 18n', () => {
-          for (const testConfig of testConfigs) {
-            test.describe(testConfig.describeLabel, () => {
-              test('json data fetch', async ({ middlewarePages, page }) => {
-                const dataFetchPromise = new Promise<Response>((resolve) => {
-                  page.on('response', (response) => {
-                    if (response.url().includes(testConfig.jsonPathMatcher)) {
-                      resolve(response)
-                    }
-                  })
-                })
-
-                await page.goto(`${middlewarePages.url}/link`)
-
-                await page.hover(`[data-link="${testConfig.selector}"]`)
-
-                const dataResponse = await dataFetchPromise
-
-                expect(dataResponse.ok()).toBe(true)
-              })
-
-              test('navigation', async ({ middlewarePages, page }) => {
-                await page.goto(`${middlewarePages.url}/link`)
-
-                await page.evaluate(() => {
-                  // set some value to window to check later if browser did reload and lost this state
-                  ;(window as ExtendedWindow).didReload = false
-                })
-
-                await page.click(`[data-link="${testConfig.selector}"]`)
-
-                // wait for page to be rendered
-                await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
-
-                // check if browser navigation worked by checking if state was preserved
-                const browserNavigationWorked =
-                  (await page.evaluate(() => {
-                    return (window as ExtendedWindow).didReload
-                  })) === false
-
-                // we expect client navigation to work without browser reload
-                expect(browserNavigationWorked).toBe(true)
-              })
-            })
-          }
-        })
+      })
+      if (expectedRuntime !== 'node') {
         test.describe('with 18n', () => {
           for (const testConfig of testConfigs) {
             test.describe(testConfig.describeLabel, () => {
@@ -242,8 +267,10 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
             })
           }
         })
-      })
+      }
+    })
 
+    if (expectedRuntime !== 'node') {
       // those tests use `fetch` instead of `page.goto` intentionally to avoid potential client rendering
       // hiding any potential edge/server issues
       test.describe('Middleware with i18n and excluded paths', () => {
