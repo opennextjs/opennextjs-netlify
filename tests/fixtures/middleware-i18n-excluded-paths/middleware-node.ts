@@ -14,4 +14,5 @@ export const config = {
      */
     '/((?!api|excluded|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)',
   ],
+  runtime: 'nodejs',
 }

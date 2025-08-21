@@ -353,6 +353,11 @@ export const fixtureFactories = {
       publishDirectory: '.next-node-middleware',
     }),
   middlewareI18nExcludedPaths: () => createE2EFixture('middleware-i18n-excluded-paths'),
+  middlewareI18nExcludedPathsNode: () =>
+    createE2EFixture('middleware-i18n-excluded-paths', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
   middlewareOg: () => createE2EFixture('middleware-og'),
   middlewarePages: () => createE2EFixture('middleware-pages'),
   middlewarePagesNode: () =>
