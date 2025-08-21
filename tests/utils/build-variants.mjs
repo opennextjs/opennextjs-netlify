@@ -146,6 +146,7 @@ for (const variantToBuild of variantsToBuild) {
       NEXT_DIST_DIR: distDir,
     },
     stdio: 'inherit',
+    reject: false,
   })
 
   await runCleanup()
