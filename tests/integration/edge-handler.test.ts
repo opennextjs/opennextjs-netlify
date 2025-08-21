@@ -632,59 +632,59 @@ for (const {
         expect(bodyFr.nextUrlLocale).toBe('fr')
       })
 
-      test.skipIf(expectedRuntime === 'node')<FixtureTestContext>(
-        'should preserve locale in request.nextUrl with skipMiddlewareUrlNormalize',
-        async (ctx) => {
-          await createFixture('middleware-i18n-skip-normalize', ctx)
-          await runPlugin(ctx)
-          const origin = await LocalServer.run(async (req, res) => {
-            res.write(
-              JSON.stringify({
-                url: req.url,
-                headers: req.headers,
-              }),
-            )
-            res.end()
-          })
-          ctx.cleanup?.push(() => origin.stop())
+      test<FixtureTestContext>('should preserve locale in request.nextUrl with skipMiddlewareUrlNormalize', async (ctx) => {
+        await createFixture('middleware-i18n-skip-normalize', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
 
-          const response = await invokeEdgeFunction(ctx, {
-            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-            origin,
-            url: `/json`,
-          })
-          expect(response.status).toBe(200)
-          const body = await response.json()
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/json`,
+        })
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+        const body = await response.json()
 
-          expect(body.requestUrlPathname).toBe('/json')
-          expect(body.nextUrlPathname).toBe('/json')
-          expect(body.nextUrlLocale).toBe('en')
+        expect(body.requestUrlPathname).toBe('/json')
+        expect(body.nextUrlPathname).toBe('/json')
+        expect(body.nextUrlLocale).toBe('en')
 
-          const responseEn = await invokeEdgeFunction(ctx, {
-            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-            origin,
-            url: `/en/json`,
-          })
-          expect(responseEn.status).toBe(200)
-          const bodyEn = await responseEn.json()
+        const responseEn = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/en/json`,
+        })
+        expect(responseEn.status).toBe(200)
+        expect(responseEn.headers.get('x-runtime')).toEqual(expectedRuntime)
+        const bodyEn = await responseEn.json()
 
-          expect(bodyEn.requestUrlPathname).toBe('/en/json')
-          expect(bodyEn.nextUrlPathname).toBe('/json')
-          expect(bodyEn.nextUrlLocale).toBe('en')
+        expect(bodyEn.requestUrlPathname).toBe('/en/json')
+        expect(bodyEn.nextUrlPathname).toBe('/json')
+        expect(bodyEn.nextUrlLocale).toBe('en')
 
-          const responseFr = await invokeEdgeFunction(ctx, {
-            functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-            origin,
-            url: `/fr/json`,
-          })
-          expect(responseFr.status).toBe(200)
-          const bodyFr = await responseFr.json()
+        const responseFr = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/fr/json`,
+        })
+        expect(responseFr.status).toBe(200)
+        expect(responseFr.headers.get('x-runtime')).toEqual(expectedRuntime)
+        const bodyFr = await responseFr.json()
 
-          expect(bodyFr.requestUrlPathname).toBe('/fr/json')
-          expect(bodyFr.nextUrlPathname).toBe('/json')
-          expect(bodyFr.nextUrlLocale).toBe('fr')
-        },
-      )
+        expect(bodyFr.requestUrlPathname).toBe('/fr/json')
+        expect(bodyFr.nextUrlPathname).toBe('/json')
+        expect(bodyFr.nextUrlLocale).toBe('fr')
+      })
     })
   })
 }
