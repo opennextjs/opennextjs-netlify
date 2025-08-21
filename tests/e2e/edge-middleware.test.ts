@@ -13,6 +13,7 @@ type ExtendedFixtures = {
   edgeOrNodeMiddlewarePages: Fixture
   edgeOrNodeMiddlewareI18n: Fixture
   edgeOrNodeMiddlewareI18nExcludedPaths: Fixture
+  edgeOrNodeMiddlewareStaticAssetMatcher: Fixture
 }
 
 for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
@@ -52,6 +53,14 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
           scope: 'worker',
         },
       ],
+      edgeOrNodeMiddlewareStaticAssetMatcher: [
+        async ({ middlewareStaticAssetMatcher }, use) => {
+          await use(middlewareStaticAssetMatcher)
+        },
+        {
+          scope: 'worker',
+        },
+      ],
     }),
   },
   hasNodeMiddlewareSupport()
@@ -86,6 +95,14 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
           edgeOrNodeMiddlewareI18nExcludedPaths: [
             async ({ middlewareI18nExcludedPathsNode }, use) => {
               await use(middlewareI18nExcludedPathsNode)
+            },
+            {
+              scope: 'worker',
+            },
+          ],
+          edgeOrNodeMiddlewareStaticAssetMatcher: [
+            async ({ middlewareStaticAssetMatcherNode }, use) => {
+              await use(middlewareStaticAssetMatcherNode)
             },
             {
               scope: 'worker',
@@ -468,16 +485,17 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
       })
     })
 
-    if (expectedRuntime !== 'node') {
-      test('requests with different encoding than matcher match anyway', async ({
-        middlewareStaticAssetMatcher,
-      }) => {
-        const response = await fetch(`${middlewareStaticAssetMatcher.url}/hello%2Fworld.txt`)
+    test('requests with different encoding than matcher match anyway', async ({
+      edgeOrNodeMiddlewareStaticAssetMatcher,
+    }) => {
+      const response = await fetch(
+        `${edgeOrNodeMiddlewareStaticAssetMatcher.url}/hello%2Fworld.txt`,
+      )
 
-        // middleware was not skipped
-        expect(await response.text()).toBe('hello from middleware')
-      })
-    }
+      // middleware was not skipped
+      expect(await response.text()).toBe('hello from middleware')
+      expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+    })
 
     test.describe('RSC cache poisoning', () => {
       test('Middleware rewrite', async ({ page, edgeOrNodeMiddleware }) => {

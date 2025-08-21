@@ -366,6 +366,11 @@ export const fixtureFactories = {
       publishDirectory: '.next-node-middleware',
     }),
   middlewareStaticAssetMatcher: () => createE2EFixture('middleware-static-asset-matcher'),
+  middlewareStaticAssetMatcherNode: () =>
+    createE2EFixture('middleware-static-asset-matcher', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
   middlewareSubrequestVuln: () => createE2EFixture('middleware-subrequest-vuln'),
   pageRouter: () => createE2EFixture('page-router'),
   pageRouterBasePathI18n: () => createE2EFixture('page-router-base-path-i18n'),
