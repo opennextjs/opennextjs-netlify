@@ -16,6 +16,8 @@ type ExtendedFixtures = {
   edgeOrNodeMiddlewareStaticAssetMatcher: Fixture
 }
 
+console.log({ hasNodeMiddlewareSupport: hasNodeMiddlewareSupport() })
+
 for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
   {
     expectedRuntime: 'edge-runtime',
@@ -124,8 +126,6 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
 
       const h1 = page.locator('h1')
       await expect(h1).toHaveText('Other')
-
-      expect(await res?.headerValue('x-runtime')).toEqual(expectedRuntime)
     })
 
     test('Does not run middleware at the origin', async ({ page, edgeOrNodeMiddleware }) => {

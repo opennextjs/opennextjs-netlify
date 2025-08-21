@@ -9,9 +9,10 @@ export const { runWithAmplifyServerContext } = createServerRunner({
 export async function middleware(request: NextRequest) {
   const response = getResponse(request)
 
-  response.headers.append('Deno' in globalThis ? 'x-deno' : 'x-node', Date.now().toString())
+  response.headers.set('Deno' in globalThis ? 'x-deno' : 'x-node', Date.now().toString())
   // report Next.js Middleware Runtime (not the execution runtime, but target runtime)
-  response.headers.append('x-runtime', typeof EdgeRuntime !== 'undefined' ? EdgeRuntime : 'node')
+  // @ts-expect-error EdgeRuntime global not declared
+  response.headers.set('x-runtime', typeof EdgeRuntime !== 'undefined' ? EdgeRuntime : 'node')
   response.headers.set('x-hello-from-middleware-res', 'hello')
 
   await runWithAmplifyServerContext({

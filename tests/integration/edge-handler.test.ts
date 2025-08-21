@@ -216,7 +216,7 @@ for (const {
 
         expect(await response.text()).toBe('')
 
-        expect(response.status).toBe(302)
+        expect(response.status).toBe(307)
         expect(response.headers.get('location')).toBe('http://example.com/redirected')
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })
@@ -555,7 +555,7 @@ for (const {
         })
         const url = new URL(response.headers.get('location') ?? '', 'http://n/')
         expect(url.pathname).toBe('/fr/new-home')
-        expect(response.status).toBe(302)
+        expect(response.status).toBe(307)
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })
 
@@ -580,7 +580,7 @@ for (const {
         })
         const url = new URL(response.headers.get('location') ?? '', 'http://n/')
         expect(url.pathname).toBe('/redirect-to-same-page-but-default-locale')
-        expect(response.status).toBe(302)
+        expect(response.status).toBe(307)
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })
 

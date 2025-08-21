@@ -10,6 +10,8 @@ export async function middleware(request: NextRequest) {
     // @ts-expect-error EdgeRuntime global not declared
     response.headers.append('x-runtime', typeof EdgeRuntime !== 'undefined' ? EdgeRuntime : 'node')
     response.headers.set('x-hello-from-middleware-res', 'hello')
+
+    return response
   }
 }
 
@@ -23,75 +25,75 @@ const getResponse = (request: NextRequest) => {
 
   if (url.pathname === '/old-home') {
     if (url.searchParams.get('override') === 'external') {
-      return Response.redirect('https://example.vercel.sh')
+      return NextResponse.redirect('https://example.vercel.sh')
     } else {
       url.pathname = '/new-home'
-      return Response.redirect(url)
+      return NextResponse.redirect(url)
     }
   }
 
   if (url.searchParams.get('foo') === 'bar') {
     url.pathname = '/new-home'
     url.searchParams.delete('foo')
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   // Chained redirects
   if (url.pathname === '/redirect-me-alot') {
     url.pathname = '/redirect-me-alot-2'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/redirect-me-alot-2') {
     url.pathname = '/redirect-me-alot-3'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/redirect-me-alot-3') {
     url.pathname = '/redirect-me-alot-4'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/redirect-me-alot-4') {
     url.pathname = '/redirect-me-alot-5'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/redirect-me-alot-5') {
     url.pathname = '/redirect-me-alot-6'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/redirect-me-alot-6') {
     url.pathname = '/redirect-me-alot-7'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/redirect-me-alot-7') {
     url.pathname = '/new-home'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   // Infinite loop
   if (url.pathname === '/infinite-loop') {
     url.pathname = '/infinite-loop-1'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/infinite-loop-1') {
     url.pathname = '/infinite-loop'
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/to') {
     url.pathname = url.searchParams.get('pathname')
     url.searchParams.delete('pathname')
-    return Response.redirect(url)
+    return NextResponse.redirect(url)
   }
 
   if (url.pathname === '/with-fragment') {
     console.log(String(new URL('/new-home#fragment', url)))
-    return Response.redirect(new URL('/new-home#fragment', url))
+    return NextResponse.redirect(new URL('/new-home#fragment', url))
   }
 
   if (url.pathname.includes('/json')) {
