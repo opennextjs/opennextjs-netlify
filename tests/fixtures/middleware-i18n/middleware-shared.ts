@@ -6,10 +6,15 @@ export async function middleware(request: NextRequest) {
 
   if (response) {
     response.headers.append('Deno' in globalThis ? 'x-deno' : 'x-node', Date.now().toString())
+    console.error('[middleware] adding x-runtime')
     // report Next.js Middleware Runtime (not the execution runtime, but target runtime)
     // @ts-expect-error EdgeRuntime global not declared
     response.headers.append('x-runtime', typeof EdgeRuntime !== 'undefined' ? EdgeRuntime : 'node')
     response.headers.set('x-hello-from-middleware-res', 'hello')
+
+    return response
+  } else {
+    console.error('[middleware] NOT adding x-runtime')
   }
 }
 
@@ -120,6 +125,7 @@ const getResponse = (request: NextRequest) => {
   }
 
   if (url.pathname.includes('/json')) {
+    console.error('[middleware] hitting json stuff')
     return NextResponse.json({
       requestUrlPathname: new URL(request.url).pathname,
       nextUrlPathname: request.nextUrl.pathname,
