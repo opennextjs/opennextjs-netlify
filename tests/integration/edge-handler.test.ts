@@ -79,7 +79,7 @@ for (const {
       expect(origin.calls).toBe(1)
     })
 
-    test.only<FixtureTestContext>('should add request/response headers when using src dir', async (ctx) => {
+    test<FixtureTestContext>('should add request/response headers when using src dir', async (ctx) => {
       await createFixture('middleware-src', ctx)
       await runPlugin(ctx, runPluginConstants)
 
