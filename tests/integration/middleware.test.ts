@@ -26,6 +26,7 @@ for (const {
   edgeFunctionNameRoot,
   edgeFunctionNameSrc,
   expectedRuntime,
+  isNodeMiddleware,
   label,
   runPluginConstants,
 } of [
@@ -33,6 +34,7 @@ for (const {
     edgeFunctionNameRoot: EDGE_MIDDLEWARE_FUNCTION_NAME,
     edgeFunctionNameSrc: EDGE_MIDDLEWARE_SRC_FUNCTION_NAME,
     expectedRuntime: 'edge-runtime',
+    isNodeMiddleware: false,
     label: 'Edge runtime middleware',
   },
   hasNodeMiddlewareSupport()
@@ -40,6 +42,7 @@ for (const {
         edgeFunctionNameRoot: NODE_MIDDLEWARE_FUNCTION_NAME,
         edgeFunctionNameSrc: NODE_MIDDLEWARE_FUNCTION_NAME,
         expectedRuntime: 'node',
+        isNodeMiddleware: true,
         label: 'Node.js runtime middleware',
         runPluginConstants: { PUBLISH_DIR: '.next-node-middleware' },
       }
@@ -692,25 +695,64 @@ for (const {
         expect(bodyFr.nextUrlLocale).toBe('fr')
       })
     })
+
+    if (isNodeMiddleware) {
+      describe('Node.js Middleware specific', () => {
+        test.only<FixtureTestContext>('should fail to deploy when using unsupported C++ Addons with meaningful message about limitation', async (ctx) => {
+          await createFixture('middleware-node-unsupported-cpp-addons', ctx)
+
+          const runPluginPromise = runPlugin(ctx)
+          await runPluginPromise
+
+          const origin = await LocalServer.run(async (req, res) => {
+            res.write(
+              JSON.stringify({
+                url: req.url,
+                headers: req.headers,
+              }),
+            )
+            res.end()
+          })
+          ctx.cleanup?.push(() => origin.stop())
+          const response = await invokeEdgeFunction(ctx, {
+            functions: [edgeFunctionNameRoot],
+            origin,
+            url: `/json`,
+          })
+          console.log(response)
+
+          // await expect(runPluginPromise).rejects.toThrow('Node.js middleware is not yet supported.')
+          // await expect(runPluginPromise).rejects.toThrow(
+          //   'Future @netlify/plugin-nextjs release will support node middleware with following limitations:',
+          // )
+          // await expect(runPluginPromise).rejects.toThrow(
+          //   ' - usage of C++ Addons (https://nodejs.org/api/addons.html) not supported (for example `bcrypt` npm module will not be supported, but `bcryptjs` will be supported)',
+          // )
+          // await expect(runPluginPromise).rejects.toThrow(
+          //   ' - usage of Filesystem (https://nodejs.org/api/fs.html) not supported',
+          // )
+        })
+      })
+    }
   })
 }
 
 // test.skipIf(!nextVersionSatisfies('>=15.2.0'))<FixtureTestContext>(
 //   'should throw an Not Supported error when node middleware is used',
-//   async (ctx) => {
-//     await createFixture('middleware-node', ctx)
+// async (ctx) => {
+//   await createFixture('middleware-node', ctx)
 
-//     const runPluginPromise = runPlugin(ctx)
+//   const runPluginPromise = runPlugin(ctx)
 
-//     await expect(runPluginPromise).rejects.toThrow('Node.js middleware is not yet supported.')
-//     await expect(runPluginPromise).rejects.toThrow(
-//       'Future @netlify/plugin-nextjs release will support node middleware with following limitations:',
-//     )
-//     await expect(runPluginPromise).rejects.toThrow(
-//       ' - usage of C++ Addons (https://nodejs.org/api/addons.html) not supported (for example `bcrypt` npm module will not be supported, but `bcryptjs` will be supported)',
-//     )
-//     await expect(runPluginPromise).rejects.toThrow(
-//       ' - usage of Filesystem (https://nodejs.org/api/fs.html) not supported',
-//     )
-//   },
+//   await expect(runPluginPromise).rejects.toThrow('Node.js middleware is not yet supported.')
+//   await expect(runPluginPromise).rejects.toThrow(
+//     'Future @netlify/plugin-nextjs release will support node middleware with following limitations:',
+//   )
+//   await expect(runPluginPromise).rejects.toThrow(
+//     ' - usage of C++ Addons (https://nodejs.org/api/addons.html) not supported (for example `bcrypt` npm module will not be supported, but `bcryptjs` will be supported)',
+//   )
+//   await expect(runPluginPromise).rejects.toThrow(
+//     ' - usage of Filesystem (https://nodejs.org/api/fs.html) not supported',
+//   )
+// },
 // )
