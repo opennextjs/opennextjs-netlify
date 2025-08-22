@@ -698,39 +698,25 @@ for (const {
 
     if (isNodeMiddleware) {
       describe('Node.js Middleware specific', () => {
-        test.only<FixtureTestContext>('should fail to deploy when using unsupported C++ Addons with meaningful message about limitation', async (ctx) => {
+        test<FixtureTestContext>('should fail to deploy when using unsupported C++ Addons with meaningful message about limitation', async (ctx) => {
           await createFixture('middleware-node-unsupported-cpp-addons', ctx)
 
           const runPluginPromise = runPlugin(ctx)
-          await runPluginPromise
 
-          const origin = await LocalServer.run(async (req, res) => {
-            res.write(
-              JSON.stringify({
-                url: req.url,
-                headers: req.headers,
-              }),
-            )
-            res.end()
-          })
-          ctx.cleanup?.push(() => origin.stop())
-          const response = await invokeEdgeFunction(ctx, {
-            functions: [edgeFunctionNameRoot],
-            origin,
-            url: `/json`,
-          })
-          console.log(response)
-
-          // await expect(runPluginPromise).rejects.toThrow('Node.js middleware is not yet supported.')
-          // await expect(runPluginPromise).rejects.toThrow(
-          //   'Future @netlify/plugin-nextjs release will support node middleware with following limitations:',
-          // )
-          // await expect(runPluginPromise).rejects.toThrow(
-          //   ' - usage of C++ Addons (https://nodejs.org/api/addons.html) not supported (for example `bcrypt` npm module will not be supported, but `bcryptjs` will be supported)',
-          // )
-          // await expect(runPluginPromise).rejects.toThrow(
-          //   ' - usage of Filesystem (https://nodejs.org/api/fs.html) not supported',
-          // )
+          await expect(
+            runPluginPromise,
+            'error message should describe error cause',
+          ).rejects.toThrow('Usage of unsupported C++ Addon(s) found in Node.js Middleware')
+          await expect(
+            runPluginPromise,
+            'error message should mention c++ addons (.node) file names to help finding the package(s) that contain them',
+          ).rejects.toThrow('bcrypt.node')
+          await expect(
+            runPluginPromise,
+            'link to documentation should be provided',
+          ).rejects.toThrow(
+            'https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/#limitations',
+          )
         })
       })
     }

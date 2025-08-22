@@ -218,7 +218,7 @@ const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
   // files are relative to location of middleware entrypoint
   // we need to capture all of them
   // they might be going to parent directories, so first we check how many directories we need to go up
-  const { maxParentDirectoriesPath } = files.reduce(
+  const { maxParentDirectoriesPath, unsupportedDotNodeModules } = files.reduce(
     (acc, file) => {
       let dirsUp = 0
       let parentDirectoriesPath = ''
@@ -231,8 +231,14 @@ const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
         }
       }
 
+      if (file.endsWith('.node')) {
+        // C++ addons are not supported
+        acc.unsupportedDotNodeModules.push(join(srcDir, file))
+      }
+
       if (dirsUp > acc.maxDirsUp) {
         return {
+          ...acc,
           maxDirsUp: dirsUp,
           maxParentDirectoriesPath: parentDirectoriesPath,
         }
@@ -240,8 +246,14 @@ const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
 
       return acc
     },
-    { maxDirsUp: 0, maxParentDirectoriesPath: '' },
+    { maxDirsUp: 0, maxParentDirectoriesPath: '', unsupportedDotNodeModules: [] as string[] },
   )
+
+  if (unsupportedDotNodeModules.length !== 0) {
+    throw new Error(
+      `Usage of unsupported C++ Addon(s) found in Node.js Middleware:\n${unsupportedDotNodeModules.map((file) => `- ${file}`).join('\n')}\n\nCheck https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/#limitations for more information.`,
+    )
+  }
 
   const commonPrefix = relative(join(srcDir, maxParentDirectoriesPath), srcDir)
 
