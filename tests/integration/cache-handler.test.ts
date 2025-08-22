@@ -19,6 +19,7 @@ import {
 } from '../utils/helpers.js'
 import {
   nextVersionSatisfies,
+  shouldHaveAppRouterGlobalErrorInPrerenderManifest,
   shouldHaveAppRouterNotFoundInPrerenderManifest,
 } from '../utils/next-version-helpers.mjs'
 
@@ -218,6 +219,7 @@ describe('app router', () => {
     expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
       [
         '/404',
+        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/index',
         '/posts/1',
@@ -371,6 +373,7 @@ describe('plugin', () => {
     expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
       [
         '/404',
+        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/api/revalidate-handler',
         '/api/static/first',
