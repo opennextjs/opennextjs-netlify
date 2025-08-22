@@ -346,6 +346,7 @@ export const fixtureFactories = {
       buildCommand: getBuildFixtureVariantCommand('node-middleware'),
       publishDirectory: '.next-node-middleware',
     }),
+  middlewareNodeRuntimeSpecific: () => createE2EFixture('middleware-node-runtime-specific'),
   middlewareI18n: () => createE2EFixture('middleware-i18n'),
   middlewareI18nNode: () =>
     createE2EFixture('middleware-i18n', {

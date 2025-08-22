@@ -24,6 +24,7 @@ const e2eOnlyFixtures = new Set([
   'cli-before-regional-blobs-support',
   'dist-dir',
   'middleware-i18n-excluded-paths',
+  'middleware-node-runtime-specific',
   'middleware-static-asset-matcher',
   'middleware-subrequest-vuln',
   // There is also a bug on Windows on Node.js 18.20.6, that cause build failures on this fixture
