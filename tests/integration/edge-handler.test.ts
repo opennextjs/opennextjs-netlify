@@ -216,7 +216,7 @@ for (const {
 
         expect(await response.text()).toBe('')
 
-        expect(response.status).toBe(307)
+        expect(response.status).toBe(302)
         expect(response.headers.get('location')).toBe('http://example.com/redirected')
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })

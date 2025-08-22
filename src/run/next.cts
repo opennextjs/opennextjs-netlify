@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs/promises'
-import { relative, resolve, join } from 'node:path'
+import { relative, resolve } from 'node:path'
 
 // @ts-expect-error no types installed
 import { patchFs } from 'fs-monkey'
@@ -107,7 +107,6 @@ export async function getMockedRequestHandler(
           const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
           const relPath = relative(resolve(nextConfig.distDir, 'server/pages'), path)
           const file = await cacheStore.get<HtmlBlob>(relPath, 'staticHtml.get')
-          console.log('trying to read path', { path, relPath, file })
           if (file !== null) {
             if (file.isFullyStaticPage) {
               const requestContext = getRequestContext()
