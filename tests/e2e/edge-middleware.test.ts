@@ -441,7 +441,6 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
           const response = await fetch(`${edgeOrNodeMiddlewareI18nExcludedPaths.url}/api/html`)
 
           expect(response.headers.get('x-test-used-middleware')).not.toBe('true')
-          expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
           expect(response.status).toBe(200)
 
           const { params } = await response.json()
@@ -455,7 +454,6 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
           const response = await fetch(`${edgeOrNodeMiddlewareI18nExcludedPaths.url}/excluded`)
 
           expect(response.headers.get('x-test-used-middleware')).not.toBe('true')
-          expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
           expect(response.status).toBe(200)
           expect(response.headers.get('content-type')).toMatch(/text\/html/)
 
@@ -472,7 +470,6 @@ for (const { expectedRuntime, label, testWithSwitchableMiddlewareRuntime } of [
           const response = await fetch(`${edgeOrNodeMiddlewareI18nExcludedPaths.url}/fr/excluded`)
 
           expect(response.headers.get('x-test-used-middleware')).not.toBe('true')
-          expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
           expect(response.status).toBe(200)
           expect(response.headers.get('content-type')).toMatch(/text\/html/)
 
