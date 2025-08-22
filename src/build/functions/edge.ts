@@ -195,10 +195,7 @@ const copyHandlerDependenciesForEdgeMiddleware = async (
 }
 
 const NODE_MIDDLEWARE_NAME = 'node-middleware'
-const copyHandlerDependenciesForNodeMiddleware = async (
-  ctx: PluginContext,
-  _arg: NodeMiddlewareDefinition,
-) => {
+const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
   const name = NODE_MIDDLEWARE_NAME
 
   const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
@@ -281,7 +278,7 @@ const createEdgeHandler = async (
 ): Promise<void> => {
   await (definition.runtime === 'edge'
     ? copyHandlerDependenciesForEdgeMiddleware(ctx, definition.functionDefinition)
-    : copyHandlerDependenciesForNodeMiddleware(ctx, definition.functionDefinition))
+    : copyHandlerDependenciesForNodeMiddleware(ctx))
   await writeHandlerFile(ctx, definition)
 }
 
