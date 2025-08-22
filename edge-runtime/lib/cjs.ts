@@ -6,7 +6,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 type RegisteredModule = {
   source: string
   loaded: boolean
-  filename: string
+  filepath: string
+  // lazily parsed json string
+  parsedJson?: any
 }
 const registeredModules = new Map<string, RegisteredModule>()
 
@@ -14,36 +16,56 @@ const require = createRequire(import.meta.url)
 
 let hookedIn = false
 
-function seedCJSModuleCacheAndReturnTarget(matchedModule: RegisteredModule, parent: Module) {
-  if (matchedModule.loaded) {
-    return matchedModule.filename
+function parseJson(matchedModule: RegisteredModule) {
+  if (matchedModule.parsedJson) {
+    return matchedModule.parsedJson
   }
-  const { source, filename } = matchedModule
 
-  const mod = new Module(filename)
-  mod.parent = parent
-  mod.filename = filename
-  mod.path = dirname(filename)
-  // @ts-expect-error - private untyped API
-  mod.paths = Module._nodeModulePaths(mod.path)
-  require.cache[filename] = mod
-
-  const wrappedSource = `(function (exports, require, module, __filename, __dirname) { ${source}\n});`
   try {
-    const compiled = vm.runInThisContext(wrappedSource, {
-      filename,
-      lineOffset: 0,
-      displayErrors: true,
-    })
-    compiled(mod.exports, createRequire(pathToFileURL(filename)), mod, filename, dirname(filename))
-    mod.loaded = matchedModule.loaded = true
+    const jsonContent = JSON.parse(matchedModule.source)
+    matchedModule.parsedJson = jsonContent
+    return jsonContent
   } catch (error) {
-    throw new Error(`Failed to compile CJS module: ${filename}`, { cause: error })
+    throw new Error(`Failed to parse JSON module: ${matchedModule.filepath}`, { cause: error })
   }
-
-  return filename
 }
 
+function seedCJSModuleCacheAndReturnTarget(matchedModule: RegisteredModule, parent: Module) {
+  if (matchedModule.loaded) {
+    return matchedModule.filepath
+  }
+  const { source, filepath } = matchedModule
+
+  const mod = new Module(filepath)
+  mod.parent = parent
+  mod.filename = filepath
+  mod.path = dirname(filepath)
+  // @ts-expect-error - private untyped API
+  mod.paths = Module._nodeModulePaths(mod.path)
+  require.cache[filepath] = mod
+
+  try {
+    if (filepath.endsWith('.json')) {
+      Object.assign(mod.exports, parseJson(matchedModule))
+    } else {
+      const wrappedSource = `(function (exports, require, module, __filename, __dirname) { ${source}\n});`
+      const compiled = vm.runInThisContext(wrappedSource, {
+        filename: filepath,
+        lineOffset: 0,
+        displayErrors: true,
+      })
+      const modRequire = createRequire(pathToFileURL(filepath))
+      compiled(mod.exports, modRequire, mod, filepath, dirname(filepath))
+    }
+    mod.loaded = matchedModule.loaded = true
+  } catch (error) {
+    throw new Error(`Failed to compile CJS module: ${filepath}`, { cause: error })
+  }
+
+  return filepath
+}
+
+// ideally require.extensions could be used, but it does NOT include '.cjs', so hardcoding instead
 const exts = ['.js', '.cjs', '.json']
 
 function tryWithExtensions(filename: string) {
@@ -80,7 +102,7 @@ export function registerCJSModules(baseUrl: URL, modules: Map<string, string>) {
   for (const [filename, source] of modules.entries()) {
     const target = join(basePath, filename)
 
-    registeredModules.set(target, { source, loaded: false, filename: target })
+    registeredModules.set(target, { source, loaded: false, filepath: target })
   }
 
   if (!hookedIn) {
@@ -101,8 +123,30 @@ export function registerCJSModules(baseUrl: URL, modules: Map<string, string>) {
       let matchedModule = tryMatchingWithIndex(target)
 
       if (!isRelative && !target.startsWith('/')) {
+        const packageName = target.startsWith('@')
+          ? target.split('/').slice(0, 2).join('/')
+          : target.split('/')[0]
+        const moduleInPackagePath = target.slice(packageName.length + 1)
+
         for (const nodeModulePaths of args[1].paths) {
-          const potentialPath = join(nodeModulePaths, target)
+          const potentialPackageJson = join(nodeModulePaths, packageName, 'package.json')
+
+          const maybePackageJson = registeredModules.get(potentialPackageJson)
+
+          let relativeTarget = moduleInPackagePath
+
+          let pkgJson: any = null
+          if (maybePackageJson) {
+            pkgJson = parseJson(maybePackageJson)
+
+            // TODO: exports and anything else like that
+            if (moduleInPackagePath.length === 0 && pkgJson.main) {
+              relativeTarget = pkgJson.main
+            }
+          }
+
+          const potentialPath = join(nodeModulePaths, packageName, relativeTarget)
+
           matchedModule = tryMatchingWithIndex(potentialPath)
           if (matchedModule) {
             break
