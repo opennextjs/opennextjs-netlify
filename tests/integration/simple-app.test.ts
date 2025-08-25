@@ -36,6 +36,7 @@ import {
 } from '../utils/helpers.js'
 import {
   nextVersionSatisfies,
+  shouldHaveAppRouterGlobalErrorInPrerenderManifest,
   shouldHaveAppRouterNotFoundInPrerenderManifest,
 } from '../utils/next-version-helpers.mjs'
 
@@ -394,6 +395,7 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
     expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
       [
         '/404',
+        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/index',
         '404.html',
