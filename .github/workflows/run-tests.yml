@@ -38,7 +38,7 @@ jobs:
           elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ steps.check-labels.outputs.result }}" = "true" ]; then
             echo "matrix=[\"latest\", \"canary\", \"14.2.15\", \"13.5.1\"]" >> $GITHUB_OUTPUT
           else
-            echo "matrix=[\"latest\"]" >> $GITHUB_OUTPUT
+            echo "matrix=[\"latest\",\"canary\"]" >> $GITHUB_OUTPUT
           fi
 
   e2e:

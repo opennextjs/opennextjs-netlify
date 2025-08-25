@@ -7,6 +7,7 @@ import { patchFs } from 'fs-monkey'
 
 import { HtmlBlob } from '../shared/blob-types.cjs'
 
+import type { NextConfigForMultipleVersions } from './config.js'
 import { getRequestContext } from './handlers/request-context.cjs'
 import { getTracer } from './handlers/tracer.cjs'
 import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
@@ -79,7 +80,10 @@ ResponseCache.prototype.get = function get(...getArgs: unknown[]) {
 
 type FS = typeof import('fs')
 
-export async function getMockedRequestHandler(...args: Parameters<typeof getRequestHandlers>) {
+export async function getMockedRequestHandler(
+  nextConfig: NextConfigForMultipleVersions,
+  ...args: Parameters<typeof getRequestHandlers>
+) {
   const initContext = { initializingServer: true }
   /**
    * Using async local storage to identify operations happening as part of server initialization
@@ -101,7 +105,7 @@ export async function getMockedRequestHandler(...args: Parameters<typeof getRequ
         // only try to get .html files from the blob store
         if (typeof path === 'string' && path.endsWith('.html')) {
           const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
-          const relPath = relative(resolve('.next/server/pages'), path)
+          const relPath = relative(resolve(nextConfig.distDir, 'server/pages'), path)
           const file = await cacheStore.get<HtmlBlob>(relPath, 'staticHtml.get')
           if (file !== null) {
             if (file.isFullyStaticPage) {

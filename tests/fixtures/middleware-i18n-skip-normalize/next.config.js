@@ -1,5 +1,6 @@
 module.exports = {
   output: 'standalone',
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -11,6 +12,7 @@ module.exports = {
   experimental: {
     clientRouterFilter: true,
     clientRouterFilterRedirects: true,
+    nodeMiddleware: true,
   },
   redirects() {
     return [

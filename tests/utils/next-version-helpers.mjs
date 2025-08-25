@@ -38,6 +38,17 @@ export function shouldHaveAppRouterNotFoundInPrerenderManifest() {
   return nextVersionSatisfies(isNextCanary() ? '>=15.4.2-canary.33' : '>=15.5.0')
 }
 
+export function shouldHaveAppRouterGlobalErrorInPrerenderManifest() {
+  // https://github.com/vercel/next.js/pull/82444
+
+  // this is not used in any stable version yet
+  return isNextCanary() && nextVersionSatisfies('>=15.5.1-canary.4')
+}
+
+export function hasNodeMiddlewareSupport() {
+  return nextVersionSatisfies(isNextCanary() ? '>=15.2.0' : '>=15.5.0')
+}
+
 /**
  * Check if current next version requires React 19
  * @param {string} version Next version

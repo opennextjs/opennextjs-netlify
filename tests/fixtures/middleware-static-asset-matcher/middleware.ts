@@ -1,6 +1,4 @@
-export default function middleware() {
-  return new Response('hello from middleware')
-}
+export { middleware } from './middleware-shared'
 
 export const config = {
   matcher: '/hello/world.txt',

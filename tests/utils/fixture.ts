@@ -560,3 +560,7 @@ export async function invokeSandboxedFunction(
   exit()
   return result
 }
+
+export const EDGE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-middleware'
+export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = '___netlify-edge-handler-src-middleware'
+export const NODE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-node-middleware'
