@@ -6,6 +6,7 @@ export function middleware(request: NextRequest) {
 
   response.headers.append('Deno' in globalThis ? 'x-deno' : 'x-node', Date.now().toString())
   // report Next.js Middleware Runtime (not the execution runtime, but target runtime)
+  // @ts-expect-error EdgeRuntime global not declared
   response.headers.append('x-runtime', typeof EdgeRuntime !== 'undefined' ? EdgeRuntime : 'node')
   response.headers.set('x-hello-from-middleware-res', 'hello')
 
