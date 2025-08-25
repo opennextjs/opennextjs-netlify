@@ -188,12 +188,6 @@ function getPackageResolver(packageJsonMatchedModule: RegisteredModule) {
 
       if (bestMatchKey && typeof bestMatchSubpath === 'string') {
         const matchedTarget = exports[bestMatchKey]
-        console.log({
-          matchedTarget,
-          bestMatchKey,
-          bestMatchSubpath,
-          subpath,
-        })
         return matchConditions(matchedTarget, bestMatchSubpath)
       }
 
