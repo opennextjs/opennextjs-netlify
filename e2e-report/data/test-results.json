@@ -8528,7 +8528,7 @@
           "link": "https://github.com/netlify/next-runtime-minimal/issues/564"
         },
         {
-          "name": "skip-trailing-slash-redirect should be able to redirect locale casing $1",
+          "name": "skip-trailing-slash-redirect should be able to redirect locale casing $2",
           "status": "failed",
           "retries": 0,
           "reason": "does not correctly handle user middleware that redirects to path with canonical locale casing when app enables `skipMiddlewareUrlNormalize` and path contains locale slug with non-canonical casing",

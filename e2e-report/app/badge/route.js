@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og'
 import testData from '@/utils/data'
-import { badgeSettings, badgeSize } from '@/utils/consts'
+import { badgeSettings } from '@/utils/consts'
 
 export const dynamic = 'force-static'
 
@@ -16,7 +16,7 @@ const bgStyles = {
 }
 
 // Generate an SVG badge with test status and target Next.js version
-export async function GET(request) {
+export async function GET() {
   const valueStyle =
     bgStyles[testData.failed === 0 ? 'ok' : testData.unknownFailuresCount > 0 ? 'error' : 'warning']
 
