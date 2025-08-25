@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { CopyIcon } from './icons'
-import { badgeDisplaySize, badgeSettings } from '@/utils/consts'
+import { badgeSettings } from '@/utils/consts'
 
 export default function CopyBadgeButton() {
   const [host, setHost] = useState('')

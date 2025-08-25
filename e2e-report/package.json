@@ -6,19 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint"
   },
   "dependencies": {
     "@netlify/plugin-nextjs": "^5.12.1",
-    "next": "^14.2.26",
+    "next": "^15.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.19",
     "daisyui": "^4.12.2",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "^14.2.4",
+    "eslint": "^9.34.0",
+    "eslint-config-next": "^15.5.0",
     "netlify-cli": "^23.3.1",
     "postcss": "^8.4.38",
     "sass": "^1.77.1",
