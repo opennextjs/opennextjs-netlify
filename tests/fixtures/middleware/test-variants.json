@@ -1,4 +1,9 @@
 {
+  "default": {
+    "env": {
+      "SPLIT_CHUNKS": "true"
+    }
+  },
   "node-middleware": {
     "distDir": ".next-node-middleware",
     "files": {
