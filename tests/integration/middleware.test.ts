@@ -710,7 +710,7 @@ for (const {
           await expect(
             runPluginPromise,
             'error message should mention c++ addons (.node) file names to help finding the package(s) that contain them',
-          ).rejects.toThrow('bcrypt.node')
+          ).rejects.toThrow(/node_modules\/bcrypt\/.*\.node/)
           await expect(
             runPluginPromise,
             'link to documentation should be provided',
