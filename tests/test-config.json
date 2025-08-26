@@ -396,6 +396,22 @@
       "tests": [
         "router autoscrolling on navigation bugs Should apply scroll when loading.js is used"
       ]
+    },
+    {
+      "file": "test/e2e/app-dir/actions-unrecognized/actions-unrecognized.test.ts",
+      "reason": "Mismatch of reported status code of response (500 instead of 'expected' 405). Test itself has FIXME comment about that.",
+      "tests": [
+        "unrecognized server actions should error and log a warning when submitting a server action with an unrecognized ID - nodejs server action invoked via form - js disabled",
+        "unrecognized server actions should error and log a warning when submitting a server action with an unrecognized ID - edge server action invoked via form - js disabled"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/actions/app-action-size-limit-invalid.test.ts",
+      "reason": "Mismatch of reported status code of response (502 instead of expected 500)",
+      "tests": [
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should error for requests that exceed the size limit",
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should error for requests that exceed the size limit"
+      ]
     }
   ],
   "failures": [
