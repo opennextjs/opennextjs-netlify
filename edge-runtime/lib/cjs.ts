@@ -1,7 +1,10 @@
 import { Module, createRequire } from 'node:module'
 import vm from 'node:vm'
-import { join, dirname } from 'node:path/posix'
+import { sep } from 'node:path'
+import { join, dirname, sep as posixSep } from 'node:path/posix'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+
+const toPosixPath = (path: string) => path.split(sep).join(posixSep)
 
 type RegisteredModule = {
   source: string
@@ -231,7 +234,7 @@ function seedCJSModuleCacheAndReturnTarget(matchedModule: RegisteredModule, pare
         lineOffset: 0,
         displayErrors: true,
       })
-      const modRequire = createRequire(pathToFileURL(filepath))
+      const modRequire = createRequire(pathToFileURL(filepath, { windows: false }))
       compiled(mod.exports, modRequire, mod, filepath, dirname(filepath))
     }
     mod.loaded = matchedModule.loaded = true
@@ -274,7 +277,7 @@ function tryMatchingWithIndex(target: string) {
 }
 
 export function registerCJSModules(baseUrl: URL, modules: Map<string, string>) {
-  const basePath = dirname(fileURLToPath(baseUrl))
+  const basePath = dirname(toPosixPath(fileURLToPath(baseUrl, { windows: false })))
 
   for (const [filename, source] of modules.entries()) {
     const target = join(basePath, filename)
@@ -291,7 +294,7 @@ export function registerCJSModules(baseUrl: URL, modules: Map<string, string>) {
 
       if (isRelative) {
         // only handle relative require paths
-        const requireFrom = args?.[1]?.filename
+        const requireFrom = toPosixPath(args?.[1]?.filename)
 
         target = join(dirname(requireFrom), args[0])
       }
