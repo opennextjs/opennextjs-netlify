@@ -35,18 +35,6 @@ function parseJson(matchedModule: RegisteredModule) {
   }
 }
 
-function normalizePackageExports(exports: any) {
-  if (typeof exports === 'string') {
-    return { '.': exports }
-  }
-
-  if (Array.isArray(exports)) {
-    return Object.fromEntries(exports.map((entry) => [entry, entry]))
-  }
-
-  return exports
-}
-
 type Condition = string // 'import', 'require', 'default', 'node-addon' etc
 type SubpathMatcher = string
 type ConditionalTarget = { [key in Condition]: string | ConditionalTarget }
@@ -307,7 +295,8 @@ export function registerCJSModules(baseUrl: URL, modules: Map<string, string>) {
           : target.split('/')[0]
         const moduleInPackagePath = target.slice(packageName.length + 1)
 
-        for (const nodeModulePaths of args[1].paths) {
+        for (const nodeModulePathsRaw of args[1].paths) {
+          const nodeModulePaths = toPosixPath(nodeModulePathsRaw)
           const potentialPackageJson = join(nodeModulePaths, packageName, 'package.json')
 
           const maybePackageJson = registeredModules.get(potentialPackageJson)
