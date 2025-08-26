@@ -53,7 +53,10 @@ const expectedVirtualRequireResult = {
     '/virtual-root/node_modules/package-exports-conditions/dist/wildcard/module.js',
   packageExportsExportedModule:
     '/virtual-root/node_modules/package-exports/dist/exported-module.js',
+  packageExportsMainRoot: '/virtual-root/node_modules/package-exports-main/root-export.js',
+  packageExportsNotAllowedBecauseNotInExportMap: 'ERROR',
   packageExportsRoot: '/virtual-root/node_modules/package-exports/root-export.js',
+  packageExportsSugarRoot: '/virtual-root/node_modules/package-exports-sugar/root-export.js',
   packageExportsWildcardModuleNoExt:
     '/virtual-root/node_modules/package-exports/dist/wildcard/module.js',
   packageExportsWildcardModuleWithExt:

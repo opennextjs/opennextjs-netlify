@@ -23,6 +23,7 @@ module.exports = {
   packageExportsExportedModule: safeRequire('package-exports/exported-module.js'),
   packageExportsWildcardModuleNoExt: safeRequire('package-exports/wildcard/module'),
   packageExportsWildcardModuleWithExt: safeRequire('package-exports/wildcard/module.js'),
+  packageExportsNotAllowedBecauseNotInExportMap: safeRequire('package-exports/not-allowed.js'),
 
   // package with `exports` (with conditions, including nested ones), but no `main`
   packageExportsConditionsRoot: safeRequire('package-exports-conditions'),
@@ -35,4 +36,10 @@ module.exports = {
   packageExportsConditionsWildcardModuleWithExt: safeRequire(
     'package-exports-conditions/wildcard/module.js',
   ),
+
+  // package with `exports` and `main` (exports should win)
+  packageExportsMainRoot: safeRequire('package-exports-main'),
+
+  // package with `exports` using shorthand / sugar syntax with single export
+  packageExportsSugarRoot: safeRequire('package-exports-sugar'),
 }
