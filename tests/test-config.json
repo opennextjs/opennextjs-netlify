@@ -420,6 +420,10 @@
         "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should error for requests that exceed the size limit",
         "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should error for requests that exceed the size limit"
       ]
+    },
+    {
+      "file": "test/e2e/app-dir/next-after-app-deploy/index.test.ts",
+      "reason": "Common test setup in this test suite is making 2 requests to page with 1 hour revalidation asserting it's the same, but on Netlify the first fetch will serve content we mark as stale, so second one will serve freshly generated one and those won't match."
     }
   ],
   "failures": [
