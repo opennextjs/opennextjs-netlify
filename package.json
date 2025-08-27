@@ -58,7 +58,7 @@
     "@netlify/edge-functions-bootstrap": "^2.14.0",
     "@netlify/edge-functions": "^2.17.1",
     "@netlify/eslint-config-node": "^7.0.1",
-    "@netlify/functions": "^4.2.2",
+    "@netlify/functions": "^4.2.4",
     "@netlify/serverless-functions-api": "^2.2.1",
     "@netlify/zip-it-and-ship-it": "^14.1.4",
     "@opentelemetry/api": "^1.8.0",
