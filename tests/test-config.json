@@ -412,6 +412,14 @@
         "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should error for requests that exceed the size limit",
         "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should error for requests that exceed the size limit"
       ]
+    },
+    {
+      "file": "test/e2e/app-dir/actions/app-action-size-limit-invalid-node-middleware.test.ts",
+      "reason": "Mismatch of reported status code of response (502 instead of expected 500)",
+      "tests": [
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for plaintext fetch actions should error for requests that exceed the size limit",
+        "app-dir action size limit invalid config should respect the size set in serverActions.bodySizeLimit for multipart fetch actions should error for requests that exceed the size limit"
+      ]
     }
   ],
   "failures": [
