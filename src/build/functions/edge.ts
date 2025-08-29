@@ -1,12 +1,42 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path/posix'
 
 import type { Manifest, ManifestFunction } from '@netlify/edge-functions'
 import { glob } from 'fast-glob'
-import type { EdgeFunctionDefinition as NextDefinition } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
+import type { FunctionsConfigManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
+import type { EdgeFunctionDefinition as EdgeMiddlewareDefinition } from 'next-with-cache-handler-v2/dist/build/webpack/plugins/middleware-plugin.js'
 import { pathToRegexp } from 'path-to-regexp'
 
 import { EDGE_HANDLER_NAME, PluginContext } from '../plugin-context.js'
+
+type NodeMiddlewareDefinitionWithOptionalMatchers = FunctionsConfigManifest['functions'][0]
+type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] }
+type NodeMiddlewareDefinition = WithRequired<
+  NodeMiddlewareDefinitionWithOptionalMatchers,
+  'matchers'
+>
+
+function nodeMiddlewareDefinitionHasMatcher(
+  definition: NodeMiddlewareDefinitionWithOptionalMatchers,
+): definition is NodeMiddlewareDefinition {
+  return Array.isArray(definition.matchers)
+}
+
+type EdgeOrNodeMiddlewareDefinition = {
+  runtime: 'nodejs' | 'edge'
+  // hoisting shared properties from underlying definitions for common handling
+  name: string
+  matchers: EdgeMiddlewareDefinition['matchers']
+} & (
+  | {
+      runtime: 'nodejs'
+      functionDefinition: NodeMiddlewareDefinition
+    }
+  | {
+      runtime: 'edge'
+      functionDefinition: EdgeMiddlewareDefinition
+    }
+)
 
 const writeEdgeManifest = async (ctx: PluginContext, manifest: Manifest) => {
   await mkdir(ctx.edgeFunctionsDir, { recursive: true })
@@ -33,9 +63,9 @@ const copyRuntime = async (ctx: PluginContext, handlerDirectory: string): Promis
  * We don't need to do this for data routes because they always have the locale.
  */
 const augmentMatchers = (
-  matchers: NextDefinition['matchers'],
+  matchers: EdgeMiddlewareDefinition['matchers'],
   ctx: PluginContext,
-): NextDefinition['matchers'] => {
+): EdgeMiddlewareDefinition['matchers'] => {
   const i18NConfig = ctx.buildConfig.i18n
   if (!i18NConfig) {
     return matchers
@@ -63,7 +93,10 @@ const augmentMatchers = (
   })
 }
 
-const writeHandlerFile = async (ctx: PluginContext, { matchers, name }: NextDefinition) => {
+const writeHandlerFile = async (
+  ctx: PluginContext,
+  { matchers, name }: EdgeOrNodeMiddlewareDefinition,
+) => {
   const nextConfig = ctx.buildConfig
   const handlerName = getHandlerName({ name })
   const handlerDirectory = join(ctx.edgeFunctionsDir, handlerName)
@@ -117,15 +150,15 @@ const writeHandlerFile = async (ctx: PluginContext, { matchers, name }: NextDefi
   )
 }
 
-const copyHandlerDependencies = async (
+const copyHandlerDependenciesForEdgeMiddleware = async (
   ctx: PluginContext,
-  { name, env, files, wasm }: NextDefinition,
+  { name, env, files, wasm }: EdgeMiddlewareDefinition,
 ) => {
   const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
   const destDir = join(ctx.edgeFunctionsDir, getHandlerName({ name }))
 
   const edgeRuntimeDir = join(ctx.pluginDir, 'edge-runtime')
-  const shimPath = join(edgeRuntimeDir, 'shim/index.js')
+  const shimPath = join(edgeRuntimeDir, 'shim/edge.js')
   const shim = await readFile(shimPath, 'utf8')
 
   const parts = [shim]
@@ -161,26 +194,119 @@ const copyHandlerDependencies = async (
   await writeFile(outputFile, parts.join('\n'))
 }
 
-const createEdgeHandler = async (ctx: PluginContext, definition: NextDefinition): Promise<void> => {
-  await copyHandlerDependencies(ctx, definition)
+const NODE_MIDDLEWARE_NAME = 'node-middleware'
+const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
+  const name = NODE_MIDDLEWARE_NAME
+
+  const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
+  const destDir = join(ctx.edgeFunctionsDir, getHandlerName({ name }))
+
+  const edgeRuntimeDir = join(ctx.pluginDir, 'edge-runtime')
+  const shimPath = join(edgeRuntimeDir, 'shim/node.js')
+  const shim = await readFile(shimPath, 'utf8')
+
+  const parts = [shim]
+
+  const entry = 'server/middleware.js'
+  const nft = `${entry}.nft.json`
+  const nftFilesPath = join(process.cwd(), ctx.nextDistDir, nft)
+  const nftManifest = JSON.parse(await readFile(nftFilesPath, 'utf8'))
+
+  const files: string[] = nftManifest.files.map((file: string) => join('server', file))
+  files.push(entry)
+
+  // files are relative to location of middleware entrypoint
+  // we need to capture all of them
+  // they might be going to parent directories, so first we check how many directories we need to go up
+  const { maxParentDirectoriesPath, unsupportedDotNodeModules } = files.reduce(
+    (acc, file) => {
+      let dirsUp = 0
+      let parentDirectoriesPath = ''
+      for (const part of file.split('/')) {
+        if (part === '..') {
+          dirsUp += 1
+          parentDirectoriesPath += '../'
+        } else {
+          break
+        }
+      }
+
+      if (file.endsWith('.node')) {
+        // C++ addons are not supported
+        acc.unsupportedDotNodeModules.push(join(srcDir, file))
+      }
+
+      if (dirsUp > acc.maxDirsUp) {
+        return {
+          ...acc,
+          maxDirsUp: dirsUp,
+          maxParentDirectoriesPath: parentDirectoriesPath,
+        }
+      }
+
+      return acc
+    },
+    { maxDirsUp: 0, maxParentDirectoriesPath: '', unsupportedDotNodeModules: [] as string[] },
+  )
+
+  if (unsupportedDotNodeModules.length !== 0) {
+    throw new Error(
+      `Usage of unsupported C++ Addon(s) found in Node.js Middleware:\n${unsupportedDotNodeModules.map((file) => `- ${file}`).join('\n')}\n\nCheck https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/#limitations for more information.`,
+    )
+  }
+
+  const commonPrefix = relative(join(srcDir, maxParentDirectoriesPath), srcDir)
+
+  parts.push(`const virtualModules = new Map();`)
+
+  for (const file of files) {
+    const srcPath = join(srcDir, file)
+
+    const content = await readFile(srcPath, 'utf8')
+
+    parts.push(
+      `virtualModules.set(${JSON.stringify(join(commonPrefix, file))}, ${JSON.stringify(content)});`,
+    )
+  }
+  parts.push(`registerCJSModules(import.meta.url, virtualModules);
+
+    const require = createRequire(import.meta.url);
+    const handlerMod = require("./${join(commonPrefix, entry)}");
+    const handler = handlerMod.default || handlerMod;
+
+    export default handler
+    `)
+
+  const outputFile = join(destDir, `server/${name}.js`)
+
+  await mkdir(dirname(outputFile), { recursive: true })
+
+  await writeFile(outputFile, parts.join('\n'))
+}
+
+const createEdgeHandler = async (
+  ctx: PluginContext,
+  definition: EdgeOrNodeMiddlewareDefinition,
+): Promise<void> => {
+  await (definition.runtime === 'edge'
+    ? copyHandlerDependenciesForEdgeMiddleware(ctx, definition.functionDefinition)
+    : copyHandlerDependenciesForNodeMiddleware(ctx))
   await writeHandlerFile(ctx, definition)
 }
 
-const getHandlerName = ({ name }: Pick<NextDefinition, 'name'>): string =>
+const getHandlerName = ({ name }: Pick<EdgeMiddlewareDefinition, 'name'>): string =>
   `${EDGE_HANDLER_NAME}-${name.replace(/\W/g, '-')}`
 
 const buildHandlerDefinition = (
   ctx: PluginContext,
-  { name, matchers, page }: NextDefinition,
+  def: EdgeOrNodeMiddlewareDefinition,
 ): Array<ManifestFunction> => {
-  const functionHandlerName = getHandlerName({ name })
-  const functionName = name.endsWith('middleware')
-    ? 'Next.js Middleware Handler'
-    : `Next.js Edge Handler: ${page}`
-  const cache = name.endsWith('middleware') ? undefined : ('manual' as const)
+  const functionHandlerName = getHandlerName({ name: def.name })
+  const functionName = 'Next.js Middleware Handler'
+  const cache = def.name.endsWith('middleware') ? undefined : ('manual' as const)
   const generator = `${ctx.pluginName}@${ctx.pluginVersion}`
 
-  return augmentMatchers(matchers, ctx).map((matcher) => ({
+  return augmentMatchers(def.matchers, ctx).map((matcher) => ({
     function: functionHandlerName,
     name: functionName,
     pattern: matcher.regexp,
@@ -194,11 +320,39 @@ export const clearStaleEdgeHandlers = async (ctx: PluginContext) => {
 }
 
 export const createEdgeHandlers = async (ctx: PluginContext) => {
+  // Edge middleware
   const nextManifest = await ctx.getMiddlewareManifest()
-  const nextDefinitions = [...Object.values(nextManifest.middleware)]
-  await Promise.all(nextDefinitions.map((def) => createEdgeHandler(ctx, def)))
+  const middlewareDefinitions: EdgeOrNodeMiddlewareDefinition[] = [
+    ...Object.values(nextManifest.middleware),
+  ].map((edgeDefinition) => {
+    return {
+      runtime: 'edge',
+      functionDefinition: edgeDefinition,
+      name: edgeDefinition.name,
+      matchers: edgeDefinition.matchers,
+    }
+  })
 
-  const netlifyDefinitions = nextDefinitions.flatMap((def) => buildHandlerDefinition(ctx, def))
+  // Node middleware
+  const functionsConfigManifest = await ctx.getFunctionsConfigManifest()
+  if (
+    functionsConfigManifest?.functions?.['/_middleware'] &&
+    nodeMiddlewareDefinitionHasMatcher(functionsConfigManifest?.functions?.['/_middleware'])
+  ) {
+    middlewareDefinitions.push({
+      runtime: 'nodejs',
+      functionDefinition: functionsConfigManifest?.functions?.['/_middleware'],
+      name: NODE_MIDDLEWARE_NAME,
+      matchers: functionsConfigManifest?.functions?.['/_middleware']?.matchers,
+    })
+  }
+
+  await Promise.all(middlewareDefinitions.map((def) => createEdgeHandler(ctx, def)))
+
+  const netlifyDefinitions = middlewareDefinitions.flatMap((def) =>
+    buildHandlerDefinition(ctx, def),
+  )
+
   const netlifyManifest: Manifest = {
     version: 1,
     functions: netlifyDefinitions,

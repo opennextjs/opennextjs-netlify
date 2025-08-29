@@ -1,6 +1,19 @@
+import type { NextRequest } from 'next/server'
 import { NextResponse, URLPattern } from 'next/server'
 
-export async function middleware(request) {
+export async function middleware(request: NextRequest) {
+  const response = getResponse(request)
+
+  response.headers.append('Deno' in globalThis ? 'x-deno' : 'x-node', Date.now().toString())
+  // report Next.js Middleware Runtime (not the execution runtime, but target runtime)
+  // @ts-expect-error EdgeRuntime global not declared
+  response.headers.append('x-runtime', typeof EdgeRuntime !== 'undefined' ? EdgeRuntime : 'node')
+  response.headers.set('x-hello-from-middleware-res', 'hello')
+
+  return response
+}
+
+const getResponse = (request: NextRequest) => {
   const url = request.nextUrl
 
   // this is needed for tests to get the BUILD_ID
@@ -93,7 +106,10 @@ export async function middleware(request) {
   })
 }
 
-const PATTERNS = [
+const PATTERNS: [
+  URLPattern,
+  (params: ReturnType<URLPattern['exec']>) => { pathname: string; params: Record<string, string> },
+][] = [
   [
     new URLPattern({ pathname: '/:locale/:id' }),
     ({ pathname }) => ({

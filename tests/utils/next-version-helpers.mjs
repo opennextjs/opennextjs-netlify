@@ -45,6 +45,10 @@ export function shouldHaveAppRouterGlobalErrorInPrerenderManifest() {
   return isNextCanary() && nextVersionSatisfies('>=15.5.1-canary.4')
 }
 
+export function hasNodeMiddlewareSupport() {
+  return nextVersionSatisfies(isNextCanary() ? '>=15.2.0' : '>=15.5.0')
+}
+
 /**
  * Check if current next version requires React 19
  * @param {string} version Next version

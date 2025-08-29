@@ -24,11 +24,11 @@ import { setupWaitUntil } from './wait-until.cjs'
 setFetchBeforeNextPatchedIt(globalThis.fetch)
 // configure globals that Next.js make use of before we start importing any Next.js code
 // as some globals are consumed at import time
-const { nextConfig, enableUseCacheHandler } = await getRunConfig()
+const { nextConfig: initialNextConfig, enableUseCacheHandler } = await getRunConfig()
 if (enableUseCacheHandler) {
   configureUseCacheHandlers()
 }
-setRunConfig(nextConfig)
+const nextConfig = setRunConfig(initialNextConfig)
 setupWaitUntil()
 
 const nextImportPromise = import('../next.cjs')
@@ -71,7 +71,7 @@ export default async (
       const { getMockedRequestHandler } = await nextImportPromise
       const url = new URL(request.url)
 
-      nextHandler = await getMockedRequestHandler({
+      nextHandler = await getMockedRequestHandler(nextConfig, {
         port: Number(url.port) || 443,
         hostname: url.hostname,
         dir: process.cwd(),

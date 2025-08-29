@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .next
+.next-node-middleware
 edge-runtime/vendor
 # deno.json is ephemeral and generated for the purpose of vendoring remote modules in CI
 tools/deno/deno.json
