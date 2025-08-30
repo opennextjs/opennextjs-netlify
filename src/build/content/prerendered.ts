@@ -69,6 +69,9 @@ const buildPagesCacheValue = async (
   revalidate: initialRevalidateSeconds,
 })
 
+const RSC_SEGMENTS_DIR_SUFFIX = '.segments'
+const RSC_SEGMENT_SUFFIX = '.segment.rsc'
+
 const buildAppCacheValue = async (
   path: string,
   shouldUseAppPageKind: boolean,
@@ -78,6 +81,29 @@ const buildAppCacheValue = async (
 
   // supporting both old and new cache kind for App Router pages - https://github.com/vercel/next.js/pull/65988
   if (shouldUseAppPageKind) {
+    // segments are normalized and outputted separately for each segment, we denormalize it here and stitch
+    // fully constructed segmentData to avoid data fetch waterfalls later in cache handler at runtime
+    // https://github.com/vercel/next.js/blob/def2c6ba75dff754767379afb44c26c30bd3d96b/packages/next/src/server/lib/incremental-cache/file-system-cache.ts#L185
+    // let segmentData: NetlifyCachedAppPageValue['segmentData']
+    if (meta.segmentPaths) {
+      const segmentsDir = path + RSC_SEGMENTS_DIR_SUFFIX
+      const segmentData: NetlifyCachedAppPageValue['segmentData'] = {}
+
+      console.log('segment stitching', {
+        segmentPaths: meta.segmentPaths,
+        path,
+      })
+      await Promise.all(
+        meta.segmentPaths.map(async (segmentPath: string) => {
+          const segmentDataFilePath = segmentsDir + segmentPath + RSC_SEGMENT_SUFFIX
+
+          segmentData[segmentPath] = await readFile(segmentDataFilePath, 'base64')
+        }),
+      )
+
+      meta.segmentData = segmentData
+    }
+
     return {
       kind: 'APP_PAGE',
       html,
@@ -168,45 +194,52 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
                 : Date.now()
               const key = routeToFilePath(route)
               let value: NetlifyIncrementalCacheValue
-              switch (true) {
-                // Parallel route default layout has no prerendered page
-                case meta.dataRoute?.endsWith('/default.rsc') &&
-                  !existsSync(join(ctx.publishDir, 'server/app', `${key}.html`)):
-                  return
-                case meta.dataRoute?.endsWith('.json'):
-                  if (manifest.notFoundRoutes.includes(route)) {
-                    // if pages router returns 'notFound: true', build won't produce html and json files
+              try {
+                switch (true) {
+                  // Parallel route default layout has no prerendered page
+                  case meta.dataRoute?.endsWith('/default.rsc') &&
+                    !existsSync(join(ctx.publishDir, 'server/app', `${key}.html`)):
                     return
-                  }
-                  value = await buildPagesCacheValue(
-                    join(ctx.publishDir, 'server/pages', key),
-                    meta.initialRevalidateSeconds,
-                    shouldUseEnumKind,
-                  )
-                  break
-                case meta.dataRoute?.endsWith('.rsc'):
-                  value = await buildAppCacheValue(
-                    join(ctx.publishDir, 'server/app', key),
-                    shouldUseAppPageKind,
-                  )
-                  break
-                case meta.dataRoute === null:
-                  value = await buildRouteCacheValue(
-                    join(ctx.publishDir, 'server/app', key),
-                    meta.initialRevalidateSeconds,
-                    shouldUseEnumKind,
-                  )
-                  break
-                default:
-                  throw new Error(`Unrecognized content: ${route}`)
-              }
+                  case meta.dataRoute?.endsWith('.json'):
+                    if (manifest.notFoundRoutes.includes(route)) {
+                      // if pages router returns 'notFound: true', build won't produce html and json files
+                      return
+                    }
 
-              // Netlify Forms are not support and require a workaround
-              if (value.kind === 'PAGE' || value.kind === 'PAGES' || value.kind === 'APP_PAGE') {
-                verifyNetlifyForms(ctx, value.html)
-              }
+                    value = await buildPagesCacheValue(
+                      join(ctx.publishDir, 'server/pages', key),
+                      meta.initialRevalidateSeconds,
+                      shouldUseEnumKind,
+                    )
+                    break
+                  case meta.dataRoute?.endsWith('.rsc'):
+                    value = await buildAppCacheValue(
+                      join(ctx.publishDir, 'server/app', key),
+                      shouldUseAppPageKind,
+                    )
+                    break
 
-              await writeCacheEntry(key, value, lastModified, ctx)
+                  case meta.dataRoute === null:
+                    value = await buildRouteCacheValue(
+                      join(ctx.publishDir, 'server/app', key),
+                      meta.initialRevalidateSeconds,
+                      shouldUseEnumKind,
+                    )
+                    break
+                  default:
+                    throw new Error(`Unrecognized content: ${route}`)
+                }
+
+                // Netlify Forms are not support and require a workaround
+                if (value.kind === 'PAGE' || value.kind === 'PAGES' || value.kind === 'APP_PAGE') {
+                  verifyNetlifyForms(ctx, value.html)
+                }
+
+                await writeCacheEntry(key, value, lastModified, ctx)
+              } catch (error) {
+                console.error({ key, route })
+                throw error
+              }
             }),
         ),
         ...ctx.getFallbacks(manifest).map(async (route) => {
