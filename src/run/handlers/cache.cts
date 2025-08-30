@@ -364,7 +364,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
             requestContext.isCacheableAppPage = true
           }
 
-          const { revalidate, rscData, ...restOfPageValue } = blob.value
+          const { revalidate, rscData, segmentData, ...restOfPageValue } = blob.value
 
           span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
@@ -375,6 +375,14 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
             value: {
               ...restOfPageValue,
               rscData: rscData ? Buffer.from(rscData, 'base64') : undefined,
+              segmentData: segmentData
+                ? new Map(
+                    Object.entries(segmentData).map(([segmentPath, base64EncodedSegment]) => [
+                      segmentPath,
+                      Buffer.from(base64EncodedSegment, 'base64'),
+                    ]),
+                  )
+                : undefined,
             },
           }
         }
@@ -416,6 +424,14 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         revalidate: context.revalidate ?? context.cacheControl?.revalidate,
         cacheControl: context.cacheControl,
         rscData: data.rscData?.toString('base64'),
+        segmentData: data.segmentData
+          ? Object.fromEntries(
+              [...data.segmentData.entries()].map(([segmentPath, base64EncodedSegment]) => [
+                segmentPath,
+                base64EncodedSegment.toString('base64'),
+              ]),
+            )
+          : undefined,
       }
     }
 

@@ -9,6 +9,7 @@ import type {
   IncrementalCachedPageValue,
   IncrementalCacheValue,
 } from 'next/dist/server/response-cache/types.js'
+import type { IncrementalCachedAppPageValue as IncrementalCachedAppPageValueForNewVersions } from 'next-with-cache-handler-v2/dist/server/response-cache/types.js'
 
 export type { CacheHandlerContext } from 'next/dist/server/lib/incremental-cache/index.js'
 
@@ -44,17 +45,19 @@ type IncrementalCachedAppPageValueForMultipleVersions = Omit<
   'kind'
 > & {
   kind: 'APP_PAGE'
-}
+} & Pick<IncrementalCachedAppPageValueForNewVersions, 'segmentData'>
 
 /**
  * Used for storing in blobs and reading from blobs
  */
 export type NetlifyCachedAppPageValue = Omit<
   IncrementalCachedAppPageValueForMultipleVersions,
-  'rscData'
+  'rscData' | 'segmentData'
 > & {
-  // Next.js stores rscData as buffer, while we store it as base64 encoded string
+  // Next.js stores rscData as Buffer, while we store it as base64 encoded string
   rscData: string | undefined
+  // Next.js stores segmentData as Map<string, Buffer>, while we store it as Record<string, string>, where value is base64 encoded string
+  segmentData: Record<string, string> | undefined
   revalidate?: Parameters<CacheHandler['set']>[2]['revalidate']
   cacheControl?: CacheControl
 }
