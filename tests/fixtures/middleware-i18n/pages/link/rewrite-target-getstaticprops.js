@@ -1,15 +1,25 @@
-export default function Page() {
+export default function Page({ locale, locales }) {
   return (
     <div data-page="NextResponse.rewrite()#getStaticProps">
       <h1>
         <code>getStaticProps</code> page
       </h1>
+      <dt>Current locale:</dt>
+      <dd data-testid="current-locale">{locale ?? 'N/A'}</dd>
+      <dt>All locales:</dt>
+      <dd data-testid="all-locales">{locales ? locales.join(',') : 'N/A'}</dd>
     </div>
   )
 }
 
-export function getStaticProps() {
+/** @type {import('next').GetStaticProps} */
+export function getStaticProps({ locale, locales }) {
+  console.log('NextResponse.rewrite()#getStaticProps', { locale, locales })
   return {
-    props: {},
+    props: {
+      locale,
+      locales,
+    },
+    revalidate: 5,
   }
 }

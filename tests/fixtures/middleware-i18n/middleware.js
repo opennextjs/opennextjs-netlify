@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 
+/**
+ * @param {import('next/server').NextRequest} request
+ */
 export async function middleware(request) {
   const url = request.nextUrl
 
@@ -17,11 +20,9 @@ export async function middleware(request) {
   }
 
   if (url.pathname.startsWith('/link/rewrite-me')) {
-    const rewriteUrl = new URL(
-      url.pathname.replace('/link/rewrite-me', '/link/rewrite-target'),
-      url,
-    )
-    return NextResponse.rewrite(rewriteUrl, {
+    // use NextUrl to rewrite the URL as it does preserve the locale
+    url.pathname = url.pathname.replace('/link/rewrite-me', '/link/rewrite-target')
+    return NextResponse.rewrite(url, {
       headers: {
         'x-middleware-test': 'link-rewrite',
       },
