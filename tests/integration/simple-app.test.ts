@@ -32,6 +32,7 @@ import {
   decodeBlobKey,
   generateRandomObjectID,
   getBlobEntries,
+  getFrameworksAPIBlobEntries,
   startMockBlobStore,
 } from '../utils/helpers.js'
 import {
@@ -92,6 +93,59 @@ beforeEach<FixtureTestContext>(async (ctx) => {
 
 afterEach(() => {
   vi.unstubAllEnvs()
+})
+
+describe('Frameworks API', () => {
+  test<FixtureTestContext>('Test that the simple next app is working', async (ctx) => {
+    vi.stubEnv('NETLIFY_BUILD_VERSION', '29.41.5')
+    await createFixture('simple', ctx)
+    await runPlugin(ctx)
+    // check if the blob entries where successful set on the build plugin
+    const blobEntries = await getFrameworksAPIBlobEntries(ctx)
+    expect(blobEntries.map(({ key }) => key).sort()).toEqual([
+      '404/blob',
+      '404.html/blob',
+      '500.html/blob',
+      'api/cached-permanent/blob',
+      'api/cached-revalidate/blob',
+      'config-redirect/blob',
+      'config-redirect/dest/blob',
+      'config-rewrite/blob',
+      'config-rewrite/dest/blob',
+      'fully-static.html/blob',
+      'image/local/blob',
+      'image/migration-from-v4-runtime/blob',
+      'image/remote-domain/blob',
+      'image/remote-pattern-1/blob',
+      'image/remote-pattern-2/blob',
+      'index/blob',
+      'other/blob',
+      'route-resolves-to-not-found/blob',
+    ])
+
+    // test the function call
+    const home = await invokeFunction(ctx)
+    expect(home.statusCode).toBe(200)
+    expect(load(home.body)('h1').text()).toBe('Home')
+
+    const other = await invokeFunction(ctx, { url: 'other' })
+    expect(other.statusCode).toBe(200)
+    expect(load(other.body)('h1').text()).toBe('Other')
+
+    const notFound = await invokeFunction(ctx, { url: 'route-resolves-to-not-found' })
+    expect(notFound.statusCode).toBe(404)
+    // depending on Next version code found in 404 page can be either NEXT_NOT_FOUND or NEXT_HTTP_ERROR_FALLBACK
+    // see https://github.com/vercel/next.js/commit/997105d27ebc7bfe01b7e907cd659e5e056e637c that moved from NEXT_NOT_FOUND to NEXT_HTTP_ERROR_FALLBACK
+    expect(
+      notFound.body?.includes('NEXT_NOT_FOUND') ||
+        notFound.body?.includes('NEXT_HTTP_ERROR_FALLBACK'),
+      '404 page should contain NEXT_NOT_FOUND or NEXT_HTTP_ERROR_FALLBACK code',
+    ).toBe(true)
+
+    const notExisting = await invokeFunction(ctx, { url: 'non-exisitng' })
+    expect(notExisting.statusCode).toBe(404)
+    expect(load(notExisting.body)('h1').text()).toBe('404 Not Found')
+  })
 })
 
 test<FixtureTestContext>('Test that the simple next app is working', async (ctx) => {

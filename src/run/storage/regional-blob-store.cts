@@ -54,9 +54,14 @@ const getFetchBeforeNextPatchedIt = () =>
   extendedGlobalThis[FETCH_BEFORE_NEXT_PATCHED_IT] ?? fetchBeforeNextPatchedItFallback
 
 export const getRegionalBlobStore = (args: GetWithMetadataOptions = {}): Store => {
+  const useFrameworksApi = process.env.USE_FRAMEWORKS_API?.toUpperCase() === 'TRUE'
+  const useRegionalBlobs = process.env.USE_REGIONAL_BLOBS?.toUpperCase() === 'TRUE'
+
   return getDeployStore({
     ...args,
     fetch: getFetchBeforeNextPatchedIt(),
-    region: process.env.USE_REGIONAL_BLOBS?.toUpperCase() === 'TRUE' ? undefined : 'us-east-2',
+    // when using frameworks api, we don't need to specify region
+    // as it is handled by the build system
+    region: useFrameworksApi || useRegionalBlobs ? undefined : 'us-east-2',
   })
 }
