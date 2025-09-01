@@ -447,6 +447,10 @@
       "tests": [
         "app-root-param-getters - generateStaticParams should be statically prerenderable"
       ]
+    },
+    {
+      "file": "test/e2e/app-dir/fallback-shells/fallback-shells.test.ts",
+      "reason": "Test rely on `x-matched-path` response header that we do not set in non minimal mode"
     }
   ],
   "failures": [
