@@ -397,6 +397,7 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
         '/1',
         '/2',
         '/404',
+        '/[dynamic]',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/index',
