@@ -392,6 +392,23 @@ export class PluginContext {
     return this.#fallbacks
   }
 
+  #shells: string[] | null = null
+  getShells(prerenderManifest: PrerenderManifest): string[] {
+    if (!this.#shells) {
+      this.#shells = Object.entries(prerenderManifest.dynamicRoutes).reduce(
+        (shells, [route, meta]) => {
+          if (meta.renderingMode === 'PARTIALLY_STATIC') {
+            shells.push(route)
+          }
+          return shells
+        },
+        [] as string[],
+      )
+    }
+
+    return this.#shells
+  }
+
   #fullyStaticHtmlPages: string[] | null = null
   /**
    * Get an array of fully static pages router pages (no `getServerSideProps` or `getStaticProps`).
