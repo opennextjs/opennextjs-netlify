@@ -397,7 +397,7 @@ export class PluginContext {
     if (!this.#shells) {
       this.#shells = Object.entries(prerenderManifest.dynamicRoutes).reduce(
         (shells, [route, meta]) => {
-          if (meta.renderingMode === 'PARTIALLY_STATIC') {
+          if (typeof meta.fallback === 'string' && meta.renderingMode === 'PARTIALLY_STATIC') {
             shells.push(route)
           }
           return shells
