@@ -89,10 +89,6 @@ const buildAppCacheValue = async (
       const segmentsDir = path + RSC_SEGMENTS_DIR_SUFFIX
       const segmentData: NetlifyCachedAppPageValue['segmentData'] = {}
 
-      console.log('segment stitching', {
-        segmentPaths: meta.segmentPaths,
-        path,
-      })
       await Promise.all(
         meta.segmentPaths.map(async (segmentPath: string) => {
           const segmentDataFilePath = segmentsDir + segmentPath + RSC_SEGMENT_SUFFIX
