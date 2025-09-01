@@ -424,6 +424,16 @@
     {
       "file": "test/e2e/app-dir/next-after-app-deploy/index.test.ts",
       "reason": "Common test setup in this test suite is making 2 requests to page with 1 hour revalidation asserting it's the same, but on Netlify the first fetch will serve content we mark as stale, so second one will serve freshly generated one and those won't match."
+    },
+    {
+      "file": "test/e2e/app-dir/segment-cache/conflicting-routes/conflicting-routes.test.ts",
+      "reason": "Test rely on `x-matched-path response header that we do not set in non minimal mode",
+      "tests": [
+        "conflicting routes /en/vercel/~/monitoring matches the right route",
+        "conflicting routes /fr/vercel/~/monitoring matches the right route",
+        "conflicting routes /es/vercel/~/monitoring matches the right route",
+        "conflicting routes matches the right route when the original route has no dynamic params, is dynamic, and PPR is disabled"
+      ]
     }
   ],
   "failures": [
