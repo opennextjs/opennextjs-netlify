@@ -124,7 +124,9 @@
     {
       "file": "test/e2e/app-dir/app-static/app-static.test.ts",
       "reason": "Uses CLI output",
-      "tests": ["app-dir static/dynamic handling should warn for too many cache tags"]
+      "tests": [
+        "app-dir static/dynamic handling should warn for too many cache tags"
+      ]
     },
     {
       "file": "test/e2e/app-dir/parallel-routes-and-interception/parallel-routes-and-interception.test.ts",
@@ -433,6 +435,17 @@
         "conflicting routes /fr/vercel/~/monitoring matches the right route",
         "conflicting routes /es/vercel/~/monitoring matches the right route",
         "conflicting routes matches the right route when the original route has no dynamic params, is dynamic, and PPR is disabled"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/sub-shell-generation/sub-shell-generation.test.ts",
+      "reason": "Test rely on `x-matched-path` response header that we do not set in non minimal mode"
+    },
+    {
+      "file": "test/e2e/app-dir/app-root-params-getters/generate-static-params.test.ts",
+      "reason": "relies on x-vercel-cache response header that is Vercel specific",
+      "tests": [
+        "app-root-param-getters - generateStaticParams should be statically prerenderable"
       ]
     }
   ],
