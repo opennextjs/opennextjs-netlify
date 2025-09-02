@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import { glob } from 'fast-glob'
+import type { RouteMetadata } from 'next-with-cache-handler-v2/dist/export/routes/types.js'
 import pLimit from 'p-limit'
 import { satisfies } from 'semver'
 
@@ -69,21 +70,44 @@ const buildPagesCacheValue = async (
   revalidate: initialRevalidateSeconds,
 })
 
+const RSC_SEGMENTS_DIR_SUFFIX = '.segments'
+const RSC_SEGMENT_SUFFIX = '.segment.rsc'
+
 const buildAppCacheValue = async (
   path: string,
   shouldUseAppPageKind: boolean,
 ): Promise<NetlifyCachedAppPageValue | NetlifyCachedPageValue> => {
-  const meta = JSON.parse(await readFile(`${path}.meta`, 'utf-8'))
+  const meta = JSON.parse(await readFile(`${path}.meta`, 'utf-8')) as RouteMetadata
   const html = await readFile(`${path}.html`, 'utf-8')
 
   // supporting both old and new cache kind for App Router pages - https://github.com/vercel/next.js/pull/65988
   if (shouldUseAppPageKind) {
+    // segments are normalized and outputted separately for each segment, we denormalize it here and stitch
+    // fully constructed segmentData to avoid data fetch waterfalls later in cache handler at runtime
+    // https://github.com/vercel/next.js/blob/def2c6ba75dff754767379afb44c26c30bd3d96b/packages/next/src/server/lib/incremental-cache/file-system-cache.ts#L185
+    let segmentData: NetlifyCachedAppPageValue['segmentData']
+    if (meta.segmentPaths) {
+      const segmentsDir = path + RSC_SEGMENTS_DIR_SUFFIX
+
+      segmentData = Object.fromEntries(
+        await Promise.all(
+          meta.segmentPaths.map(async (segmentPath: string) => {
+            const segmentDataFilePath = segmentsDir + segmentPath + RSC_SEGMENT_SUFFIX
+
+            const segmentContent = await readFile(segmentDataFilePath, 'base64')
+            return [segmentPath, segmentContent]
+          }),
+        ),
+      )
+    }
+
     return {
       kind: 'APP_PAGE',
       html,
       rscData: await readFile(`${path}.rsc`, 'base64').catch(() =>
         readFile(`${path}.prefetch.rsc`, 'base64'),
       ),
+      segmentData,
       ...meta,
     }
   }
@@ -97,7 +121,10 @@ const buildAppCacheValue = async (
   if (
     !meta.status &&
     rsc.includes('NEXT_NOT_FOUND') &&
-    !meta.headers['x-next-cache-tags'].includes('/@')
+    !(
+      typeof meta.headers?.['x-next-cache-tags'] === 'string' &&
+      meta.headers?.['x-next-cache-tags'].includes('/@')
+    )
   ) {
     meta.status = 404
   }
