@@ -424,6 +424,29 @@
     {
       "file": "test/e2e/app-dir/next-after-app-deploy/index.test.ts",
       "reason": "Common test setup in this test suite is making 2 requests to page with 1 hour revalidation asserting it's the same, but on Netlify the first fetch will serve content we mark as stale, so second one will serve freshly generated one and those won't match."
+    },
+    {
+      "file": "test/e2e/app-dir/segment-cache/conflicting-routes/conflicting-routes.test.ts",
+      "reason": "Test relies on x-matched-path response header that is not set in non-minimal mode",
+      "tests": [
+        "conflicting routes /en/vercel/~/monitoring matches the right route",
+        "conflicting routes /fr/vercel/~/monitoring matches the right route",
+        "conflicting routes /es/vercel/~/monitoring matches the right route",
+        "conflicting routes matches the right route when the original route has no dynamic params, is dynamic, and PPR is disabled"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/sub-shell-generation/sub-shell-generation.test.ts",
+      "reason": "Test relies on x-matched-path response header that is not set in non-minimal mode"
+    },
+    {
+      "file": "test/e2e/app-dir/app-root-params-getters/generate-static-params.test.ts",
+      "reason": "Test relies on x-vercel-cache response header that is Vercel specific",
+      "tests": ["app-root-param-getters - generateStaticParams should be statically prerenderable"]
+    },
+    {
+      "file": "test/e2e/app-dir/fallback-shells/fallback-shells.test.ts",
+      "reason": "Test relies on x-matched-path response header that is not set in non-minimal mode"
     }
   ],
   "failures": [
