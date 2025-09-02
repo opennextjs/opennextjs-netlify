@@ -10,11 +10,14 @@ import type {
   NetlifyPluginOptions,
   NetlifyPluginUtils,
 } from '@netlify/build'
-import type { PrerenderManifest, RoutesManifest } from 'next/dist/build/index.js'
 import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
 import type { PagesManifest } from 'next/dist/build/webpack/plugins/pages-manifest-plugin.js'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
-import type { FunctionsConfigManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
+import type {
+  FunctionsConfigManifest,
+  PrerenderManifest,
+  RoutesManifest,
+} from 'next-with-cache-handler-v2/dist/build/index.js'
 import { satisfies } from 'semver'
 
 const MODULE_DIR = fileURLToPath(new URL('.', import.meta.url))
@@ -355,7 +358,7 @@ export class PluginContext {
 
   #fallbacks: string[] | null = null
   /**
-   * Get an array of localized fallback routes
+   * Get an array of localized fallback routes for Pages Router
    *
    * Example return value for non-i18n site: `['blog/[slug]']`
    *
@@ -374,7 +377,7 @@ export class PluginContext {
           //  - `string` - when user use pages router with `fallback: true`, and then it's html file path
           //  - `null` - when user use pages router with `fallback: 'block'` or app router with `export const dynamicParams = true`
           //  - `false` - when user use pages router with `fallback: false` or app router with `export const dynamicParams = false`
-          if (typeof meta.fallback === 'string') {
+          if (typeof meta.fallback === 'string' && meta.renderingMode !== 'PARTIALLY_STATIC') {
             for (const locale of locales) {
               const localizedRoute = posixJoin(locale, route.replace(/^\/+/g, ''))
               fallbacks.push(localizedRoute)
@@ -416,6 +419,26 @@ export class PluginContext {
         .map((filePath) => posixRelative('pages', filePath))
     }
     return this.#fullyStaticHtmlPages
+  }
+
+  #shells: string[] | null = null
+  /**
+   * Get an array of static shells for App Router's PPR dynamic routes
+   */
+  getShells(prerenderManifest: PrerenderManifest): string[] {
+    if (!this.#shells) {
+      this.#shells = Object.entries(prerenderManifest.dynamicRoutes).reduce(
+        (shells, [route, meta]) => {
+          if (typeof meta.fallback === 'string' && meta.renderingMode === 'PARTIALLY_STATIC') {
+            shells.push(route)
+          }
+          return shells
+        },
+        [] as string[],
+      )
+    }
+
+    return this.#shells
   }
 
   /** Fails a build with a message and an optional error */
