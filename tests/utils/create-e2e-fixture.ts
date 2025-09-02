@@ -314,6 +314,10 @@ async function cleanup(dest: string, deployId?: string): Promise<void> {
   await Promise.allSettled([deleteDeploy(deployId), rm(dest, { recursive: true, force: true })])
 }
 
+function getBuildFixtureVariantCommand(variantName: string) {
+  return `node ${fileURLToPath(new URL(`./build-variants.mjs`, import.meta.url))} ${variantName}`
+}
+
 export const fixtureFactories = {
   simple: () => createE2EFixture('simple'),
   helloWorldTurbopack: () =>
@@ -337,11 +341,37 @@ export const fixtureFactories = {
   pnpm: () => createE2EFixture('pnpm', { packageManger: 'pnpm' }),
   bun: () => createE2EFixture('simple', { packageManger: 'bun' }),
   middleware: () => createE2EFixture('middleware'),
+  middlewareNode: () =>
+    createE2EFixture('middleware', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
+  middlewareNodeRuntimeSpecific: () => createE2EFixture('middleware-node-runtime-specific'),
   middlewareI18n: () => createE2EFixture('middleware-i18n'),
+  middlewareI18nNode: () =>
+    createE2EFixture('middleware-i18n', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
   middlewareI18nExcludedPaths: () => createE2EFixture('middleware-i18n-excluded-paths'),
+  middlewareI18nExcludedPathsNode: () =>
+    createE2EFixture('middleware-i18n-excluded-paths', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
   middlewareOg: () => createE2EFixture('middleware-og'),
   middlewarePages: () => createE2EFixture('middleware-pages'),
+  middlewarePagesNode: () =>
+    createE2EFixture('middleware-pages', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
   middlewareStaticAssetMatcher: () => createE2EFixture('middleware-static-asset-matcher'),
+  middlewareStaticAssetMatcherNode: () =>
+    createE2EFixture('middleware-static-asset-matcher', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
   middlewareSubrequestVuln: () => createE2EFixture('middleware-subrequest-vuln'),
   pageRouter: () => createE2EFixture('page-router'),
   pageRouterBasePathI18n: () => createE2EFixture('page-router-base-path-i18n'),

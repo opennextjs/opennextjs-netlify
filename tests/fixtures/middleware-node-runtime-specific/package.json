@@ -1,5 +1,5 @@
 {
-  "name": "middleware-node",
+  "name": "middleware-node-runtime-specific",
   "version": "0.1.0",
   "private": true,
   "scripts": {

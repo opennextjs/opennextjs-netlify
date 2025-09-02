@@ -19,7 +19,7 @@ export const getRunConfig = async () => {
   return JSON.parse(await readFile(resolve(PLUGIN_DIR, RUN_CONFIG_FILE), 'utf-8')) as RunConfig
 }
 
-type NextConfigForMultipleVersions = NextConfigComplete & {
+export type NextConfigForMultipleVersions = NextConfigComplete & {
   experimental: NextConfigComplete['experimental'] & {
     // those are pre 14.1.0 options that were moved out of experimental in // https://github.com/vercel/next.js/pull/57953/files#diff-c49c4767e6ed8627e6e1b8f96b141ee13246153f5e9142e1da03450c8e81e96fL311
 
@@ -62,4 +62,6 @@ export const setRunConfig = (config: NextConfigForMultipleVersions) => {
 
   // set config
   process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(config)
+
+  return config
 }

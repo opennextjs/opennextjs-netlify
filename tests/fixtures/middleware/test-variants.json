@@ -1,0 +1,26 @@
+{
+  "default": {
+    "env": {
+      "SPLIT_CHUNKS": "true"
+    }
+  },
+  "node-middleware": {
+    "distDir": ".next-node-middleware",
+    "files": {
+      "middleware.ts": "middleware-node.ts"
+    },
+    "test": {
+      "dependencies": {
+        "next": [
+          {
+            "versionConstraint": ">=15.2.0",
+            "canaryOnly": true
+          },
+          {
+            "versionConstraint": ">=15.5.0"
+          }
+        ]
+      }
+    }
+  }
+}
