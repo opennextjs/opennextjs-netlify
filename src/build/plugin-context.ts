@@ -14,6 +14,7 @@ import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middlew
 import type { PagesManifest } from 'next/dist/build/webpack/plugins/pages-manifest-plugin.js'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import type {
+  FunctionsConfigManifest,
   PrerenderManifest,
   RoutesManifest,
 } from 'next-with-cache-handler-v2/dist/build/index.js'
@@ -260,6 +261,23 @@ export class PluginContext {
     return JSON.parse(
       await readFile(join(this.publishDir, 'server/middleware-manifest.json'), 'utf-8'),
     )
+  }
+
+  /**
+   * Get Next.js Functions Config Manifest config if it exists from the build output
+   */
+  async getFunctionsConfigManifest(): Promise<FunctionsConfigManifest | null> {
+    const functionsConfigManifestPath = join(
+      this.publishDir,
+      'server/functions-config-manifest.json',
+    )
+
+    if (existsSync(functionsConfigManifestPath)) {
+      return JSON.parse(await readFile(functionsConfigManifestPath, 'utf-8'))
+    }
+
+    // this file might not have been produced
+    return null
   }
 
   // don't make private as it is handy inside testing to override the config
