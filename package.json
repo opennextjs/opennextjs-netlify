@@ -9,6 +9,8 @@
     "edge-runtime",
     "!edge-runtime/deno.json",
     "!edge-runtime/deno.lock",
+    "!edge-runtime/**/*.test.ts",
+    "!edge-runtime/lib/fixture",
     "manifest.yml"
   ],
   "engines": {

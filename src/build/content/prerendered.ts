@@ -236,17 +236,30 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
               await writeCacheEntry(key, value, lastModified, ctx)
             }),
         ),
-        ...ctx.getFallbacks(manifest).map(async (route) => {
-          const key = routeToFilePath(route)
-          const value = await buildPagesCacheValue(
-            join(ctx.publishDir, 'server/pages', key),
-            undefined,
-            shouldUseEnumKind,
-            true, // there is no corresponding json file for fallback, so we are skipping it for this entry
-          )
+        ...ctx.getFallbacks(manifest).map((route) =>
+          limitConcurrentPrerenderContentHandling(async () => {
+            const key = routeToFilePath(route)
+            const value = await buildPagesCacheValue(
+              join(ctx.publishDir, 'server/pages', key),
+              undefined,
+              shouldUseEnumKind,
+              true, // there is no corresponding json file for fallback, so we are skipping it for this entry
+            )
 
-          await writeCacheEntry(key, value, Date.now(), ctx)
-        }),
+            await writeCacheEntry(key, value, Date.now(), ctx)
+          }),
+        ),
+        ...ctx.getShells(manifest).map((route) =>
+          limitConcurrentPrerenderContentHandling(async () => {
+            const key = routeToFilePath(route)
+            const value = await buildAppCacheValue(
+              join(ctx.publishDir, 'server/app', key),
+              shouldUseAppPageKind,
+            )
+
+            await writeCacheEntry(key, value, Date.now(), ctx)
+          }),
+        ),
       ])
 
       // app router 404 pages are not in the prerender manifest

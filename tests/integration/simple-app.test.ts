@@ -394,7 +394,10 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
     const blobEntries = await getBlobEntries(ctx)
     expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
       [
+        '/1',
+        '/2',
         '/404',
+        '/[dynamic]',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/index',
@@ -407,6 +410,14 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
     const home = await invokeFunction(ctx)
     expect(home.statusCode).toBe(200)
     expect(load(home.body)('h1').text()).toBe('Home')
+
+    const dynamicPrerendered = await invokeFunction(ctx, { url: '/1' })
+    expect(dynamicPrerendered.statusCode).toBe(200)
+    expect(load(dynamicPrerendered.body)('h1').text()).toBe('Dynamic Page: 1')
+
+    const dynamicNotPrerendered = await invokeFunction(ctx, { url: '/3' })
+    expect(dynamicNotPrerendered.statusCode).toBe(200)
+    expect(load(dynamicNotPrerendered.body)('h1').text()).toBe('Dynamic Page: 3')
   },
 )
 

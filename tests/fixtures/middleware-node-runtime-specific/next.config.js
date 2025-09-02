@@ -7,6 +7,7 @@ const nextConfig = {
   experimental: {
     nodeMiddleware: true,
   },
+  outputFileTracingRoot: __dirname,
 }
 
 module.exports = nextConfig
