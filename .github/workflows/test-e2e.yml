@@ -14,6 +14,11 @@ on:
         # TODO(serhalp) Ideally this would simply accept bare quotes but we're having trouble
         # parsing that so this will do for now.
         default: "\\\"latest\\\""
+      testPatterns:
+        description: 'Leave empty to run all tests. To run just selected tests, specify a regex (for example "test/e2e/app-dir/dynamic/dynamic.test.ts|test/e2e/app-dir/fallback-shells/fallback-shells.test.ts").'
+        required: false
+        default: ""
+      
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
@@ -52,24 +57,38 @@ jobs:
       version_spec: ${{ steps.set-matrix.outputs.version_spec }}
       group: ${{ steps.set-matrix.outputs.group }}
       total: ${{ steps.set-matrix.outputs.total }}
+      runTestsArgs: ${{ steps.set-matrix.outputs.runTestsArgs }}
+      skipCleanup: ${{ steps.set-matrix.outputs.skipCleanup }}
     steps:
 
       - name: Set Next.js versions to test
         id: set-matrix
         run: |
+          SKIP_CLEANUP=""
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             VERSION_SELECTORS=[${{ github.event.inputs.versions }}]
-            echo "group=[1, 2, 3, 4, 5, 6, 7, 8]" >> $GITHUB_OUTPUT
-            echo "total=8" >> $GITHUB_OUTPUT
+            if [ -n "${{ github.event.inputs.testPatterns }}" ]; then
+              echo "group=[1]" >> $GITHUB_OUTPUT
+              echo "total=1" >> $GITHUB_OUTPUT
+              echo "runTestsArgs=--test-pattern \"${{ github.event.inputs.testPatterns }}\"" >> $GITHUB_OUTPUT
+              SKIP_CLEANUP="1"
+            else
+              echo "group=[1, 2, 3, 4, 5, 6, 7, 8]" >> $GITHUB_OUTPUT
+              echo "total=8" >> $GITHUB_OUTPUT
+              echo "runTestsArgs=''" >> $GITHUB_OUTPUT
+            fi
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
             VERSION_SELECTORS=[\"latest\"]
             echo "group=[1, 2, 3, 4, 5, 6, 7, 8]" >> $GITHUB_OUTPUT
             echo "total=8" >> $GITHUB_OUTPUT
+            echo "runTestsArgs=''" >> $GITHUB_OUTPUT
           else
             VERSION_SELECTORS=[\"latest\",\"canary\"]
             echo "group=[1, 2, 3, 4, 5, 6, 7, 8]" >> $GITHUB_OUTPUT
             echo "total=8" >> $GITHUB_OUTPUT
+            echo "runTestsArgs=''" >> $GITHUB_OUTPUT
           fi
+          echo "skipCleanup=$SKIP_CLEANUP" >> $GITHUB_OUTPUT
 
           VERSION_SPEC="["
           for QUOTED_SELECTOR in $(echo $VERSION_SELECTORS | jq -c '.[]'); do
@@ -205,7 +224,8 @@ jobs:
           # one job may wait for deploys in other jobs (only one deploy may be in progress for
           # a given alias at a time), resulting in cascading timeouts.
           DEPLOY_ALIAS: vercel-next-e2e-${{ matrix.version_spec.selector }}-${{ matrix.group }}
-        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e
+          NEXT_TEST_SKIP_CLEANUP: ${{ needs.setup.outputs.skipCleanup }}
+        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e ${{ needs.setup.outputs.runTestsArgs }}
         working-directory: ${{ env.next-path }}
 
       - name: Upload Test Results
