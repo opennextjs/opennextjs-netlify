@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.13.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.12.1...v5.13.0) (2025-09-02)
+
+
+### Features
+
+* Node.js Middleware support ([#3018](https://github.com/opennextjs/opennextjs-netlify/issues/3018)) ([ddfe7f4](https://github.com/opennextjs/opennextjs-netlify/commit/ddfe7f40bc0f96bf8195e7e02818bafd20c0288f))
+
+
+### Bug Fixes
+
+* support ppr shells for dynamic page routes ([#3092](https://github.com/opennextjs/opennextjs-netlify/issues/3092)) ([bfed78e](https://github.com/opennextjs/opennextjs-netlify/commit/bfed78e9b927822582340c48741ea0ed19a5a676))
+* support segment data in cache entries ([#3093](https://github.com/opennextjs/opennextjs-netlify/issues/3093)) ([1142752](https://github.com/opennextjs/opennextjs-netlify/commit/1142752b0b9327d0c4f2a28efaca83dabb397415))
+
 ## [5.12.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.12.0...v5.12.1) (2025-08-20)
 
 
