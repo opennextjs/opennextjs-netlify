@@ -128,10 +128,23 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+      - name: Decide Node Version
+        id: decide-node-version
+        shell: bash
+        run: |
+          NODE_VERSION=18.x
+          if [ "${{ matrix.version}}" = "canary" ]; then
+            # this is not ideal, because we set node@20 just when explicitly using canary tag as target
+            # but next@canary are still on 15 major, so we can't yet use major version of resolved next version
+            # as condition
+            NODE_VERSION=20.x
+          fi
+          echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
+          echo "Node version for 'next@${{ matrix.version }}' is '$NODE_VERSION'"
       - name: 'Install Node'
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: ${{ steps.decide-node-version.outputs.version }}
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
       - name: Prefer npm global on windows
