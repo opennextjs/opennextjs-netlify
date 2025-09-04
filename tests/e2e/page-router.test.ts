@@ -1433,7 +1433,7 @@ test.describe('Page Router with basePath and i18n', () => {
       expect(staticAsset).toBeDefined()
 
       const response = await page.goto(
-        `${pageRouterBasePathI18n.url}/_next/static/chunks/${staticAsset}`,
+        `${pageRouterBasePathI18n.url}/base/path/_next/static/chunks/${staticAsset}`,
       )
 
       expect(response?.status()).toBe(200)
@@ -1445,7 +1445,7 @@ test.describe('Page Router with basePath and i18n', () => {
       pageRouterBasePathI18n,
     }) => {
       const response = await page.goto(
-        `${pageRouterBasePathI18n.url}/_next/static/stale123abcdef.js`,
+        `${pageRouterBasePathI18n.url}/base/path/_next/static/stale123abcdef.js`,
       )
 
       expect(response?.status()).toBe(404)
