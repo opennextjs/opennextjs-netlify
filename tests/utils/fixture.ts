@@ -39,9 +39,7 @@ const eszipHelper = join(actualCwd, 'tools/deno/eszip.ts')
 
 async function installDependencies(cwd: string) {
   const NEXT_VERSION = process.env.NEXT_VERSION ?? 'latest'
-  if (NEXT_VERSION !== 'latest') {
-    await setNextVersionInFixture(cwd, NEXT_VERSION, { silent: true })
-  }
+  await setNextVersionInFixture(cwd, NEXT_VERSION, { silent: true })
 
   const { packageManager } = JSON.parse(await readFile(join(cwd, 'package.json'), 'utf8'))
   if (packageManager?.startsWith('pnpm')) {

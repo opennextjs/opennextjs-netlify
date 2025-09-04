@@ -60,10 +60,12 @@ const promises = fixtures.map((fixture) =>
     })
     await Promise.all(publishDirectories.map((dir) => rm(dir, { recursive: true, force: true })))
 
-    if (NEXT_VERSION !== 'latest') {
-      await setNextVersionInFixture(cwd, NEXT_VERSION, {
-        logPrefix: `[${fixture}] `,
-      })
+    const fixtureNextVersionSatisfied = await setNextVersionInFixture(cwd, NEXT_VERSION, {
+      logPrefix: `[${fixture}] `,
+    })
+
+    if (!fixtureNextVersionSatisfied) {
+      return
     }
 
     let cmd = ``
@@ -104,12 +106,10 @@ const promises = fixtures.map((fixture) =>
     }
     output.stderr?.pipe(addPrefix).pipe(process.stderr)
     return output.finally(async () => {
-      if (NEXT_VERSION !== 'latest') {
-        await setNextVersionInFixture(cwd, 'latest', {
-          logPrefix: `[${fixture}] `,
-          operation: 'revert',
-        })
-      }
+      await setNextVersionInFixture(cwd, 'latest', {
+        logPrefix: `[${fixture}] `,
+        operation: 'revert',
+      })
       if (output.exitCode !== 0) {
         const errorMessage = `[${fixture}] 🚨 Failed to install dependencies or build a fixture`
         console.error(errorMessage)
