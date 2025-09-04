@@ -1384,7 +1384,9 @@ test.describe('Page Router with basePath and i18n', () => {
     page,
     pageRouterBasePathI18n,
   }) => {
-    const response = await page.goto(new URL('non-existing', pageRouterBasePathI18n.url).href)
+    const response = await page.goto(
+      new URL('base/path/non-existing', pageRouterBasePathI18n.url).href,
+    )
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
@@ -1407,7 +1409,9 @@ test.describe('Page Router with basePath and i18n', () => {
     page,
     pageRouterBasePathI18n,
   }) => {
-    const response = await page.goto(new URL('static/not-found', pageRouterBasePathI18n.url).href)
+    const response = await page.goto(
+      new URL('base/path/static/not-found', pageRouterBasePathI18n.url).href,
+    )
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
