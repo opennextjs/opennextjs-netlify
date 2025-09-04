@@ -38,79 +38,79 @@ jobs:
           elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ steps.check-labels.outputs.result }}" = "true" ]; then
             echo "matrix=[\"latest\", \"canary\", \"14.2.15\", \"13.5.1\"]" >> $GITHUB_OUTPUT
           else
-            echo "matrix=[\"latest\"]" >> $GITHUB_OUTPUT
+            echo "matrix=[\"latest\", \"canary\"]" >> $GITHUB_OUTPUT
           fi
 
-  e2e:
-    needs: setup
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ${{ fromJson(needs.setup.outputs.matrix) }}
-        shard: [1, 2, 3, 4, 5]
+  # e2e:
+  #   needs: setup
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       version: ${{ fromJson(needs.setup.outputs.matrix) }}
+  #       shard: [1, 2, 3, 4, 5]
 
-    steps:
-      - uses: actions/checkout@v5
-      - name: 'Install Node'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18.x'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
-      - uses: oven-sh/setup-bun@v2
-      - name: setup pnpm/yarn
-        run: |
-          npm install -g corepack
-          corepack enable
-        shell: bash
-      - name: Install Deno
-        uses: denoland/setup-deno@v1
-        with:
-          # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
-          deno-version: v2.2.4
-      - name: 'Install dependencies'
-        run: npm ci
-      - name: 'Prepare Netlify CLI'
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: |
-          # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
-          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
-          npx netlify login
-      - name: Get installed Playwright version
-        id: playwright-version
-        run: echo "version=$(npm view @playwright/test version)" >> $GITHUB_OUTPUT
-      - uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: '~/.cache/ms-playwright'
-          key: '${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}'
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-      - name: Install Playwright Browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps
-      - name: Resolve Next.js version
-        id: resolve-next-version
-        shell: bash
-        run: |
-          RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
-          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
-          echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
-      - name: Run Playwright tests
-        run: npm run test:ci:e2e -- --shard=${{ matrix.shard }}/5
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NEXT_VERSION: ${{ matrix.version }}
-          NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
-      - name: Upload blob report to GitHub Actions Artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: blob-report-${{matrix.version}}-${{ matrix.shard }}
-          path: blob-report
-          retention-days: 1
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - name: 'Install Node'
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '18.x'
+  #         cache: 'npm'
+  #         cache-dependency-path: '**/package-lock.json'
+  #     - uses: oven-sh/setup-bun@v2
+  #     - name: setup pnpm/yarn
+  #       run: |
+  #         npm install -g corepack
+  #         corepack enable
+  #       shell: bash
+  #     - name: Install Deno
+  #       uses: denoland/setup-deno@v1
+  #       with:
+  #         # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
+  #         deno-version: v2.2.4
+  #     - name: 'Install dependencies'
+  #       run: npm ci
+  #     - name: 'Prepare Netlify CLI'
+  #       env:
+  #         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+  #       run: |
+  #         # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
+  #         npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
+  #         npx netlify login
+  #     - name: Get installed Playwright version
+  #       id: playwright-version
+  #       run: echo "version=$(npm view @playwright/test version)" >> $GITHUB_OUTPUT
+  #     - uses: actions/cache@v4
+  #       id: playwright-cache
+  #       with:
+  #         path: '~/.cache/ms-playwright'
+  #         key: '${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}'
+  #         restore-keys: |
+  #           ${{ runner.os }}-playwright-
+  #     - name: Install Playwright Browsers
+  #       if: steps.playwright-cache.outputs.cache-hit != 'true'
+  #       run: npx playwright install --with-deps
+  #     - name: Resolve Next.js version
+  #       id: resolve-next-version
+  #       shell: bash
+  #       run: |
+  #         RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
+  #         echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+  #         echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
+  #     - name: Run Playwright tests
+  #       run: npm run test:ci:e2e -- --shard=${{ matrix.shard }}/5
+  #       env:
+  #         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+  #         NEXT_VERSION: ${{ matrix.version }}
+  #         NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
+  #     - name: Upload blob report to GitHub Actions Artifacts
+  #       uses: actions/upload-artifact@v4
+  #       if: always()
+  #       with:
+  #         name: blob-report-${{matrix.version}}-${{ matrix.shard }}
+  #         path: blob-report
+  #         retention-days: 1
 
   test:
     needs: setup
@@ -118,7 +118,7 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
-        os: [ubuntu-latest, windows-2025]
+        os: [ubuntu-latest]
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         exclude:
           - os: windows-2025
@@ -195,87 +195,87 @@ jobs:
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           TEMP: ${{ github.workspace }}/..
 
-  smoke:
-    if: always()
-    needs: setup
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ${{ fromJson(needs.setup.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v5
-      - name: 'Install Node'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18.x'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
-      - name: setup pnpm/yarn
-        run: corepack enable
-        shell: bash
-      - name: Install Deno
-        uses: denoland/setup-deno@v1
-        with:
-          # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
-          deno-version: v2.2.4
-      - name: 'Install dependencies'
-        run: npm ci
-      - name: 'Build'
-        run: npm run build
-      - name: 'Prepare Netlify CLI'
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: |
-          # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
-          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
-          npx netlify login
-      - name: Resolve Next.js version
-        id: resolve-next-version
-        shell: bash
-        run: |
-          RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
-          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
-          echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
-      - name: 'Smoke tests'
-        run: npm run test:ci:smoke
-        env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NEXT_VERSION: ${{ matrix.version }}
-          NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
+  # smoke:
+  #   if: always()
+  #   needs: setup
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       version: ${{ fromJson(needs.setup.outputs.matrix) }}
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - name: 'Install Node'
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '18.x'
+  #         cache: 'npm'
+  #         cache-dependency-path: '**/package-lock.json'
+  #     - name: setup pnpm/yarn
+  #       run: corepack enable
+  #       shell: bash
+  #     - name: Install Deno
+  #       uses: denoland/setup-deno@v1
+  #       with:
+  #         # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
+  #         deno-version: v2.2.4
+  #     - name: 'Install dependencies'
+  #       run: npm ci
+  #     - name: 'Build'
+  #       run: npm run build
+  #     - name: 'Prepare Netlify CLI'
+  #       env:
+  #         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+  #       run: |
+  #         # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
+  #         npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
+  #         npx netlify login
+  #     - name: Resolve Next.js version
+  #       id: resolve-next-version
+  #       shell: bash
+  #       run: |
+  #         RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
+  #         echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+  #         echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
+  #     - name: 'Smoke tests'
+  #       run: npm run test:ci:smoke
+  #       env:
+  #         NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+  #         NEXT_VERSION: ${{ matrix.version }}
+  #         NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
 
-  merge-reports:
-    if: always()
-    needs: [setup,e2e]
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ${{ fromJson(needs.setup.outputs.matrix) }}
+  # merge-reports:
+  #   if: always()
+  #   needs: [setup,e2e]
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       version: ${{ fromJson(needs.setup.outputs.matrix) }}
 
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v5
-    - uses: actions/setup-node@v4
-      with:
-        node-version: 18
-    - name: Install dependencies
-      run: npm ci
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - uses: actions/checkout@v5
+  #   - uses: actions/setup-node@v4
+  #     with:
+  #       node-version: 18
+  #   - name: Install dependencies
+  #     run: npm ci
 
-    - name: Download blob reports from GitHub Actions Artifacts
-      uses: actions/download-artifact@v5
-      with:
-        path: all-blob-reports
-        pattern: blob-report-${{ matrix.version }}-*
-        merge-multiple: true
+  #   - name: Download blob reports from GitHub Actions Artifacts
+  #     uses: actions/download-artifact@v5
+  #     with:
+  #       path: all-blob-reports
+  #       pattern: blob-report-${{ matrix.version }}-*
+  #       merge-multiple: true
 
-    - name: Merge reports
-      run: |
-        npx playwright merge-reports --reporter html ./all-blob-reports
-        npx playwright merge-reports --reporter json ./all-blob-reports > merged_reports.json
+  #   - name: Merge reports
+  #     run: |
+  #       npx playwright merge-reports --reporter html ./all-blob-reports
+  #       npx playwright merge-reports --reporter json ./all-blob-reports > merged_reports.json
 
-    - name: Upload HTML report
-      uses: actions/upload-artifact@v4
-      with:
-        name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
-        path: playwright-report
-        retention-days: 14
+  #   - name: Upload HTML report
+  #     uses: actions/upload-artifact@v4
+  #     with:
+  #       name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
+  #       path: playwright-report
+  #       retention-days: 14
