@@ -54,7 +54,7 @@
   "devDependencies": {
     "@fastly/http-compute-js": "1.1.5",
     "@netlify/blobs": "^8.2.0",
-    "@netlify/build": "^35.1.4",
+    "@netlify/build": "^35.1.5",
     "@netlify/config": "^24.0.3",
     "@netlify/edge-bundler": "^14.5.4",
     "@netlify/edge-functions-bootstrap": "^2.14.0",

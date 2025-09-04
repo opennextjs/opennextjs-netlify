@@ -55,7 +55,7 @@ jobs:
       - name: 'Install Node'
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: '20.x'
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
       - uses: oven-sh/setup-bun@v2
@@ -131,7 +131,7 @@ jobs:
       - name: 'Install Node'
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: '20.x'
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
       - name: Prefer npm global on windows
@@ -208,7 +208,7 @@ jobs:
       - name: 'Install Node'
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: '20.x'
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
       - name: setup pnpm/yarn
