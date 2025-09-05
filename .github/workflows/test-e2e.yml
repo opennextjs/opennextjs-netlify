@@ -105,6 +105,11 @@ jobs:
           path: ${{ env.next-path }}
           ref: ${{ matrix.version_spec.tag }}
 
+      - name: checkout runtime repo
+        uses: actions/checkout@v5
+        with:
+          path: ${{ env.runtime-path }}
+
       - name: Decide Node Version
         id: decide-node-version
         shell: bash
@@ -118,15 +123,11 @@ jobs:
           fi
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ matrix.version_spec.selector }}' is '$NODE_VERSION'"
-      - name: checkout runtime repo
-        uses: actions/checkout@v5
-        with:
-          path: ${{ env.runtime-path }}
 
       - name: setup node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: ${{ steps.decide-node-version.outputs.version }}
 
       - name: setup pnpm/yarn
         run: corepack enable
