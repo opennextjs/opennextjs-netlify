@@ -19,7 +19,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: 20.9.0
   PNPM_VERSION: 8.9.0
   NEXT_REPO: vercel/next.js
   NEXT_TEST_MODE: deploy
@@ -106,6 +105,19 @@ jobs:
           path: ${{ env.next-path }}
           ref: ${{ matrix.version_spec.tag }}
 
+      - name: Decide Node Version
+        id: decide-node-version
+        shell: bash
+        run: |
+          NODE_VERSION=18.x
+          if [ "${{ matrix.version_spec.selector }}" = "canary" ]; then
+            # this is not ideal, because we set node@20 just when explicitly using canary tag as target
+            # but next@canary are still on 15 major, so we can't yet use major version of resolved next version
+            # as condition
+            NODE_VERSION=20.x
+          fi
+          echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
+          echo "Node version for 'next@${{ matrix.version_spec.selector }}' is '$NODE_VERSION'"
       - name: checkout runtime repo
         uses: actions/checkout@v5
         with:
