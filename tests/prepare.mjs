@@ -81,19 +81,20 @@ const promises = fixtures.map((fixture) =>
       await rm(join(cwd, 'package-lock.json'), { force: true })
     }
 
-    const addPrefix = new Transform({
-      transform(chunk, encoding, callback) {
-        this.push(chunk.toString().replace(/\n/gm, `\n[${fixture}] `))
-        callback()
-      },
-      flush(callback) {
-        // final transform might create non-terminated line with a prefix
-        // so this is just to make sure we end with a newline so further writes
-        // to same destination stream start on a new line for better readability
-        this.push('\n')
-        callback()
-      },
-    })
+    const addPrefix = () =>
+      new Transform({
+        transform(chunk, encoding, callback) {
+          this.push(chunk.toString().replace(/\n/gm, `\n[${fixture}] `))
+          callback()
+        },
+        flush(callback) {
+          // final transform might create non-terminated line with a prefix
+          // so this is just to make sure we end with a newline so further writes
+          // to same destination stream start on a new line for better readability
+          this.push('\n')
+          callback()
+        },
+      })
 
     console.log(`[${fixture}] Running \`${cmd}\`...`)
     const output = execaCommand(cmd, {
@@ -102,13 +103,13 @@ const promises = fixtures.map((fixture) =>
       env: { ...process.env, FORCE_COLOR: '1' },
     })
     if (process.env.DEBUG) {
-      output.stdout?.pipe(addPrefix).pipe(process.stdout)
+      output.stdout?.pipe(addPrefix()).pipe(process.stdout)
     }
-    output.stderr?.pipe(addPrefix).pipe(process.stderr)
+    output.stderr?.pipe(addPrefix()).pipe(process.stderr)
     return output.finally(async () => {
       const npmListPromise = execaCommand(`npm list next`, { cwd, stdio: 'pipe' })
-      npmListPromise.stdout?.pipe(addPrefix).pipe(process.stdout)
-      npmListPromise.stderr?.pipe(addPrefix).pipe(process.stderr)
+      npmListPromise.stdout?.pipe(addPrefix()).pipe(process.stdout)
+      npmListPromise.stderr?.pipe(addPrefix()).pipe(process.stderr)
       await npmListPromise
 
       await setNextVersionInFixture(cwd, 'latest', {
