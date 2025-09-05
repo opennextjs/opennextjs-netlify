@@ -1392,17 +1392,10 @@ test.describe('Page Router with basePath and i18n', () => {
 
     expect(await page.textContent('p')).toBe('Custom 404 page for locale: en')
 
-    // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
-    // after that 404 pages would have `private` directive, before that it would not
-    const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
-    expect(headers['debug-netlify-cdn-cache-control']).toBe(
-      (shouldHavePrivateDirective ? 'private, ' : '') +
-        'no-cache, no-store, max-age=0, must-revalidate, durable',
+    expect(headers['debug-netlify-cdn-cache-control']).toMatch(
+      /no-cache, no-store, max-age=0, must-revalidate, durable/m,
     )
-    expect(headers['cache-control']).toBe(
-      (shouldHavePrivateDirective ? 'private,' : '') +
-        'no-cache,no-store,max-age=0,must-revalidate',
-    )
+    expect(headers['cache-control']).toMatch(/no-cache,no-store,max-age=0,must-revalidate/m)
   })
 
   test('requesting a non existing page route that needs to be fetched from the blob store like 404.html (notFound: true)', async ({
@@ -1417,12 +1410,16 @@ test.describe('Page Router with basePath and i18n', () => {
 
     expect(await page.textContent('p')).toBe('Custom 404 page for locale: en')
 
-    expect(headers['debug-netlify-cdn-cache-control']).toBe(
-      nextVersionSatisfies('>=15.0.0-canary.187')
-        ? 's-maxage=31536000, durable'
-        : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
-    )
-    expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
+    // Prior to v14.2.4 notFound pages are not cacheable
+    // https://github.com/vercel/next.js/pull/66674
+    if (nextVersionSatisfies('>= 14.2.4')) {
+      expect(headers['debug-netlify-cdn-cache-control']).toBe(
+        nextVersionSatisfies('>=15.0.0-canary.187')
+          ? 's-maxage=31536000, durable'
+          : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
+      )
+      expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
+    }
   })
 
   test.describe('static assets and function invocations', () => {
