@@ -126,7 +126,7 @@ export async function setNextVersionInFixture(
     return false
   }
 
-  if (process.env.NEXT_VERSION ?? 'latest' === 'latest') {
+  if ((process.env.NEXT_VERSION ?? 'latest') === 'latest') {
     // latest is default so we don't want to make any changes
     return true
   }
