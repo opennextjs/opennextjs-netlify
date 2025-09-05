@@ -113,13 +113,15 @@ const promises = fixtures.map((fixture) =>
     }
     output.stderr?.pipe(addPrefix()).pipe(process.stderr)
     return output.finally(async () => {
-      const npmListPromise = execaCommand(
-        packageManager?.startsWith('pnpm') ? 'pnpm list next' : 'npm list next',
-        { cwd, stdio: 'pipe', reject: false },
-      )
-      npmListPromise.stdout?.pipe(addPrefix()).pipe(process.stdout)
-      npmListPromise.stderr?.pipe(addPrefix()).pipe(process.stderr)
-      await npmListPromise
+      if (process.env.DEBUG) {
+        const npmListPromise = execaCommand(
+          packageManager?.startsWith('pnpm') ? 'pnpm list next' : 'npm list next',
+          { cwd, stdio: 'pipe', reject: false },
+        )
+        npmListPromise.stdout?.pipe(addPrefix()).pipe(process.stdout)
+        npmListPromise.stderr?.pipe(addPrefix()).pipe(process.stderr)
+        await npmListPromise
+      }
 
       await setNextVersionInFixture(cwd, 'latest', {
         logPrefix: `[${fixture}] `,

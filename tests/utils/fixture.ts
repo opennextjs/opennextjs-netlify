@@ -43,14 +43,23 @@ async function installDependencies(cwd: string) {
 
   const { packageManager } = JSON.parse(await readFile(join(cwd, 'package.json'), 'utf8'))
   if (packageManager?.startsWith('pnpm')) {
-    return execaCommand(`pnpm install --ignore-scripts --reporter=silent`, {
+    await execaCommand(`pnpm install --ignore-scripts --reporter=silent`, {
       cwd,
     })
+  } else {
+    await execaCommand(
+      `npm install --ignore-scripts --no-audit --progress=false --legacy-peer-deps`,
+      { cwd },
+    )
   }
-  return execaCommand(
-    `npm install --ignore-scripts --no-audit --progress=false --legacy-peer-deps`,
-    { cwd },
-  )
+
+  if (process.env.DEBUG) {
+    await execaCommand(packageManager?.startsWith('pnpm') ? `pnpm list next` : 'npm list next', {
+      cwd,
+      stdio: 'inherit',
+      reject: false,
+    })
+  }
 }
 
 export const getFixtureSourceDirectory = (fixture: string) =>
@@ -150,8 +159,6 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
     )
 
     await installDependencies(ctx.cwd)
-
-    await execaCommand(`npm list next`, { cwd: ctx.cwd, stdio: 'inherit' })
   } catch (error) {
     throw new Error(`could not prepare the fixture: ${fixture}. ${error}`)
   }
