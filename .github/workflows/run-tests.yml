@@ -11,6 +11,9 @@ on:
         required: false
         default: 'latest'
 
+env:
+  DEBUG: true
+
 jobs:
   setup:
     runs-on: ubuntu-latest
