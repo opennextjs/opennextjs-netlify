@@ -150,6 +150,8 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
     )
 
     await installDependencies(ctx.cwd)
+
+    await execaCommand(`npm list next`, { cwd: ctx.cwd, stdio: 'inherit' })
   } catch (error) {
     throw new Error(`could not prepare the fixture: ${fixture}. ${error}`)
   }
