@@ -21,6 +21,7 @@ export interface DeployResult {
   deployID: string
   url: string
   logs: string
+  isolatedFixtureRoot: string
 }
 
 type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun' | 'berry'
@@ -90,6 +91,7 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
       cleanup: _cleanup,
       deployID: result.deployID,
       url: result.url,
+      isolatedFixtureRoot: result.isolatedFixtureRoot,
     }
   } catch (error) {
     await _cleanup(true)
@@ -290,6 +292,7 @@ async function deploySite(
     url: `https://${deployID}--${siteName}.netlify.app`,
     deployID,
     logs: output,
+    isolatedFixtureRoot,
   }
 }
 

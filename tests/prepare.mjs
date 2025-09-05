@@ -27,7 +27,7 @@ const e2eOnlyFixtures = new Set([
   'middleware-node-runtime-specific',
   'middleware-static-asset-matcher',
   'middleware-subrequest-vuln',
-  // There is also a bug on Windows on Node.js 18.20.6, that cause build failures on this fixture
+  // There is a bug on Windows on Node.js 18.20.6, that causes build failures on this fixture
   // see https://github.com/opennextjs/opennextjs-netlify/actions/runs/13268839161/job/37043172448?pr=2749#step:12:78
   'middleware-og',
   'middleware-single-matcher',

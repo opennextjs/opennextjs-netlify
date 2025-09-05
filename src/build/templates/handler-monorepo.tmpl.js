@@ -49,4 +49,9 @@ export default async function (req, context) {
 export const config = {
   path: '/*',
   preferStatic: true,
+  excludedPath: [
+    // We use `preferStatic: true` so we already won't run this on *existing* static assets,
+    // but by excluding this entire path we also avoid invoking the function just to 404.
+    '{{excludeStaticPath}}',
+  ],
 }

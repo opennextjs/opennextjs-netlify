@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: 18.18.0
+  NODE_VERSION: 20.9.0
   PNPM_VERSION: 8.9.0
   NEXT_REPO: vercel/next.js
   NEXT_TEST_MODE: deploy
