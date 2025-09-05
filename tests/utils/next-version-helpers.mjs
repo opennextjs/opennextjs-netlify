@@ -101,11 +101,6 @@ export async function setNextVersionInFixture(
         const versionConstraint = packageJson.test?.dependencies?.next
         // We can't use semver to check "canary" or "latest", so we use a fake future minor version
         const checkVersion = isSemverVersion ? resolvedVersion : FUTURE_NEXT_PATCH_VERSION
-        console.log({
-          checkVersion,
-          versionConstraint,
-          isNextCanary: isNextCanary(),
-        })
         if (
           operation === 'update' &&
           versionConstraint &&
