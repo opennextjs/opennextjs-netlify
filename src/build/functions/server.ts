@@ -106,6 +106,7 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
 
   const templateVariables: Record<string, string> = {
     '{{useRegionalBlobs}}': ctx.useRegionalBlobs.toString(),
+    '{{excludeStaticPath}}': posixJoin(ctx.buildConfig.basePath || '', '/_next/static/*'),
   }
   // In this case it is a monorepo and we need to use a own template for it
   // as we have to change the process working directory
