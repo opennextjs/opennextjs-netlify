@@ -81,9 +81,14 @@ const promises = fixtures.map((fixture) =>
       await rm(join(cwd, 'package-lock.json'), { force: true })
     }
 
-    const addPrefix = () =>
-      new Transform({
+    const addPrefix = () => {
+      let isFirstChunk = true
+      return new Transform({
         transform(chunk, encoding, callback) {
+          if (isFirstChunk) {
+            this.push(`[${fixture}] `)
+            isFirstChunk = false
+          }
           this.push(chunk.toString().replace(/\n/gm, `\n[${fixture}] `))
           callback()
         },
@@ -95,6 +100,7 @@ const promises = fixtures.map((fixture) =>
           callback()
         },
       })
+    }
 
     console.log(`[${fixture}] Running \`${cmd}\`...`)
     const output = execaCommand(cmd, {
@@ -107,7 +113,10 @@ const promises = fixtures.map((fixture) =>
     }
     output.stderr?.pipe(addPrefix()).pipe(process.stderr)
     return output.finally(async () => {
-      const npmListPromise = execaCommand(`npm list next`, { cwd, stdio: 'pipe', reject: false })
+      const npmListPromise = execaCommand(
+        packageManager?.startsWith('pnpm') ? 'pnpm list next' : 'npm list next',
+        { cwd, stdio: 'pipe', reject: false },
+      )
       npmListPromise.stdout?.pipe(addPrefix()).pipe(process.stdout)
       npmListPromise.stderr?.pipe(addPrefix()).pipe(process.stderr)
       await npmListPromise
