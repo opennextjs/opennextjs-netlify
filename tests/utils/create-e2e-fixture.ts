@@ -78,9 +78,7 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
       copyFixture(fixture, isolatedFixtureRoot, config),
     ])
 
-    if (NEXT_VERSION !== 'latest') {
-      await setNextVersionInFixture(isolatedFixtureRoot, NEXT_VERSION)
-    }
+    await setNextVersionInFixture(isolatedFixtureRoot, NEXT_VERSION)
     await installRuntime(packageName, isolatedFixtureRoot, config)
     await verifyFixture(isolatedFixtureRoot, config)
 

@@ -39,20 +39,27 @@ const eszipHelper = join(actualCwd, 'tools/deno/eszip.ts')
 
 async function installDependencies(cwd: string) {
   const NEXT_VERSION = process.env.NEXT_VERSION ?? 'latest'
-  if (NEXT_VERSION !== 'latest') {
-    await setNextVersionInFixture(cwd, NEXT_VERSION, { silent: true })
-  }
+  await setNextVersionInFixture(cwd, NEXT_VERSION, { silent: true })
 
   const { packageManager } = JSON.parse(await readFile(join(cwd, 'package.json'), 'utf8'))
   if (packageManager?.startsWith('pnpm')) {
-    return execaCommand(`pnpm install --ignore-scripts --reporter=silent`, {
+    await execaCommand(`pnpm install --ignore-scripts --reporter=silent`, {
       cwd,
     })
+  } else {
+    await execaCommand(
+      `npm install --ignore-scripts --no-audit --progress=false --legacy-peer-deps`,
+      { cwd },
+    )
   }
-  return execaCommand(
-    `npm install --ignore-scripts --no-audit --progress=false --legacy-peer-deps`,
-    { cwd },
-  )
+
+  if (process.env.DEBUG) {
+    await execaCommand(packageManager?.startsWith('pnpm') ? `pnpm list next` : 'npm list next', {
+      cwd,
+      stdio: 'inherit',
+      reject: false,
+    })
+  }
 }
 
 export const getFixtureSourceDirectory = (fixture: string) =>
