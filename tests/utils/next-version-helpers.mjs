@@ -70,7 +70,7 @@ export function nextVersionRequiresReact19(version) {
  * @param {'update' | 'revert'} [options.operation] This just informs log output wording, otherwise it has no effect
  * @param {boolean} [options.silent] Doesn't produce any logs if truthy
  * @param {boolean} [options.updateReact] Update React version to match Next version
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} true if fixture's next version requirements are satisfied
  */
 export async function setNextVersionInFixture(
   cwd,
@@ -87,12 +87,6 @@ export async function setNextVersionInFixture(
   // if resolved version is different from version, we add it to the log to provide additional details
   const nextVersionForLogs = `next@${version}${resolvedVersion !== version ? ` (${resolvedVersion})` : ``}`
 
-  if (!silent) {
-    console.log(
-      `${logPrefix}▲ ${operation === 'revert' ? 'Reverting' : 'Updating'} to ${nextVersionForLogs}...`,
-    )
-  }
-
   const packageJsons = await fg.glob(['**/package.json', '!**/node_modules'], {
     cwd,
     absolute: true,
@@ -100,7 +94,7 @@ export async function setNextVersionInFixture(
 
   const isSemverVersion = valid(resolvedVersion)
 
-  await Promise.all(
+  const areNextVersionConstraintsSatisfied = await Promise.all(
     packageJsons.map(async (packageJsonPath) => {
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
       if (packageJson.dependencies?.next) {
@@ -110,7 +104,9 @@ export async function setNextVersionInFixture(
         if (
           operation === 'update' &&
           versionConstraint &&
-          !satisfies(checkVersion, versionConstraint, { includePrerelease: true }) &&
+          !(versionConstraint === 'canary'
+            ? isNextCanary()
+            : satisfies(checkVersion, versionConstraint, { includePrerelease: true })) &&
           version !== versionConstraint
         ) {
           if (!silent) {
@@ -118,9 +114,35 @@ export async function setNextVersionInFixture(
               `${logPrefix}⏩ Skipping '${packageJson.name}' because it requires next@${versionConstraint}`,
             )
           }
-          return
+          return false
         }
+      }
+      return true
+    }),
+  )
+
+  if (areNextVersionConstraintsSatisfied.some((isSatisfied) => !isSatisfied)) {
+    // at least one next version constraint is not satisfied so we skip this fixture
+    return false
+  }
+
+  if ((process.env.NEXT_VERSION ?? 'latest') === 'latest') {
+    // latest is default so we don't want to make any changes
+    return true
+  }
+
+  if (!silent) {
+    console.log(
+      `${logPrefix}▲ ${operation === 'revert' ? 'Reverting' : 'Updating'} to ${nextVersionForLogs}...`,
+    )
+  }
+
+  await Promise.all(
+    packageJsons.map(async (packageJsonPath) => {
+      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
+      if (packageJson.dependencies?.next) {
         packageJson.dependencies.next = version
+        const checkVersion = isSemverVersion ? resolvedVersion : FUTURE_NEXT_PATCH_VERSION
 
         const { stdout } = await execaCommand(
           `npm info next@${resolvedVersion} peerDependencies --json`,
@@ -172,4 +194,6 @@ export async function setNextVersionInFixture(
       `${logPrefix}▲ ${operation === 'revert' ? 'Reverted' : 'Updated'} to ${nextVersionForLogs}`,
     )
   }
+
+  return true
 }
