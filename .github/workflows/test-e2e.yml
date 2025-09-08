@@ -125,7 +125,7 @@ jobs:
           echo "Node version for 'next@${{ matrix.version_spec.selector }}' is '$NODE_VERSION'"
 
       - name: setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
 
