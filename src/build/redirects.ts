@@ -4,6 +4,7 @@ import type { PluginContext } from './plugin-context.js'
 
 // These are the characters that are not allowed in a simple redirect source.
 // They are all special characters in a regular expression.
+// eslint-disable-next-line unicorn/better-regex, no-useless-escape
 const DISALLOWED_SOURCE_CHARACTERS = /[()\[\]{}?+|]/
 const SPLAT_REGEX = /\/:(\w+)\*$/
 
@@ -11,10 +12,7 @@ const SPLAT_REGEX = /\/:(\w+)\*$/
  * Adds redirects from the Next.js routes manifest to the Netlify config.
  */
 export const setRedirectsConfig = async (ctx: PluginContext): Promise<void> => {
-  const {
-    redirects,
-    basePath,
-  } = await ctx.getRoutesManifest()
+  const { redirects, basePath } = await ctx.getRoutesManifest()
 
   for (const redirect of redirects) {
     // We can only handle simple redirects that don't have complex conditions.
@@ -32,7 +30,7 @@ export const setRedirectsConfig = async (ctx: PluginContext): Promise<void> => {
 
     const splatMatch = from.match(SPLAT_REGEX)
     if (splatMatch) {
-      const param = splatMatch[1]
+      const [, param] = splatMatch
       from = from.replace(SPLAT_REGEX, '/*')
       to = to.replace(`/:${param}`, '/:splat')
     }

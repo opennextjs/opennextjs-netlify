@@ -1,6 +1,6 @@
 import type { NetlifyPluginOptions } from '@netlify/build'
 import type { RoutesManifest } from 'next/dist/build/index.js'
-import { beforeEach, describe, expect, test, vi, type TestContext } from 'vitest'
+import { beforeEach, describe, expect, test, type TestContext, vi } from 'vitest'
 
 import { PluginContext } from './plugin-context.js'
 import { setRedirectsConfig } from './redirects.js'
