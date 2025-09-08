@@ -20,7 +20,7 @@ jobs:
       - name: Check PR labels
         if: github.event_name == 'pull_request'
         id: check-labels
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: labels } = await github.rest.issues.listLabelsOnIssue({
