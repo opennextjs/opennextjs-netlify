@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.13.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.0...v5.13.1) (2025-09-08)
+
+
+### Bug Fixes
+
+* **perf:** exclude `/_next/static/*` from generated functions ([#3100](https://github.com/opennextjs/opennextjs-netlify/issues/3100)) ([5e28132](https://github.com/opennextjs/opennextjs-netlify/commit/5e2813227aa439fc39bad993c51329833f502ea1))
+
 ## [5.13.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.12.1...v5.13.0) (2025-09-02)
 
 
