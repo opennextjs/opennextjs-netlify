@@ -353,6 +353,22 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
     buildHandlerDefinition(ctx, def),
   )
 
+  // --- PPR start
+  {
+    const template = await readFile(
+      join(ctx.pluginDir, 'dist/build/templates/ppr.tmpl.js'),
+      'utf-8',
+    )
+    await mkdir(ctx.edgeFunctionsDir, { recursive: true })
+    await writeFile(join(ctx.edgeFunctionsDir, 'ppr.js'), template)
+    netlifyDefinitions.push({
+      function: 'ppr',
+      name: 'Next.js PPR Handler',
+      path: '/*',
+    })
+  }
+  // --- PPR end
+
   const netlifyManifest: Manifest = {
     version: 1,
     functions: netlifyDefinitions,

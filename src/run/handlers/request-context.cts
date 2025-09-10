@@ -16,6 +16,14 @@ export type RequestContext = {
   responseCacheGetLastModified?: number
   responseCacheKey?: string
   responseCacheTags?: string[]
+  postponed?: {
+    postponedString: string
+    cacheKey: string
+  }
+  resume?: {
+    resumedString: string
+    cacheKey: string
+  }
   usedFsReadForNonFallback?: boolean
   didPagesRouterOnDemandRevalidate?: boolean
   serverTiming?: string

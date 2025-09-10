@@ -40,7 +40,7 @@ export type NetlifyCachedRouteValue = Omit<CachedRouteValueForMultipleVersions, 
 /**
  * Shape of the cache value that is returned from CacheHandler.get or passed to CacheHandler.set
  */
-type IncrementalCachedAppPageValueForMultipleVersions = Omit<
+export type IncrementalCachedAppPageValueForMultipleVersions = Omit<
   IncrementalCachedAppPageValue,
   'kind'
 > & {

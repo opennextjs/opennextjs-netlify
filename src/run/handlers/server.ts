@@ -59,11 +59,12 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
 }
 
 export default async (
-  request: Request,
+  argRequest: Request,
   _context: Context,
   topLevelSpan: Span,
   requestContext: RequestContext,
 ) => {
+  let request = argRequest
   const tracer = getTracer()
 
   if (!nextHandler) {
@@ -81,6 +82,27 @@ export default async (
   }
 
   return await tracer.withActiveSpan('generate response', async (span) => {
+    const pprPostponed = request.headers.get('x-ppr-request-body')
+    const pprCacheKey = request.headers.get('x-ppr-cache-key')
+
+    // handle PPR request that is Netlify implementation specific
+    if (pprPostponed && pprCacheKey && request.method === 'POST') {
+      const cleanedHeaders = new Headers(request.headers)
+      cleanedHeaders.delete('x-ppr-request-body')
+      cleanedHeaders.delete('x-ppr-cache-key')
+
+      requestContext.resume = {
+        resumedString: pprPostponed,
+        cacheKey: pprCacheKey,
+      }
+
+      request = new Request(request, {
+        ...request,
+        method: 'GET',
+        headers: cleanedHeaders,
+      })
+    }
+
     const { req, res } = toReqRes(request)
 
     // Work around a bug in http-proxy in next@<14.0.2
@@ -132,6 +154,11 @@ export default async (
     setCacheTagsHeaders(response.headers, requestContext)
     setVaryHeaders(response.headers, request, nextConfig)
     setCacheStatusHeader(response.headers, nextCache)
+
+    if (requestContext.postponed) {
+      response.headers.set('x-ppr-request-body', requestContext.postponed.postponedString)
+      response.headers.set('x-ppr-cache-key', requestContext.postponed.cacheKey)
+    }
 
     const netlifyVary = response.headers.get('netlify-vary') ?? undefined
     const netlifyCdnCacheControl = response.headers.get('netlify-cdn-cache-control') ?? undefined

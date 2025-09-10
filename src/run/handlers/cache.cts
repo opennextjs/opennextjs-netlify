@@ -12,6 +12,7 @@ import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 import {
   type CacheHandlerContext,
   type CacheHandlerForMultipleVersions,
+  IncrementalCachedAppPageValueForMultipleVersions,
   isCachedPageValue,
   isCachedRouteValue,
   type NetlifyCachedPageValue,
@@ -150,6 +151,13 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       cacheValue.kind === 'ROUTE' ||
       cacheValue.kind === 'APP_ROUTE'
     ) {
+      if (cacheValue.kind === 'APP_PAGE' && cacheValue.postponed) {
+        requestContext.postponed = {
+          postponedString: cacheValue.postponed,
+          cacheKey: key,
+        }
+      }
+
       if (cacheValue.headers?.[NEXT_CACHE_TAGS_HEADER]) {
         const cacheTags = (cacheValue.headers[NEXT_CACHE_TAGS_HEADER] as string).split(/,|%2c/gi)
         requestContext.responseCacheTags = cacheTags
@@ -260,6 +268,27 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       const [key, context = {}] = args
       getLogger().debug(`[NetlifyCacheHandler.get]: ${key}`)
 
+      const resume = getRequestContext()?.resume
+      console.log('resume??', {
+        key,
+        resume,
+      })
+      if (resume?.cacheKey === key) {
+        return {
+          lastModified: Date.now(),
+          value: {
+            kind: 'APP_PAGE',
+            headers: {},
+            status: 200,
+            html: '<!-- Netlify PPR resumed response -->',
+            rscData: undefined,
+            postponed: resume.resumedString,
+            segmentData: undefined,
+            // revalidate: false,
+          } satisfies IncrementalCachedAppPageValueForMultipleVersions,
+        }
+      }
+
       span.setAttributes({ key })
 
       const blob = await this.cacheStore.get<NetlifyCacheHandlerValue>(key, 'blobStore.get')
@@ -364,7 +393,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
             requestContext.isCacheableAppPage = true
           }
 
-          const { revalidate, rscData, segmentData, ...restOfPageValue } = blob.value
+          const { revalidate, rscData, segmentData, postponed, ...restOfPageValue } = blob.value
 
           span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
@@ -383,7 +412,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
                     ]),
                   )
                 : undefined,
-            },
+              postponed: undefined,
+            } satisfies IncrementalCachedAppPageValueForMultipleVersions,
           }
         }
         default:
