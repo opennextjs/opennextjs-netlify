@@ -124,7 +124,9 @@
     {
       "file": "test/e2e/app-dir/app-static/app-static.test.ts",
       "reason": "Uses CLI output",
-      "tests": ["app-dir static/dynamic handling should warn for too many cache tags"]
+      "tests": [
+        "app-dir static/dynamic handling should warn for too many cache tags"
+      ]
     },
     {
       "file": "test/e2e/app-dir/parallel-routes-and-interception/parallel-routes-and-interception.test.ts",
@@ -442,11 +444,41 @@
     {
       "file": "test/e2e/app-dir/app-root-params-getters/generate-static-params.test.ts",
       "reason": "Test relies on x-vercel-cache response header that is Vercel specific",
-      "tests": ["app-root-param-getters - generateStaticParams should be statically prerenderable"]
+      "tests": [
+        "app-root-param-getters - generateStaticParams should be statically prerenderable"
+      ]
     },
     {
       "file": "test/e2e/app-dir/fallback-shells/fallback-shells.test.ts",
       "reason": "Test relies on x-matched-path response header that is not set in non-minimal mode"
+    },
+    {
+      "file": "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages.test.ts",
+      "reason": "We are serving default Netlify 404 page instead of relying on next-server to serve 404 (https://github.com/opennextjs/opennextjs-netlify/pull/3100)",
+      "tests": [
+        "invalid-static-asset-404-pages should return 404 with plain text when fetching invalid asset path"
+      ]
+    },
+    {
+      "file": "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-base-path.test.ts",
+      "reason": "We are serving default Netlify 404 page instead of relying on next-server to serve 404 (https://github.com/opennextjs/opennextjs-netlify/pull/3100)",
+      "tests": [
+        "invalid-static-asset-404-pages-base-path should return 404 with plain text when fetching invalid asset path"
+      ]
+    },
+    {
+      "file": "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app-base-path.test.ts",
+      "reason": "We are serving default Netlify 404 page instead of relying on next-server to serve 404 (https://github.com/opennextjs/opennextjs-netlify/pull/3100)",
+      "tests": [
+        "invalid-static-asset-404-app-base-path should return 404 with plain text when fetching invalid asset path"
+      ]
+    },
+    {
+      "file": "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app.test.ts",
+      "reason": "We are serving default Netlify 404 page instead of relying on next-server to serve 404 (https://github.com/opennextjs/opennextjs-netlify/pull/3100)",
+      "tests": [
+        "invalid-static-asset-404-app should return 404 with plain text when fetching invalid asset path"
+      ]
     }
   ],
   "failures": [
