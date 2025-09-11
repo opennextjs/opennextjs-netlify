@@ -479,6 +479,14 @@
       "tests": [
         "invalid-static-asset-404-app should return 404 with plain text when fetching invalid asset path"
       ]
+    },
+    {
+      "file": "test/e2e/app-dir/rsc-redirect/rsc-redirect.test.ts",
+      "reason": "page.waitForLoadState('networkidle') not resolving",
+      "tests": [
+        "rsc-redirect /old-about -> /about (ppr: false, segmentCache: true) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
+        "rsc-redirect /old-about -> /about (ppr: false, segmentCache: false) uses prefetched, redirected URL in the navigation, as opposed to the href in the link"
+      ]
     }
   ],
   "failures": [
