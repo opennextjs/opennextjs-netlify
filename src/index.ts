@@ -18,6 +18,7 @@ import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/ed
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
 import { setImageConfig } from './build/image-cdn.js'
 import { PluginContext } from './build/plugin-context.js'
+import { setSkewProtection } from './build/skew-protection.js'
 import {
   verifyAdvancedAPIRoutes,
   verifyNetlifyFormsWorkaround,
@@ -62,6 +63,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     } else {
       await restoreBuildCache(ctx)
     }
+    await setSkewProtection(ctx)
   })
 }
 
