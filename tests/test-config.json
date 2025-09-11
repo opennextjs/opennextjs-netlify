@@ -487,6 +487,13 @@
         "rsc-redirect /old-about -> /about (ppr: false, segmentCache: true) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
         "rsc-redirect /old-about -> /about (ppr: false, segmentCache: false) uses prefetched, redirected URL in the navigation, as opposed to the href in the link"
       ]
+    },
+    {
+      "file": "test/e2e/app-dir/sub-shell-generation-middleware/sub-shell-generation-middleware.test.ts",
+      "reason": "Checking Vercel specific x-vercel-cache header",
+      "tests": [
+        "middleware-static-rewrite should eventually result in a cache hit"
+      ]
     }
   ],
   "failures": [
