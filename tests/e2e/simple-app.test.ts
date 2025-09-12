@@ -342,3 +342,12 @@ test.describe('RSC cache poisoning', () => {
     expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
   })
 })
+
+test('Handles route with a path segment starting with dot correctly', async ({ simple }) => {
+  const response = await fetch(`${simple.url}/.well-known/farcaster`)
+
+  expect(response.status).toBe(200)
+
+  const data = await response.json()
+  expect(data).toEqual({ msg: 'Hi!' })
+})
