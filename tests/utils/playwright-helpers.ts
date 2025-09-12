@@ -98,7 +98,7 @@ export const test = base.extend<
         if (response.url().includes('/_next/static/')) {
           expect(
             response.headers()['cache-control'],
-            `_next/static asset (${response.url()}) should have immutable cache control`,
+            '_next/static assets should have immutable cache control',
           ).toContain('public,max-age=31536000,immutable')
         }
       })
