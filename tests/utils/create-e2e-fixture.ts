@@ -476,4 +476,5 @@ export const fixtureFactories = {
     }),
   dynamicCms: () => createE2EFixture('dynamic-cms'),
   after: () => createE2EFixture('after'),
+  redirects: () => createE2EFixture('redirects'),
 }
