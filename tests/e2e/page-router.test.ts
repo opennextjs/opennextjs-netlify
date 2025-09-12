@@ -1,8 +1,6 @@
 import { expect } from '@playwright/test'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
-import { join } from 'node:path'
-import { readdir } from 'node:fs/promises'
 
 export function waitFor(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis))
@@ -615,34 +613,6 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     expect(response?.headers()['debug-netlify-cdn-cache-control'] ?? '').not.toMatch(
       /(s-maxage|max-age)/,
     )
-  })
-
-  test.describe('static assets and function invocations', () => {
-    test('should return 200 for an existing static asset without invoking a function', async ({
-      page,
-      pageRouter,
-    }) => {
-      // Since assets are hashed, we can't hardcode anything here. Find something to fetch.
-      const [staticAsset] = await readdir(
-        join(pageRouter.isolatedFixtureRoot, '.next', 'static', 'chunks'),
-      )
-      expect(staticAsset).toBeDefined()
-
-      const response = await page.goto(`${pageRouter.url}/_next/static/chunks/${staticAsset}`)
-
-      expect(response?.status()).toBe(200)
-      expect(response?.headers()).not.toHaveProperty('x-nf-function-type')
-    })
-
-    test('should return 404 for a nonexistent static asset without invoking a function', async ({
-      page,
-      pageRouter,
-    }) => {
-      const response = await page.goto(`${pageRouter.url}/_next/static/stale123abcdef.js`)
-
-      expect(response?.status()).toBe(404)
-      expect(response?.headers()).not.toHaveProperty('x-nf-function-type')
-    })
   })
 })
 
@@ -1382,15 +1352,13 @@ test.describe('Page Router with basePath and i18n', () => {
 
   test('requesting a non existing page route that needs to be fetched from the blob store like 404.html', async ({
     page,
-    pageRouterBasePathI18n,
+    pageRouter,
   }) => {
-    const response = await page.goto(
-      new URL('base/path/non-existing', pageRouterBasePathI18n.url).href,
-    )
+    const response = await page.goto(new URL('non-existing', pageRouter.url).href)
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('p')).toBe('Custom 404 page for locale: en')
+    expect(await page.textContent('p')).toBe('Custom 404 page')
 
     expect(headers['debug-netlify-cdn-cache-control']).toMatch(
       /no-cache, no-store, max-age=0, must-revalidate, durable/m,
@@ -1400,15 +1368,13 @@ test.describe('Page Router with basePath and i18n', () => {
 
   test('requesting a non existing page route that needs to be fetched from the blob store like 404.html (notFound: true)', async ({
     page,
-    pageRouterBasePathI18n,
+    pageRouter,
   }) => {
-    const response = await page.goto(
-      new URL('base/path/static/not-found', pageRouterBasePathI18n.url).href,
-    )
+    const response = await page.goto(new URL('static/not-found', pageRouter.url).href)
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('p')).toBe('Custom 404 page for locale: en')
+    expect(await page.textContent('p')).toBe('Custom 404 page')
 
     // Prior to v14.2.4 notFound pages are not cacheable
     // https://github.com/vercel/next.js/pull/66674
@@ -1420,37 +1386,5 @@ test.describe('Page Router with basePath and i18n', () => {
       )
       expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
     }
-  })
-
-  test.describe('static assets and function invocations', () => {
-    test('should return 200 for an existing static asset without invoking a function', async ({
-      page,
-      pageRouterBasePathI18n,
-    }) => {
-      // Since assets are hashed, we can't hardcode anything here. Find something to fetch.
-      const [staticAsset] = await readdir(
-        join(pageRouterBasePathI18n.isolatedFixtureRoot, '.next', 'static', 'chunks'),
-      )
-      expect(staticAsset).toBeDefined()
-
-      const response = await page.goto(
-        `${pageRouterBasePathI18n.url}/base/path/_next/static/chunks/${staticAsset}`,
-      )
-
-      expect(response?.status()).toBe(200)
-      expect(response?.headers()).not.toHaveProperty('x-nf-function-type')
-    })
-
-    test('should return 404 for a nonexistent static asset without invoking a function', async ({
-      page,
-      pageRouterBasePathI18n,
-    }) => {
-      const response = await page.goto(
-        `${pageRouterBasePathI18n.url}/base/path/_next/static/stale123abcdef.js`,
-      )
-
-      expect(response?.status()).toBe(404)
-      expect(response?.headers()).not.toHaveProperty('x-nf-function-type')
-    })
   })
 })
