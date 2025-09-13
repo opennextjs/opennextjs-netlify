@@ -447,6 +447,47 @@
     {
       "file": "test/e2e/app-dir/fallback-shells/fallback-shells.test.ts",
       "reason": "Test relies on x-matched-path response header that is not set in non-minimal mode"
+    },
+    {
+      "file": "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages.test.ts",
+      "reason": "We are serving default Netlify 404 page instead of relying on next-server to serve 404 (https://github.com/opennextjs/opennextjs-netlify/pull/3100)",
+      "tests": [
+        "invalid-static-asset-404-pages should return 404 with plain text when fetching invalid asset path"
+      ]
+    },
+    {
+      "file": "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-base-path.test.ts",
+      "reason": "We are serving default Netlify 404 page instead of relying on next-server to serve 404 (https://github.com/opennextjs/opennextjs-netlify/pull/3100)",
+      "tests": [
+        "invalid-static-asset-404-pages-base-path should return 404 with plain text when fetching invalid asset path"
+      ]
+    },
+    {
+      "file": "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app-base-path.test.ts",
+      "reason": "We are serving default Netlify 404 page instead of relying on next-server to serve 404 (https://github.com/opennextjs/opennextjs-netlify/pull/3100)",
+      "tests": [
+        "invalid-static-asset-404-app-base-path should return 404 with plain text when fetching invalid asset path"
+      ]
+    },
+    {
+      "file": "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app.test.ts",
+      "reason": "We are serving default Netlify 404 page instead of relying on next-server to serve 404 (https://github.com/opennextjs/opennextjs-netlify/pull/3100)",
+      "tests": [
+        "invalid-static-asset-404-app should return 404 with plain text when fetching invalid asset path"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/rsc-redirect/rsc-redirect.test.ts",
+      "reason": "page.waitForLoadState('networkidle') not resolving",
+      "tests": [
+        "rsc-redirect /old-about -> /about (ppr: false, segmentCache: true) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
+        "rsc-redirect /old-about -> /about (ppr: false, segmentCache: false) uses prefetched, redirected URL in the navigation, as opposed to the href in the link"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/sub-shell-generation-middleware/sub-shell-generation-middleware.test.ts",
+      "reason": "Checking Vercel specific x-vercel-cache header",
+      "tests": ["middleware-static-rewrite should eventually result in a cache hit"]
     }
   ],
   "failures": [
