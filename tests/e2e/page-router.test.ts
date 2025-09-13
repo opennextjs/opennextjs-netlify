@@ -1352,13 +1352,15 @@ test.describe('Page Router with basePath and i18n', () => {
 
   test('requesting a non existing page route that needs to be fetched from the blob store like 404.html', async ({
     page,
-    pageRouter,
+    pageRouterBasePathI18n,
   }) => {
-    const response = await page.goto(new URL('non-existing', pageRouter.url).href)
+    const response = await page.goto(
+      new URL('base/path/non-existing', pageRouterBasePathI18n.url).href,
+    )
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('p')).toBe('Custom 404 page')
+    expect(await page.textContent('p')).toBe('Custom 404 page for locale: en')
 
     expect(headers['debug-netlify-cdn-cache-control']).toMatch(
       /no-cache, no-store, max-age=0, must-revalidate, durable/m,
@@ -1368,13 +1370,15 @@ test.describe('Page Router with basePath and i18n', () => {
 
   test('requesting a non existing page route that needs to be fetched from the blob store like 404.html (notFound: true)', async ({
     page,
-    pageRouter,
+    pageRouterBasePathI18n,
   }) => {
-    const response = await page.goto(new URL('static/not-found', pageRouter.url).href)
+    const response = await page.goto(
+      new URL('base/path/static/not-found', pageRouterBasePathI18n.url).href,
+    )
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('p')).toBe('Custom 404 page')
+    expect(await page.textContent('p')).toBe('Custom 404 page for locale: en')
 
     // Prior to v14.2.4 notFound pages are not cacheable
     // https://github.com/vercel/next.js/pull/66674
