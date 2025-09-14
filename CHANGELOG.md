@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.13.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.1...v5.13.2) (2025-09-12)
+
+
+### Bug Fixes
+
+* allow dot files in function bundle ([#3118](https://github.com/opennextjs/opennextjs-netlify/issues/3118)) ([8cd51b5](https://github.com/opennextjs/opennextjs-netlify/commit/8cd51b5633fee4629d12601aac59c637dafa7c9a))
+* revert "fix(perf): exclude /_next/static/* from generated functions ([#3100](https://github.com/opennextjs/opennextjs-netlify/issues/3100))" ([8e14a76](https://github.com/opennextjs/opennextjs-netlify/commit/8e14a760f63fa9ef042fede7c6ab3a703ab5ac7d))
+
 ## [5.13.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.0...v5.13.1) (2025-09-08)
 
 

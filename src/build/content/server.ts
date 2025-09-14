@@ -111,6 +111,7 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
       ],
       {
         cwd: srcDir,
+        dot: true,
         extglob: true,
       },
     )
