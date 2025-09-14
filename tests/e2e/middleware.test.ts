@@ -569,33 +569,68 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
     if (isNodeMiddleware) {
       // Node.js Middleware specific tests to test features not available in Edge Runtime
       test.describe('Node.js Middleware specific', () => {
-        test('node:crypto module', async ({ middlewareNodeRuntimeSpecific }) => {
-          const response = await fetch(`${middlewareNodeRuntimeSpecific.url}/test/crypto`)
-          expect(response.status).toBe(200)
-          const body = await response.json()
-          expect(
-            body.random,
-            'random should have 16 random bytes generated with `randomBytes` function from node:crypto in hex format',
-          ).toMatch(/[0-9a-f]{32}/)
+        test.describe('npm package manager', () => {
+          test('node:crypto module', async ({ middlewareNodeRuntimeSpecific }) => {
+            const response = await fetch(`${middlewareNodeRuntimeSpecific.url}/test/crypto`)
+            expect(response.status).toBe(200)
+            const body = await response.json()
+            expect(
+              body.random,
+              'random should have 16 random bytes generated with `randomBytes` function from node:crypto in hex format',
+            ).toMatch(/[0-9a-f]{32}/)
+          })
+
+          test('node:http(s) module', async ({ middlewareNodeRuntimeSpecific }) => {
+            const response = await fetch(`${middlewareNodeRuntimeSpecific.url}/test/http`)
+            expect(response.status).toBe(200)
+            const body = await response.json()
+            expect(
+              body.proxiedWithHttpRequest,
+              'proxiedWithHttpRequest should be the result of `http.request` from node:http fetching static asset',
+            ).toStrictEqual({ hello: 'world' })
+          })
+
+          test('node:path module', async ({ middlewareNodeRuntimeSpecific }) => {
+            const response = await fetch(`${middlewareNodeRuntimeSpecific.url}/test/path`)
+            expect(response.status).toBe(200)
+            const body = await response.json()
+            expect(
+              body.joined,
+              'joined should be the result of `join` function from node:path',
+            ).toBe('a/b')
+          })
         })
 
-        test('node:http(s) module', async ({ middlewareNodeRuntimeSpecific }) => {
-          const response = await fetch(`${middlewareNodeRuntimeSpecific.url}/test/http`)
-          expect(response.status).toBe(200)
-          const body = await response.json()
-          expect(
-            body.proxiedWithHttpRequest,
-            'proxiedWithHttpRequest should be the result of `http.request` from node:http fetching static asset',
-          ).toStrictEqual({ hello: 'world' })
-        })
+        test.describe('pnpm package manager', () => {
+          test('node:crypto module', async ({ middlewareNodeRuntimeSpecificPnpm }) => {
+            const response = await fetch(`${middlewareNodeRuntimeSpecificPnpm.url}/test/crypto`)
+            expect(response.status).toBe(200)
+            const body = await response.json()
+            expect(
+              body.random,
+              'random should have 16 random bytes generated with `randomBytes` function from node:crypto in hex format',
+            ).toMatch(/[0-9a-f]{32}/)
+          })
 
-        test('node:path module', async ({ middlewareNodeRuntimeSpecific }) => {
-          const response = await fetch(`${middlewareNodeRuntimeSpecific.url}/test/path`)
-          expect(response.status).toBe(200)
-          const body = await response.json()
-          expect(body.joined, 'joined should be the result of `join` function from node:path').toBe(
-            'a/b',
-          )
+          test('node:http(s) module', async ({ middlewareNodeRuntimeSpecificPnpm }) => {
+            const response = await fetch(`${middlewareNodeRuntimeSpecificPnpm.url}/test/http`)
+            expect(response.status).toBe(200)
+            const body = await response.json()
+            expect(
+              body.proxiedWithHttpRequest,
+              'proxiedWithHttpRequest should be the result of `http.request` from node:http fetching static asset',
+            ).toStrictEqual({ hello: 'world' })
+          })
+
+          test('node:path module', async ({ middlewareNodeRuntimeSpecificPnpm }) => {
+            const response = await fetch(`${middlewareNodeRuntimeSpecificPnpm.url}/test/path`)
+            expect(response.status).toBe(200)
+            const body = await response.json()
+            expect(
+              body.joined,
+              'joined should be the result of `join` function from node:path',
+            ).toBe('a/b')
+          })
         })
       })
     }
