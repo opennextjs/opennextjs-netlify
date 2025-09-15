@@ -447,13 +447,186 @@
     {
       "file": "test/e2e/app-dir/fallback-shells/fallback-shells.test.ts",
       "reason": "Test relies on x-matched-path response header that is not set in non-minimal mode"
+    },
+    {
+      "file": "test/e2e/app-dir/rsc-redirect/rsc-redirect.test.ts",
+      "reason": "page.waitForLoadState('networkidle') not resolving",
+      "tests": [
+        "rsc-redirect /old-about -> /about (ppr: false, segmentCache: true) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
+        "rsc-redirect /old-about -> /about (ppr: false, segmentCache: false) uses prefetched, redirected URL in the navigation, as opposed to the href in the link"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/sub-shell-generation-middleware/sub-shell-generation-middleware.test.ts",
+      "reason": "Checking Vercel specific x-vercel-cache header",
+      "tests": ["middleware-static-rewrite should eventually result in a cache hit"]
     }
   ],
   "failures": [
     {
-      "name": "This is an example for the json import to infer the right type",
-      "reason": "(This is because for some reason we inject the `failures` key at runtime)",
-      "link": "https://example.com"
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/3117",
+      "reason": "[cache-components] `console.*` calls result in https://nextjs.org/docs/messages/next-prerender-current-time errors",
+      "name": "hello-world should allow creating Spans during prerendering at runtime - inside a Cache Components"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/3091",
+      "reason": "hitting redirect count exceeded fetch error in edge runtime server action",
+      "name": "app-dir - server-actions-redirect-middleware-rewrite.test should redirect correctly in edge runtime with middleware rewrite"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/3090",
+      "reason": "x-nextjs-postponed response header is set unexpectedly",
+      "name": "runtime prefetching errors should trigger error boundaries for errors that occurred in runtime-prefetched content"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/3090",
+      "reason": "x-nextjs-postponed response header is set unexpectedly",
+      "name": "(runtime prefetch) errors should trigger error boundaries for errors that occurred in runtime-prefetched content"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/3075",
+      "reason": "Not matching on static assets when assetPrefix is used and attempting to use url with assetPrefix",
+      "name": "invalid-static-asset-404-pages-asset-prefix should return correct output with status 200 on valid asset path"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/3075",
+      "reason": "Not matching on static assets when assetPrefix is used and attempting to use url with assetPrefix",
+      "name": "invalid-static-asset-404-app-asset-prefix should return correct output with status 200 on valid asset path"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2924",
+      "reason": "clientTraceMetadata experimental feature not supported",
+      "name": "test/e2e/opentelemetry/client-trace-metadata/client-trace-metadata.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2785",
+      "reason": "Crawler or Google prerender bot requests do not buffer responses",
+      "name": "streaming-ssr-edge should not stream to crawlers or google pagerender bot"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2784",
+      "reason": "Test setup from previous test in test suite doesn't unregister request listener",
+      "name": "app dir - rsc basics should be able to navigate between rsc routes"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2751",
+      "reason": "Socket.io test is flakey",
+      "name": "test/e2e/socket-io/index.test.js"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2750",
+      "reason": "Middleware rewrites for dynamic routes not setting query/params in router",
+      "name": "Middleware Rewrite should handle catch-all rewrite correctly"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2750",
+      "reason": "Middleware rewrites for dynamic routes not setting query/params in router",
+      "name": "Middleware Rewrite should handle static rewrite from next.config.js correctly"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2750",
+      "reason": "Middleware rewrites for dynamic routes not setting query/params in router",
+      "name": "Middleware Rewrite should opt out of prefetch caching for dynamic routes"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2697",
+      "reason": "middleware assets are not supported",
+      "name": "test/e2e/og-api/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2694",
+      "reason": "use-cache not persisted",
+      "name": "test/e2e/app-dir/use-cache/use-cache.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2694",
+      "reason": "use-cache not persisted",
+      "name": "test/e2e/app-dir/use-cache-route-handler-only/use-cache-route-handler-only.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2678",
+      "reason": "Prefetch priority is not threaded through to fetch calls",
+      "name": "test/e2e/app-dir/app-prefetch/prefetching.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2628",
+      "reason": "Rewrites to _next/static files not working",
+      "name": "test/e2e/app-dir/asset-prefix/asset-prefix.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2628",
+      "reason": "Rewrites to _next/static files not working",
+      "name": "test/e2e/app-dir/asset-prefix-with-basepath/asset-prefix-with-basepath.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2628",
+      "reason": "Rewrites to _next/static files not working",
+      "name": "test/e2e/app-dir/asset-prefix-absolute/asset-prefix-absolute.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2626",
+      "reason": "Undocumented next@15-canary reactMaxHeadersLength config option is not respected",
+      "name": "test/e2e/app-dir/react-max-headers-length/react-max-headers-length.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2474",
+      "reason": "does not correctly handle user middleware that redirects to path with canonical locale casing when app enables `skipMiddlewareUrlNormalize` and path contains locale slug with non-canonical casing",
+      "name": "test/e2e/skip-trailing-slash-redirect/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2472",
+      "reason": "Middleware does not match when using basePath and default locale",
+      "name": "test/e2e/middleware-matcher/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2471",
+      "reason": "Pages router data requests returning 404 when middleware is used",
+      "name": "test/e2e/middleware-base-path/test/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2470",
+      "reason": "Appending set-cookie header in middleware leads to duplicate header",
+      "name": "test/e2e/middleware-responses/test/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2469",
+      "reason": "Fetch action prefetch cache test is flakey",
+      "name": "test/e2e/app-dir/actions/app-action.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2468",
+      "reason": "Server error pages return encoded data without content-encoding header if accept-encoding is gzip",
+      "name": "test/e2e/getserversideprops/test/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2467",
+      "reason": "Pages router middleware should return 302 status for redirected data requests",
+      "name": "test/e2e/middleware-redirects/test/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2466",
+      "reason": "Middleware should not add trailing slashes to non-data requests in static dir",
+      "name": "test/e2e/middleware-trailing-slash/test/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2465",
+      "reason": "Middleware on sites with i18n cannot rewrite to static files",
+      "name": "test/e2e/i18n-ignore-rewrite-source-locale/rewrites-with-basepath.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2465",
+      "reason": "Middleware on sites with i18n cannot rewrite to static files",
+      "name": "test/e2e/i18n-ignore-rewrite-source-locale/rewrites.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2464",
+      "reason": "Nonce not automatically set in script tags when using CSP",
+      "name": "test/e2e/app-dir/app/index.test.ts"
+    },
+    {
+      "link": "https://github.com/opennextjs/opennextjs-netlify/issues/2464",
+      "reason": "Nonce not automatically set in script tags when using CSP",
+      "name": "test/e2e/app-dir/next-dynamic-csp-nonce/next-dynamic-csp-nonce.test.ts"
     }
   ]
 }
