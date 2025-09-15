@@ -55,7 +55,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       if (typeof revalidate === 'number') {
         const revalidateAfter = revalidate * 1_000 + blob.lastModified
-        return (revalidateAfter - Date.now()) / 1_000
+        return (revalidateAfter - DateBeforeNextPatchedIt.now()) / 1_000
       }
       if (revalidate === false) {
         return 'PERMANENT'
@@ -441,7 +441,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   async set(...args: Parameters<CacheHandlerForMultipleVersions['set']>) {
     return this.tracer.withActiveSpan('set cache key', async (span) => {
       const [key, data, context] = args
-      const lastModified = Date.now()
+      const lastModified = DateBeforeNextPatchedIt.now()
       span.setAttributes({ key, lastModified })
 
       getLogger().debug(`[NetlifyCacheHandler.set]: ${key}`)

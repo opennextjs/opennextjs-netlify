@@ -192,7 +192,7 @@ export const adjustDateHeader = async ({
     return
   }
 
-  const lastModifiedDate = new Date(lastModified)
+  const lastModifiedDate = new DateBeforeNextPatchedIt(lastModified)
   // Show actual date of the function call in the date header
   headers.set('x-nextjs-date', headers.get('date') ?? lastModifiedDate.toUTCString())
   // Setting Age also would work, but we already have the lastModified time so will use that.

@@ -112,7 +112,8 @@ export const NetlifyDefaultUseCacheHandler = {
         }
 
         const { entry } = privateEntry
-        const ttl = (entry.timestamp + entry.revalidate * 1000 - Date.now()) / 1000
+        const ttl =
+          (entry.timestamp + entry.revalidate * 1000 - DateBeforeNextPatchedIt.now()) / 1000
         if (ttl < 0) {
           // In-memory caches should expire after revalidate time because it is
           // unlikely that a new entry will be able to be used before it is dropped

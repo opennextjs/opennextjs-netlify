@@ -130,7 +130,7 @@ async function doRevalidateTagAndPurgeEdgeCache(tags: string[]): Promise<void> {
   }
 
   const tagManifest: TagManifest = {
-    revalidatedAt: Date.now(),
+    revalidatedAt: DateBeforeNextPatchedIt.now(),
   }
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })

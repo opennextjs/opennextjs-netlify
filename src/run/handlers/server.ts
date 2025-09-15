@@ -22,6 +22,7 @@ import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
 // make use of global fetch before Next.js applies any patching
 setFetchBeforeNextPatchedIt(globalThis.fetch)
+globalThis.DateBeforeNextPatchedIt = Date
 // configure globals that Next.js make use of before we start importing any Next.js code
 // as some globals are consumed at import time
 const { nextConfig: initialNextConfig, enableUseCacheHandler } = await getRunConfig()
@@ -34,6 +35,30 @@ setupWaitUntil()
 const nextImportPromise = import('../next.cjs')
 
 let nextHandler: WorkerRequestHandler
+
+// Lambda Runtime patches these methods to include timestamp with `new Date()` which ...
+// has tension with https://nextjs.org/docs/messages/next-prerender-current-time
+// as this timestamp is NOT impacting Next.js render we temporarily restore original Date
+// to not affect Next.js heuristics related to `Date` usage
+for (const consoleMethod of [
+  'trace',
+  'debug',
+  'info',
+  'log',
+  'warn',
+  'error',
+  // fatal is not console method, but AWS Lambda Runtime adds it
+  'fatal',
+] as const) {
+  const originalMethod = console[consoleMethod].bind(console)
+  console[consoleMethod] = (...args: unknown[]) => {
+    const patchedDate = Date
+    Date = DateBeforeNextPatchedIt
+    const retval = originalMethod(...args)
+    Date = patchedDate
+    return retval
+  }
+}
 
 /**
  * When Next.js proxies requests externally, it writes the response back as-is.
