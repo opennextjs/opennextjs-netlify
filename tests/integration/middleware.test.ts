@@ -130,7 +130,7 @@ for (const {
         expect(response.status).toBe(307)
         expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string).pathname,
+          new URL(response.headers.get('location') as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
@@ -154,7 +154,7 @@ for (const {
         expect(response.status).toBe(307)
         expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string).pathname,
+          new URL(response.headers.get('location') as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -357,7 +357,7 @@ for (const {
         expect(response.status).toBe(307)
         expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string).pathname,
+          new URL(response.headers.get('location') as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -382,7 +382,7 @@ for (const {
         expect(response.status).toBe(307)
         expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string).pathname,
+          new URL(response.headers.get('location') as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')

@@ -1,5 +1,5 @@
 import { assertEquals } from 'https://deno.land/std@0.175.0/testing/asserts.ts'
-import { rewriteDataPath } from './util.ts'
+import { relativizeURL, rewriteDataPath } from './util.ts'
 
 Deno.test('rewriteDataPath', async (t) => {
   await t.step('should rewrite a data url', async () => {
@@ -35,5 +35,28 @@ Deno.test('rewriteDataPath', async (t) => {
     const newRoute = '/target/'
     const result = rewriteDataPath({ dataUrl, newRoute })
     assertEquals(result, '/_next/data/build-id/target.json')
+  })
+})
+
+Deno.test('relativizeURL', async (t) => {
+  await t.step('should relativize a URL when origin matches', async () => {
+    const url = 'https://example.com/pathname'
+    const base = 'https://example.com/'
+    const result = relativizeURL(url, base)
+    assertEquals(result, '/pathname')
+  })
+
+  await t.step('should NOT relativize a URL when origin does not match', async () => {
+    const url = 'https://example.com/pathname'
+    const base = 'https://not-example.com/'
+    const result = relativizeURL(url, base)
+    assertEquals(result, 'https://example.com/pathname')
+  })
+
+  await t.step('accepts relative URL strings and produce relative URL as output', async () => {
+    const url = '/pathname'
+    const base = 'https://example.com/'
+    const result = relativizeURL(url, base)
+    assertEquals(result, '/pathname')
   })
 })

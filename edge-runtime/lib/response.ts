@@ -210,7 +210,7 @@ export const buildResponse = async ({
       logger.withFields({ redirect_url: redirect }).debug('Redirect url is same as original url')
       return
     }
-    edgeResponse.headers.set('location', redirect)
+    edgeResponse.headers.set('location', relativizeURL(redirect, request.url))
   }
 
   // Data requests shouldn't automatically redirect in the browser (they might be HTML pages): they're handled by the router
