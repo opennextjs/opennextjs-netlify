@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.13.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.2...v5.13.3) (2025-09-16)
+
+
+### Bug Fixes
+
+* handle node middleware bundling when pnpm is used ([#3126](https://github.com/opennextjs/opennextjs-netlify/issues/3126)) ([c29381e](https://github.com/opennextjs/opennextjs-netlify/commit/c29381eddab51ecea734fb48d48ab13a3fdc4e9e))
+* produce relative redirect location url for same origin ([#3129](https://github.com/opennextjs/opennextjs-netlify/issues/3129)) ([9f42311](https://github.com/opennextjs/opennextjs-netlify/commit/9f42311d1df7631558e10113f1c30d3ed99b16b0))
+
 ## [5.13.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.1...v5.13.2) (2025-09-12)
 
 
