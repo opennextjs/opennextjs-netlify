@@ -345,6 +345,10 @@ export const fixtureFactories = {
       publishDirectory: '.next-node-middleware',
     }),
   middlewareNodeRuntimeSpecific: () => createE2EFixture('middleware-node-runtime-specific'),
+  middlewareNodeRuntimeSpecificPnpm: () =>
+    createE2EFixture('middleware-node-runtime-specific', {
+      packageManger: 'pnpm',
+    }),
   middlewareI18n: () => createE2EFixture('middleware-i18n'),
   middlewareI18nNode: () =>
     createE2EFixture('middleware-i18n', {

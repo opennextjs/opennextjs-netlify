@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative } from 'node:path/posix'
 
 import type { Manifest, ManifestFunction } from '@netlify/edge-functions'
@@ -259,14 +259,26 @@ const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
 
   parts.push(`const virtualModules = new Map();`)
 
+  const handleFileOrDirectory = async (fileOrDir: string) => {
+    const srcPath = join(srcDir, fileOrDir)
+
+    const stats = await stat(srcPath)
+    if (stats.isDirectory()) {
+      const filesInDir = await readdir(srcPath)
+      for (const fileInDir of filesInDir) {
+        await handleFileOrDirectory(join(fileOrDir, fileInDir))
+      }
+    } else {
+      const content = await readFile(srcPath, 'utf8')
+
+      parts.push(
+        `virtualModules.set(${JSON.stringify(join(commonPrefix, fileOrDir))}, ${JSON.stringify(content)});`,
+      )
+    }
+  }
+
   for (const file of files) {
-    const srcPath = join(srcDir, file)
-
-    const content = await readFile(srcPath, 'utf8')
-
-    parts.push(
-      `virtualModules.set(${JSON.stringify(join(commonPrefix, file))}, ${JSON.stringify(content)});`,
-    )
+    await handleFileOrDirectory(file)
   }
   parts.push(`registerCJSModules(import.meta.url, virtualModules);
 
