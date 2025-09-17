@@ -44,13 +44,13 @@ export interface ExportDetail {
 }
 
 export class PluginContext {
+  constants: NetlifyPluginConstants
   featureFlags: NetlifyPluginOptions['featureFlags']
   netlifyConfig: NetlifyPluginOptions['netlifyConfig']
   pluginName: string
   pluginVersion: string
   utils: NetlifyPluginUtils
 
-  private constants: NetlifyPluginConstants
   private packageJSON: { name: string; version: string } & Record<string, unknown>
 
   /** Absolute path of the next runtime plugin directory */

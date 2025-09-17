@@ -50,7 +50,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     return
   }
 
-  await tracer.withActiveSpan('onPreBuild', async () => {
+  await tracer.withActiveSpan('onPreBuild', async (span) => {
     // Enable Next.js standalone mode at build time
     process.env.NEXT_PRIVATE_STANDALONE = 'true'
     const ctx = new PluginContext(options)
@@ -63,7 +63,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     } else {
       await restoreBuildCache(ctx)
     }
-    await setSkewProtection(ctx)
+    await setSkewProtection(ctx, span)
   })
 }
 
