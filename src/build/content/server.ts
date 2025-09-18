@@ -299,7 +299,12 @@ export const copyNextDependencies = async (ctx: PluginContext): Promise<void> =>
       }
       const src = join(ctx.standaloneDir, entry)
       const dest = join(ctx.serverHandlerDir, entry)
-      await cp(src, dest, { recursive: true, verbatimSymlinks: true, force: true })
+      await cp(src, dest, {
+        recursive: true,
+        verbatimSymlinks: true,
+        force: true,
+        filter: nodeModulesFilter,
+      })
 
       if (entry === 'node_modules') {
         await recreateNodeModuleSymlinks(ctx.resolveFromSiteDir('node_modules'), dest)
@@ -437,4 +442,17 @@ export const verifyHandlerDirStructure = async (ctx: PluginContext) => {
       `Failed creating server handler. BUILD_ID file not found at expected location "${expectedBuildIDPath}".`,
     )
   }
+}
+
+// This is a workaround for Next.js installations in a pnpm+glibc context
+// Occurs due to an intermittent upstream issue in the npm/pnpm ecosystem
+// https://github.com/pnpm/pnpm/issues/9654
+// https://github.com/pnpm/pnpm/issues/5928
+// https://github.com/pnpm/pnpm/issues/7362 (persisting even though ticket is closed)
+const nodeModulesFilter = (sourcePath: string, _: string) => {
+  if (sourcePath.includes('linuxmusl-x64') || sourcePath.includes('linux-x64-musl')) {
+    return false
+  }
+
+  return true
 }
