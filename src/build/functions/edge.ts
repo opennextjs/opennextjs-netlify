@@ -313,17 +313,11 @@ const buildHandlerDefinition = (
   ctx: PluginContext,
   def: EdgeOrNodeMiddlewareDefinition,
 ): Array<ManifestFunction> => {
-  const functionHandlerName = getHandlerName({ name: def.name })
-  const functionName = 'Next.js Middleware Handler'
-  const cache = def.name.endsWith('middleware') ? undefined : ('manual' as const)
-  const generator = `${ctx.pluginName}@${ctx.pluginVersion}`
-
   return augmentMatchers(def.matchers, ctx).map((matcher) => ({
-    function: functionHandlerName,
-    name: functionName,
+    function: getHandlerName({ name: def.name }),
+    name: 'Next.js Middleware Handler',
     pattern: matcher.regexp,
-    cache,
-    generator,
+    generator: `${ctx.pluginName}@${ctx.pluginVersion}`,
   }))
 }
 
