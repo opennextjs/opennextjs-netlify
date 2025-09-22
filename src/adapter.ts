@@ -6,7 +6,12 @@ const adapter: NextAdapter = {
     // Enable Next.js standalone mode at build time
     config.output = 'standalone'
 
-    console.log('modifyConfig hook called')
+    if (config.images.loader === 'default') {
+      // Set up Netlify Image CDN image's loaderFile
+      config.images.loader = 'custom'
+      config.images.loaderFile = '@netlify/plugin-nextjs/dist/next-image-loader.cjs'
+    }
+
     return config
   },
   async onBuildComplete(ctx) {
