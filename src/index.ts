@@ -63,6 +63,11 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
       await restoreBuildCache(ctx)
     }
   })
+
+  // We will have a build plugin that will contain the adapter, we will still use some build plugin features
+  // for operations that are more idiomatic to do in build plugin rather than adapter due to helpers we can
+  // use in a build plugin context.
+  process.env.NEXT_ADAPTER_PATH = `@netlify/plugin-nextjs/dist/adapter.js`
 }
 
 export const onBuild = async (options: NetlifyPluginOptions) => {
