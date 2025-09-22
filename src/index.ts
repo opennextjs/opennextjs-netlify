@@ -50,8 +50,6 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
   }
 
   await tracer.withActiveSpan('onPreBuild', async () => {
-    // Enable Next.js standalone mode at build time
-    process.env.NEXT_PRIVATE_STANDALONE = 'true'
     const ctx = new PluginContext(options)
     if (options.constants.IS_LOCAL) {
       // Only clear directory if we are running locally as then we might have stale functions from previous
