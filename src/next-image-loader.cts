@@ -5,7 +5,6 @@ const netlifyImageLoader: ImageLoader = ({ src, width, quality }) => {
   url.searchParams.set('url', src)
   url.searchParams.set('w', width.toString())
   url.searchParams.set('q', (quality || 75).toString())
-  console.log(url)
   return url.pathname + url.search
 }
 

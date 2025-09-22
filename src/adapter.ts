@@ -8,6 +8,7 @@ const adapter: NextAdapter = {
 
     if (config.images.loader === 'default') {
       // Set up Netlify Image CDN image's loaderFile
+      // see https://nextjs.org/docs/app/api-reference/config/next-config-js/images
       config.images.loader = 'custom'
       config.images.loaderFile = '@netlify/plugin-nextjs/dist/next-image-loader.cjs'
     }
