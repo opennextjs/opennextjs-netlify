@@ -13,7 +13,7 @@ import {
   publishStaticDir,
   unpublishStaticDir,
 } from './build/content/static.js'
-import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/edge.js'
+import { clearStaleEdgeHandlers } from './build/functions/edge.js'
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
 import { PluginContext } from './build/plugin-context.js'
 import {

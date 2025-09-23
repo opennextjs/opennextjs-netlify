@@ -7,7 +7,7 @@ import glob from 'fast-glob'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { beforeEach, describe, expect, Mock, test, vi } from 'vitest'
 
-import { decodeBlobKey, encodeBlobKey, mockFileSystem } from '../../../tests/index.js'
+import { decodeBlobKey, encodeBlobKey } from '../../../tests/index.js'
 import { type FixtureTestContext } from '../../../tests/utils/contexts.js'
 import { createFsFixture } from '../../../tests/utils/fixture.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
@@ -57,19 +57,7 @@ const createFsFixtureWithBasePath = (
   )
 }
 
-async function readDirRecursive(dir: string) {
-  const posixPaths = await glob('**/*', { cwd: dir, dot: true, absolute: true })
-  // glob always returns unix-style paths, even on Windows!
-  // To compare them more easily in our tests running on Windows, we convert them to the platform-specific paths.
-  const paths = posixPaths.map((posixPath) => join(posixPath))
-  return paths
-}
-
 let failBuildMock: Mock<PluginContext['utils']['build']['failBuild']>
-
-const dontFailTest: PluginContext['utils']['build']['failBuild'] = () => {
-  return undefined as never
-}
 
 describe('Regular Repository layout', () => {
   beforeEach<Context>((ctx) => {

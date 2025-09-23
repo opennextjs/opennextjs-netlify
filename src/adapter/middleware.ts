@@ -1,11 +1,11 @@
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, parse } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { glob } from 'fast-glob'
 import { pathToRegexp } from 'path-to-regexp'
 
 import type { FrameworksAPIConfig, NextConfigComplete, OnBuildCompleteContext } from './types.js'
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { glob } from 'fast-glob'
 
 const NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS = '.netlify/v1/edge-functions'
 const MIDDLEWARE_FUNCTION_NAME = 'middleware'

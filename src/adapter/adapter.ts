@@ -29,6 +29,7 @@ const adapter: NextAdapter = {
   async onBuildComplete(nextAdapterContext) {
     // for dev/debugging purposes only
     await writeFile('./onBuildComplete.json', JSON.stringify(nextAdapterContext, null, 2))
+    // debugger
 
     console.log('onBuildComplete hook called')
 
@@ -53,8 +54,6 @@ const adapter: NextAdapter = {
         JSON.stringify(frameworksAPIConfig, null, 2),
       )
     }
-
-    debugger
   },
 }
 
