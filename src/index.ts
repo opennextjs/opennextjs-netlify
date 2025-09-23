@@ -8,7 +8,6 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 import { restoreBuildCache, saveBuildCache } from './build/cache.js'
 import { copyPrerenderedContent } from './build/content/prerendered.js'
 import {
-  copyStaticAssets,
   copyStaticContent,
   copyStaticExport,
   publishStaticDir,
@@ -94,7 +93,6 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
     await verifyNetlifyFormsWorkaround(ctx)
 
     await Promise.all([
-      copyStaticAssets(ctx), // this
       copyStaticContent(ctx), // this
       copyPrerenderedContent(ctx), // maybe this
       createServerHandler(ctx), // not this while we use standalone

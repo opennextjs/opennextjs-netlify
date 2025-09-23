@@ -30,3 +30,5 @@
 - Can we export build time otel spans from adapter similarly how we do that now in a build plugin?
 - Expose some constants from build plugin to adapter - what's best way to do that? (things like
   packagePath, publishDir etc)
+- Looking forward - Platform change to accept a list of files to upload to cdn (avoids file system
+  operations such as `cp`)

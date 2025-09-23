@@ -8,6 +8,7 @@ import {
   modifyConfig as modifyConfigForImageCDN,
   onBuildComplete as onBuildCompleteForImageCDN,
 } from './image-cdn.js'
+import { onBuildComplete as onBuildCompleteForStaticFiles } from './static.js'
 import { FrameworksAPIConfig } from './types.js'
 
 const NETLIFY_FRAMEWORKS_API_CONFIG_PATH = '.netlify/v1/config.json'
@@ -30,6 +31,10 @@ const adapter: NextAdapter = {
     let frameworksAPIConfig: FrameworksAPIConfig = null
 
     frameworksAPIConfig = onBuildCompleteForImageCDN(nextAdapterContext, frameworksAPIConfig)
+    frameworksAPIConfig = await onBuildCompleteForStaticFiles(
+      nextAdapterContext,
+      frameworksAPIConfig,
+    )
     frameworksAPIConfig = onBuildCompleteForHeaders(nextAdapterContext, frameworksAPIConfig)
 
     if (frameworksAPIConfig) {
