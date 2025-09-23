@@ -1,4 +1,5 @@
-import { rm } from 'fs/promises'
+import { rm } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 
 import type { NetlifyPluginOptions } from '@netlify/build'
 import { trace } from '@opentelemetry/api'
@@ -65,7 +66,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
   // We will have a build plugin that will contain the adapter, we will still use some build plugin features
   // for operations that are more idiomatic to do in build plugin rather than adapter due to helpers we can
   // use in a build plugin context.
-  process.env.NEXT_ADAPTER_PATH = `@netlify/plugin-nextjs/dist/adapter.js`
+  process.env.NEXT_ADAPTER_PATH = fileURLToPath(import.meta.resolve(`./adapter/adapter.js`))
 }
 
 export const onBuild = async (options: NetlifyPluginOptions) => {
