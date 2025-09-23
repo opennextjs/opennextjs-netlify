@@ -7,6 +7,7 @@ import {
   modifyConfig as modifyConfigForImageCDN,
   onBuildComplete as onBuildCompleteForImageCDN,
 } from './image-cdn.js'
+import { FrameworksAPIConfig } from './types.js'
 
 const NETLIFY_FRAMEWORKS_API_CONFIG_PATH = '.netlify/v1/config.json'
 
@@ -23,8 +24,7 @@ const adapter: NextAdapter = {
   async onBuildComplete(ctx) {
     console.log('onBuildComplete hook called')
 
-    // TODO: do we have a type for this? https://docs.netlify.com/build/frameworks/frameworks-api/#netlifyv1configjson
-    let frameworksAPIConfig: any = null
+    let frameworksAPIConfig: FrameworksAPIConfig = null
 
     frameworksAPIConfig = onBuildCompleteForImageCDN(ctx, frameworksAPIConfig)
 

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import type { RemotePattern } from 'next-with-adapters/dist/shared/lib/image-config.js'
 import { makeRe } from 'picomatch'
 
-import type { NextConfigComplete, OnBuildCompleteContext } from './types.js'
+import type { FrameworksAPIConfig, NextConfigComplete, OnBuildCompleteContext } from './types.js'
 
 const NETLIFY_IMAGE_LOADER_FILE = fileURLToPath(import.meta.resolve(`./next-image-loader.cjs`))
 
@@ -20,8 +20,11 @@ function generateRegexFromPattern(pattern: string): string {
   return makeRe(pattern).source
 }
 
-export function onBuildComplete(ctx: OnBuildCompleteContext, frameworksAPIConfigArg: any) {
-  const frameworksAPIConfig: any = frameworksAPIConfigArg ?? {}
+export function onBuildComplete(
+  ctx: OnBuildCompleteContext,
+  frameworksAPIConfigArg: FrameworksAPIConfig,
+) {
+  const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
 
   // when migrating from @netlify/plugin-nextjs@4 image redirect to ipx might be cached in the browser
   frameworksAPIConfig.redirects ??= []
@@ -95,7 +98,7 @@ export function onBuildComplete(ctx: OnBuildCompleteContext, frameworksAPIConfig
 
     if (remoteImageSources.length !== 0) {
       // https://docs.netlify.com/build/frameworks/frameworks-api/#images
-      frameworksAPIConfig.images ??= {}
+      frameworksAPIConfig.images ??= { remote_images: [] }
       frameworksAPIConfig.images.remote_images = remoteImageSources
     }
   }
