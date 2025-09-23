@@ -14,8 +14,10 @@ const NETLIFY_FRAMEWORKS_API_CONFIG_PATH = '.netlify/v1/config.json'
 const adapter: NextAdapter = {
   name: 'Netlify',
   modifyConfig(config) {
-    // Enable Next.js standalone mode at build time
-    config.output = 'standalone'
+    if (config.output !== 'export') {
+      // Enable Next.js standalone mode at build time
+      config.output = 'standalone'
+    }
 
     modifyConfigForImageCDN(config)
 
