@@ -12,7 +12,6 @@ import {
   copyStaticContent,
   copyStaticExport,
   publishStaticDir,
-  setHeadersConfig,
   unpublishStaticDir,
 } from './build/content/static.js'
 import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/edge.js'
@@ -88,19 +87,18 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
 
     // static exports only need to be uploaded to the CDN and setup /_next/image handler
     if (ctx.buildConfig.output === 'export') {
-      return Promise.all([copyStaticExport(ctx), setHeadersConfig(ctx)])
+      return Promise.all([copyStaticExport(ctx)])
     }
 
     await verifyAdvancedAPIRoutes(ctx)
     await verifyNetlifyFormsWorkaround(ctx)
 
     await Promise.all([
-      copyStaticAssets(ctx),
-      copyStaticContent(ctx),
-      copyPrerenderedContent(ctx),
-      createServerHandler(ctx),
-      createEdgeHandlers(ctx),
-      setHeadersConfig(ctx),
+      copyStaticAssets(ctx), // this
+      copyStaticContent(ctx), // this
+      copyPrerenderedContent(ctx), // maybe this
+      createServerHandler(ctx), // not this while we use standalone
+      createEdgeHandlers(ctx), // this - middleware
     ])
   })
 }

@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 
 import type { NextAdapter } from 'next-with-adapters'
 
+import { onBuildComplete as onBuildCompleteForHeaders } from './header.js'
 import {
   modifyConfig as modifyConfigForImageCDN,
   onBuildComplete as onBuildCompleteForImageCDN,
@@ -23,12 +24,13 @@ const adapter: NextAdapter = {
 
     return config
   },
-  async onBuildComplete(ctx) {
+  async onBuildComplete(nextAdapterContext) {
     console.log('onBuildComplete hook called')
 
     let frameworksAPIConfig: FrameworksAPIConfig = null
 
-    frameworksAPIConfig = onBuildCompleteForImageCDN(ctx, frameworksAPIConfig)
+    frameworksAPIConfig = onBuildCompleteForImageCDN(nextAdapterContext, frameworksAPIConfig)
+    frameworksAPIConfig = onBuildCompleteForHeaders(nextAdapterContext, frameworksAPIConfig)
 
     if (frameworksAPIConfig) {
       // write out config if there is any
@@ -40,7 +42,7 @@ const adapter: NextAdapter = {
     }
 
     // for dev/debugging purposes only
-    await writeFile('./onBuildComplete.json', JSON.stringify(ctx, null, 2))
+    await writeFile('./onBuildComplete.json', JSON.stringify(nextAdapterContext, null, 2))
     debugger
   },
 }

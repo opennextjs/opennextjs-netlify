@@ -3,6 +3,7 @@
 - Files from `public` not in `outputs.staticFiles`
 - In `onBuildComplete` - `config.images.remotePatterns` type is `(RemotePattern | URL)[]` but in
   reality `URL` inputs are converted to `RemotePattern` so type should be just `RemotePattern[]`
+- `routes.headers` does not contain immutable cache-control headers for \_next/static
 
 ## Plan
 
