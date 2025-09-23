@@ -17,7 +17,6 @@ import {
 } from './build/content/static.js'
 import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/edge.js'
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
-import { setLegacyIpxRewrite } from './build/image-cdn.js'
 import { PluginContext } from './build/plugin-context.js'
 import {
   verifyAdvancedAPIRoutes,
@@ -89,7 +88,7 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
 
     // static exports only need to be uploaded to the CDN and setup /_next/image handler
     if (ctx.buildConfig.output === 'export') {
-      return Promise.all([copyStaticExport(ctx), setHeadersConfig(ctx), setLegacyIpxRewrite(ctx)])
+      return Promise.all([copyStaticExport(ctx), setHeadersConfig(ctx)])
     }
 
     await verifyAdvancedAPIRoutes(ctx)
@@ -102,7 +101,6 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
       createServerHandler(ctx),
       createEdgeHandlers(ctx),
       setHeadersConfig(ctx),
-      setLegacyIpxRewrite(ctx),
     ])
   })
 }

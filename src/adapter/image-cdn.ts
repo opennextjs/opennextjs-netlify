@@ -21,7 +21,19 @@ function generateRegexFromPattern(pattern: string): string {
 }
 
 export function onBuildComplete(ctx: OnBuildCompleteContext, frameworksAPIConfigArg: any) {
-  let frameworksAPIConfig: any = frameworksAPIConfigArg
+  const frameworksAPIConfig: any = frameworksAPIConfigArg ?? {}
+
+  // when migrating from @netlify/plugin-nextjs@4 image redirect to ipx might be cached in the browser
+  frameworksAPIConfig.redirects ??= []
+  frameworksAPIConfig.redirects.push({
+    from: '/_ipx/*',
+    // w and q are too short to be used as params with id-length rule
+    // but we are forced to do so because of the next/image loader decides on their names
+    // eslint-disable-next-line id-length
+    query: { url: ':url', w: ':width', q: ':quality' },
+    to: '/.netlify/images?url=:url&w=:width&q=:quality',
+    status: 200,
+  })
 
   const { images } = ctx.config
   if (images.loader === 'custom' && images.loaderFile === NETLIFY_IMAGE_LOADER_FILE) {
@@ -83,7 +95,6 @@ export function onBuildComplete(ctx: OnBuildCompleteContext, frameworksAPIConfig
 
     if (remoteImageSources.length !== 0) {
       // https://docs.netlify.com/build/frameworks/frameworks-api/#images
-      frameworksAPIConfig ??= {}
       frameworksAPIConfig.images ??= {}
       frameworksAPIConfig.images.remote_images = remoteImageSources
     }
