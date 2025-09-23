@@ -54,31 +54,6 @@ export const copyStaticContent = async (ctx: PluginContext): Promise<void> => {
   })
 }
 
-/**
- * Copy static content to the static dir so it is uploaded to the CDN
- */
-export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
-  return tracer.withActiveSpan('copyStaticAssets', async (span): Promise<void> => {
-    try {
-      await rm(ctx.staticDir, { recursive: true, force: true })
-      const { basePath } = await ctx.getRoutesManifest()
-      if (existsSync(ctx.resolveFromSiteDir('public'))) {
-        await cp(ctx.resolveFromSiteDir('public'), join(ctx.staticDir, basePath), {
-          recursive: true,
-        })
-      }
-      if (existsSync(join(ctx.publishDir, 'static'))) {
-        await cp(join(ctx.publishDir, 'static'), join(ctx.staticDir, basePath, '_next/static'), {
-          recursive: true,
-        })
-      }
-    } catch (error) {
-      span.end()
-      ctx.failBuild('Failed copying static assets', error)
-    }
-  })
-}
-
 export const copyStaticExport = async (ctx: PluginContext): Promise<void> => {
   await tracer.withActiveSpan('copyStaticExport', async () => {
     if (!ctx.exportDetail?.outDirectory) {
