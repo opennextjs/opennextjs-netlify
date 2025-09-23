@@ -78,5 +78,12 @@ export default defineConfig({
   },
   esbuild: {
     include: ['**/*.ts', '**/*.cts'],
+    footer: `
+    if (typeof __vite_ssr_import_meta__ !== 'undefined') {
+      __vite_ssr_import_meta__.resolve = (path) => {
+        return 'file://' + require.resolve(path.replace('.js', '.ts'));
+      }
+    }
+    `,
   },
 })
