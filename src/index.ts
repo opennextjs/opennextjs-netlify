@@ -96,7 +96,6 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
       copyStaticContent(ctx), // this
       copyPrerenderedContent(ctx), // maybe this
       createServerHandler(ctx), // not this while we use standalone
-      createEdgeHandlers(ctx), // this - middleware
     ])
   })
 }

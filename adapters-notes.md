@@ -4,6 +4,10 @@
 - In `onBuildComplete` - `config.images.remotePatterns` type is `(RemotePattern | URL)[]` but in
   reality `URL` inputs are converted to `RemotePattern` so type should be just `RemotePattern[]`
 - `routes.headers` does not contain immutable cache-control headers for \_next/static
+- `outputs.middleware` does not contain env that exist in `middleware-manifest.json` (i.e.
+  NEXT_SERVER_ACTIONS_ENCRYPTION_KEY, **NEXT_PREVIEW_MODE_ID, **NEXT_PREVIEW_MODE_SIGNING_KEY etc)
+- `outputs.middleware.config.matchers` can be undefined per types - can that ever happen? Can we
+  just have empty array instead to simplify handling.
 
 ## Plan
 

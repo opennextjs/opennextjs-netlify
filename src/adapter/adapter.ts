@@ -8,6 +8,7 @@ import {
   modifyConfig as modifyConfigForImageCDN,
   onBuildComplete as onBuildCompleteForImageCDN,
 } from './image-cdn.js'
+import { onBuildComplete as onBuildCompleteForMiddleware } from './middleware.js'
 import { onBuildComplete as onBuildCompleteForStaticFiles } from './static.js'
 import { FrameworksAPIConfig } from './types.js'
 
@@ -26,11 +27,18 @@ const adapter: NextAdapter = {
     return config
   },
   async onBuildComplete(nextAdapterContext) {
+    // for dev/debugging purposes only
+    await writeFile('./onBuildComplete.json', JSON.stringify(nextAdapterContext, null, 2))
+
     console.log('onBuildComplete hook called')
 
     let frameworksAPIConfig: FrameworksAPIConfig = null
 
     frameworksAPIConfig = onBuildCompleteForImageCDN(nextAdapterContext, frameworksAPIConfig)
+    frameworksAPIConfig = await onBuildCompleteForMiddleware(
+      nextAdapterContext,
+      frameworksAPIConfig,
+    )
     frameworksAPIConfig = await onBuildCompleteForStaticFiles(
       nextAdapterContext,
       frameworksAPIConfig,
@@ -46,8 +54,6 @@ const adapter: NextAdapter = {
       )
     }
 
-    // for dev/debugging purposes only
-    await writeFile('./onBuildComplete.json', JSON.stringify(nextAdapterContext, null, 2))
     debugger
   },
 }
