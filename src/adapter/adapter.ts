@@ -9,7 +9,8 @@ import {
   onBuildComplete as onBuildCompleteForImageCDN,
 } from './image-cdn.js'
 import { onBuildComplete as onBuildCompleteForMiddleware } from './middleware.js'
-import { onBuildComplete as onBuildCompleteForStaticFiles } from './static.js'
+import { onBuildComplete as onBuildCompleteForStaticAssets } from './static-assets.js'
+import { onBuildComplete as onBuildCompleteForStaticContent } from './static-content.js'
 import { FrameworksAPIConfig } from './types.js'
 
 const NETLIFY_FRAMEWORKS_API_CONFIG_PATH = '.netlify/v1/config.json'
@@ -40,7 +41,7 @@ const adapter: NextAdapter = {
       nextAdapterContext,
       frameworksAPIConfig,
     )
-    frameworksAPIConfig = await onBuildCompleteForStaticFiles(
+    frameworksAPIConfig = await onBuildCompleteForStaticAssets(
       nextAdapterContext,
       frameworksAPIConfig,
     )
