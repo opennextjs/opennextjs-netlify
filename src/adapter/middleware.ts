@@ -1,5 +1,5 @@
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join, parse } from 'node:path'
+import { cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { dirname, join, parse, relative } from 'node:path/posix'
 
 import { glob } from 'fast-glob'
 import { pathToRegexp } from 'path-to-regexp'
@@ -26,12 +26,13 @@ export async function onBuildComplete(
     return frameworksAPIConfig
   }
 
-  if (middleware.runtime !== 'edge') {
-    // TODO: nodejs middleware
-    return frameworksAPIConfig
+  if (middleware.runtime === 'edge') {
+    await copyHandlerDependenciesForEdgeMiddleware(middleware)
+  } else if (middleware.runtime === 'nodejs') {
+    // return frameworksAPIConfig
+    await copyHandlerDependenciesForNodeMiddleware(middleware, ctx.repoRoot)
   }
 
-  await copyHandlerDependenciesForEdgeMiddleware(middleware)
   await writeHandlerFile(middleware, ctx.config)
 
   return frameworksAPIConfig
@@ -40,8 +41,6 @@ export async function onBuildComplete(
 const copyHandlerDependenciesForEdgeMiddleware = async (
   middleware: Required<OnBuildCompleteContext['outputs']>['middleware'],
 ) => {
-  // const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
-
   const edgeRuntimeDir = join(PLUGIN_DIR, 'edge-runtime')
   const shimPath = join(edgeRuntimeDir, 'shim/edge.js')
   const shim = await readFile(shimPath, 'utf8')
@@ -58,15 +57,15 @@ const copyHandlerDependenciesForEdgeMiddleware = async (
   //   }
   // }
 
-  for (const [relative, absolute] of Object.entries(middleware.assets)) {
-    if (absolute.endsWith('.wasm')) {
-      const data = await readFile(absolute)
+  for (const [relativePath, absolutePath] of Object.entries(middleware.assets)) {
+    if (absolutePath.endsWith('.wasm')) {
+      const data = await readFile(absolutePath)
 
-      const { name } = parse(relative)
+      const { name } = parse(relativePath)
       parts.push(`const ${name} = Uint8Array.from(${JSON.stringify([...data])})`)
-    } else if (absolute.endsWith('.js')) {
-      const entrypoint = await readFile(absolute, 'utf8')
-      parts.push(`;// Concatenated file: ${relative} \n`, entrypoint)
+    } else if (absolutePath.endsWith('.js')) {
+      const entrypoint = await readFile(absolutePath, 'utf8')
+      parts.push(`;// Concatenated file: ${relativePath} \n`, entrypoint)
     }
   }
   parts.push(
@@ -75,6 +74,66 @@ const copyHandlerDependenciesForEdgeMiddleware = async (
     // non-turbopack entries are already resolved, so await does not change anything
     `export default await _ENTRIES[middlewareEntryKey].default;`,
   )
+  await mkdir(dirname(outputFile), { recursive: true })
+
+  await writeFile(outputFile, parts.join('\n'))
+}
+
+const copyHandlerDependenciesForNodeMiddleware = async (
+  middleware: Required<OnBuildCompleteContext['outputs']>['middleware'],
+  repoRoot: string,
+) => {
+  const edgeRuntimeDir = join(PLUGIN_DIR, 'edge-runtime')
+  const shimPath = join(edgeRuntimeDir, 'shim/node.js')
+  const shim = await readFile(shimPath, 'utf8')
+
+  const parts = [shim]
+
+  const files: string[] = Object.values(middleware.assets)
+  if (!files.includes(middleware.filePath)) {
+    files.push(middleware.filePath)
+  }
+
+  // C++ addons are not supported
+  const unsupportedDotNodeModules = files.filter((file) => file.endsWith('.node'))
+  if (unsupportedDotNodeModules.length !== 0) {
+    throw new Error(
+      `Usage of unsupported C++ Addon(s) found in Node.js Middleware:\n${unsupportedDotNodeModules.map((file) => `- ${file}`).join('\n')}\n\nCheck https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/#limitations for more information.`,
+    )
+  }
+
+  parts.push(`const virtualModules = new Map();`)
+
+  const handleFileOrDirectory = async (fileOrDir: string) => {
+    const stats = await stat(fileOrDir)
+    if (stats.isDirectory()) {
+      const filesInDir = await readdir(fileOrDir)
+      for (const fileInDir of filesInDir) {
+        await handleFileOrDirectory(join(fileOrDir, fileInDir))
+      }
+    } else {
+      const content = await readFile(fileOrDir, 'utf8')
+
+      parts.push(
+        `virtualModules.set(${JSON.stringify(relative(repoRoot, fileOrDir))}, ${JSON.stringify(content)});`,
+      )
+    }
+  }
+
+  for (const file of files) {
+    await handleFileOrDirectory(file)
+  }
+  parts.push(`registerCJSModules(import.meta.url, virtualModules);
+
+    const require = createRequire(import.meta.url);
+    const handlerMod = require("./${relative(repoRoot, middleware.filePath)}");
+    const handler = handlerMod.default || handlerMod;
+
+    export default handler
+    `)
+
+  const outputFile = join(MIDDLEWARE_FUNCTION_DIR, `concatenated-file.js`)
+
   await mkdir(dirname(outputFile), { recursive: true })
 
   await writeFile(outputFile, parts.join('\n'))

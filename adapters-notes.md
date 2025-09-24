@@ -51,6 +51,7 @@
     handler and convert those files into blobs to upload later
 - [partially done - for edge runtime] use middleware output to generate middleware edge function
 - [done] don't glob for static files and use `outputs.staticFiles` instead
+- check `output: 'export'` case
 - note any remaining manual manifest files reading in build plugin once everything that could be
   adjusted was handled
 
