@@ -45,6 +45,10 @@ const adapter: NextAdapter = {
       nextAdapterContext,
       frameworksAPIConfig,
     )
+    frameworksAPIConfig = await onBuildCompleteForStaticContent(
+      nextAdapterContext,
+      frameworksAPIConfig,
+    )
     frameworksAPIConfig = onBuildCompleteForHeaders(nextAdapterContext, frameworksAPIConfig)
 
     if (frameworksAPIConfig) {
