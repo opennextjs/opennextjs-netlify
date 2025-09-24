@@ -1,10 +1,10 @@
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, parse } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { glob } from 'fast-glob'
 import { pathToRegexp } from 'path-to-regexp'
 
+import { GENERATOR, PLUGIN_DIR } from './constants.js'
 import type { FrameworksAPIConfig, NextConfigComplete, OnBuildCompleteContext } from './types.js'
 
 const NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS = '.netlify/v1/edge-functions'
@@ -14,9 +14,6 @@ const MIDDLEWARE_FUNCTION_DIR = join(
   NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS,
   MIDDLEWARE_FUNCTION_NAME,
 )
-
-const MODULE_DIR = fileURLToPath(new URL('.', import.meta.url))
-const PLUGIN_DIR = join(MODULE_DIR, '../..')
 
 export async function onBuildComplete(
   ctx: OnBuildCompleteContext,
@@ -138,8 +135,10 @@ const writeHandlerFile = async (
     export default (req, context) => handleMiddleware(req, context, handler);
 
     export const config = ${JSON.stringify({
-      pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.regexp),
       cache: undefined,
+      generator: GENERATOR,
+      name: 'Next.js Middleware Handler',
+      pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.regexp),
     })}
     `,
   )
