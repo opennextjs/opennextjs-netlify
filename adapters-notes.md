@@ -33,6 +33,11 @@
   could report issues in correct place in such cases. Not that important for nearest future / not
   blocking)
 
+- `output: 'export'` case seems to produce outputs as if it was not export mode (for example having
+  non-empty `outputs.appPages` or `outputs.prerenders`). To not have special handling for that in
+  adapters, only non-empty outputs should be `staticFiles` pointing to what's being written to `out`
+  (or custom `distDir`) directory?
+
 ## Plan
 
 1. There are some operations that are easier to do in a build plugin context due to helpers, so some
@@ -51,7 +56,8 @@
     handler and convert those files into blobs to upload later
 - [done] use middleware output to generate middleware edge function
 - [done] don't glob for static files and use `outputs.staticFiles` instead
-- check `output: 'export'` case
+- [checked, did not apply changes yet, due to question about this in feedback section] check
+  `output: 'export'` case
 - note any remaining manual manifest files reading in build plugin once everything that could be
   adjusted was handled
 
