@@ -1,13 +1,19 @@
 ## Feedback
 
-- Files from `public` directory not listed in `outputs.staticFiles`
-- In `onBuildComplete` - `config.images.remotePatterns` type is `(RemotePattern | URL)[]` but in
-  reality `URL` inputs are converted to `RemotePattern` so type should be just `RemotePattern[]`
+- Files from `public` directory not listed in `outputs.staticFiles`. Should they be?
 - `routes.headers` does not contain immutable cache-control headers for `_next/static`
-- `outputs.middleware` does not contain env that exist in `middleware-manifest.json` (i.e.
-  `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`, `NEXT_PREVIEW_MODE_ID`, `NEXT_PREVIEW_MODE_SIGNING_KEY` etc)
+- In `onBuildComplete` - `config.images.remotePatterns` type is `(RemotePattern | URL)[]` but in
+  reality `URL` inputs are converted to `RemotePattern` so type should be just `RemotePattern[]` in
+  `onBuildComplete` (this would require different config type for `modifyConfig` (allow inputs
+  here?) and `onBuildComplete` (final, normalized config shape)?)
 - `outputs.middleware.config.matchers` can be undefined per types - can that ever happen? Can we
-  just have empty array instead to simplify handling.
+  just have empty array instead to simplify handling (possibly similar as above point where type is
+  for the input, while "output" will have a default matcher if not defined by user).
+- `outputs.middleware` does not contain `env` that exist in `middleware-manifest.json` (i.e.
+  `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`, `NEXT_PREVIEW_MODE_ID`, `NEXT_PREVIEW_MODE_SIGNING_KEY` etc)
+  or `wasm` (tho wasm files are included in assets, so I think I have a way to support those as-is,
+  but need to to make some assumption about using extension-less file name of wasm file as
+  identifier)
 - `outputs.staticFiles` (i18n enabled) custom fully static (no `getStaticProps`) `/pages/404.js`
   `filePath` point to not existing file (it doesn't have i18n locale prefix in `staticFiles` array,
   actual 404.html are written to i18n locale prefixed directories)
@@ -45,7 +51,8 @@
     handler and convert those files into blobs to upload later
 - [partially done - for edge runtime] use middleware output to generate middleware edge function
 - [done] don't glob for static files and use `outputs.staticFiles` instead
-- don't read various manifest files manually and use provided context in `onBuildComplete` instead
+- note any remaining manual manifest files reading in build plugin once everything that could be
+  adjusted was handled
 
 ## To figure out
 

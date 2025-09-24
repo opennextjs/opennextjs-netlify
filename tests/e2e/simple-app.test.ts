@@ -110,12 +110,12 @@ test.skip('streams stale responses', async ({ simple }) => {
 
 test.describe('next/image is using Netlify Image CDN', () => {
   test('Local images', async ({ page, simple }) => {
-    const nextImageResponsePromise = page.waitForResponse('**/_next/image**')
+    const nextImageResponsePromise = page.waitForResponse('**/.netlify/images**')
 
     await page.goto(`${simple.url}/image/local`)
 
     const nextImageResponse = await nextImageResponsePromise
-    expect(nextImageResponse.request().url()).toContain('_next/image?url=%2Fsquirrel.jpg')
+    expect(nextImageResponse.request().url()).toContain('.netlify/images?url=%2Fsquirrel.jpg')
 
     expect(nextImageResponse.status()).toBe(200)
     // ensure next/image is using Image CDN
@@ -131,14 +131,14 @@ test.describe('next/image is using Netlify Image CDN', () => {
     page,
     simple,
   }) => {
-    const nextImageResponsePromise = page.waitForResponse('**/_next/image**')
+    const nextImageResponsePromise = page.waitForResponse('**/.netlify/images**')
 
     await page.goto(`${simple.url}/image/remote-pattern-1`)
 
     const nextImageResponse = await nextImageResponsePromise
 
     expect(nextImageResponse.url()).toContain(
-      `_next/image?url=${encodeURIComponent(
+      `.netlify/images?url=${encodeURIComponent(
         'https://images.unsplash.com/photo-1574870111867-089730e5a72b',
       )}`,
     )
@@ -155,14 +155,14 @@ test.describe('next/image is using Netlify Image CDN', () => {
     page,
     simple,
   }) => {
-    const nextImageResponsePromise = page.waitForResponse('**/_next/image**')
+    const nextImageResponsePromise = page.waitForResponse('**/.netlify/images**')
 
     await page.goto(`${simple.url}/image/remote-pattern-2`)
 
     const nextImageResponse = await nextImageResponsePromise
 
     expect(nextImageResponse.url()).toContain(
-      `_next/image?url=${encodeURIComponent(
+      `.netlify/images?url=${encodeURIComponent(
         'https://cdn.pixabay.com/photo/2017/02/20/18/03/cat-2083492_1280.jpg',
       )}`,
     )
@@ -176,14 +176,14 @@ test.describe('next/image is using Netlify Image CDN', () => {
   })
 
   test('Remote images: domains', async ({ page, simple }) => {
-    const nextImageResponsePromise = page.waitForResponse('**/_next/image**')
+    const nextImageResponsePromise = page.waitForResponse('**/.netlify/images**')
 
     await page.goto(`${simple.url}/image/remote-domain`)
 
     const nextImageResponse = await nextImageResponsePromise
 
     expect(nextImageResponse.url()).toContain(
-      `_next/image?url=${encodeURIComponent(
+      `.netlify/images?url=${encodeURIComponent(
         'https://images.pexels.com/photos/406014/pexels-photo-406014.jpeg',
       )}`,
     )
