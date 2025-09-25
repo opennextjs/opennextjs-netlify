@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
-import { cp } from 'node:fs/promises'
-import { extname, join } from 'node:path/posix'
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, extname, join } from 'node:path/posix'
 
 import { NEXT_RUNTIME_STATIC_ASSETS } from './constants.js'
 import type { FrameworksAPIConfig, OnBuildCompleteContext } from './types.js'
@@ -15,11 +15,26 @@ export async function onBuildComplete(
     try {
       let distPathname = staticFile.pathname
       if (extname(distPathname) === '' && extname(staticFile.filePath) === '.html') {
+        // if it's fully static page, we need to also create empty _next/data JSON file
+        // on Vercel this is done in routing layer, but we can't express that routing right now on Netlify
+        const buildID = await readFile(join(ctx.distDir, 'BUILD_ID'), 'utf-8')
+        const dataFilePath = join(
+          NEXT_RUNTIME_STATIC_ASSETS,
+          '_next',
+          'data',
+          buildID,
+          `${distPathname === '/' ? 'index' : distPathname}.json`,
+        )
+        await mkdir(dirname(dataFilePath), { recursive: true })
+        await writeFile(dataFilePath, '{}')
+
         // FEEDBACK: should this be applied in Next.js before passing to context to adapters?
-        if (ctx.config.trailingSlash && !distPathname.endsWith('/')) {
-          distPathname += '/'
-        } else if (!ctx.config.trailingSlash && distPathname.endsWith('/')) {
-          distPathname = distPathname.slice(0, -1)
+        if (distPathname !== '/') {
+          if (ctx.config.trailingSlash && !distPathname.endsWith('/')) {
+            distPathname += '/'
+          } else if (!ctx.config.trailingSlash && distPathname.endsWith('/')) {
+            distPathname = distPathname.slice(0, -1)
+          }
         }
 
         // if pathname is extension-less, but source file has an .html extension, preserve it
