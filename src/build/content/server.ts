@@ -186,108 +186,6 @@ async function recreateNodeModuleSymlinks(src: string, dest: string, org?: strin
   )
 }
 
-export type NextInternalModuleReplacement = {
-  /**
-   * Minimum Next.js version that this patch should be applied to
-   */
-  minVersion: string
-  /**
-   * If the reason to patch was not addressed in Next.js we mark this as ongoing
-   * to continue to test latest versions to know wether we should bump `maxStableVersion`
-   */
-  ongoing: boolean
-  /**
-   * Module that should be replaced
-   */
-  nextModule: string
-  /**
-   * Location of replacement module (relative to `<runtime>/dist/build/content`)
-   */
-  shimModule: string
-} & (
-  | {
-      ongoing: true
-      /**
-       * Maximum Next.js version that this patch should be applied to, note that for ongoing patches
-       * we will continue to apply patch for prerelease versions also as canary versions are released
-       * very frequently and trying to target canary versions is not practical. If user is using
-       * canary next versions they should be aware of the risks
-       */
-      maxStableVersion: string
-    }
-  | {
-      ongoing: false
-      /**
-       * Maximum Next.js version that this patch should be applied to. This should be last released
-       * version of Next.js before version making the patch not needed anymore (can be canary version).
-       */
-      maxVersion: string
-    }
-)
-
-const nextInternalModuleReplacements: NextInternalModuleReplacement[] = [
-  {
-    // standalone is loading expensive Telemetry module that is not actually used
-    // so this replace that module with lightweight no-op shim that doesn't load additional modules
-    // see https://github.com/vercel/next.js/pull/63574 that removed need for this shim
-    ongoing: false,
-    minVersion: '13.5.0-canary.0',
-    // perf released in https://github.com/vercel/next.js/releases/tag/v14.2.0-canary.43
-    maxVersion: '14.2.0-canary.42',
-    nextModule: 'next/dist/telemetry/storage.js',
-    shimModule: './next-shims/telemetry-storage.cjs',
-  },
-]
-
-export function getPatchesToApply(
-  nextVersion: string,
-  patches: NextInternalModuleReplacement[] = nextInternalModuleReplacements,
-) {
-  return patches.filter((patch) => {
-    // don't apply patches for next versions below minVersion
-    if (semverLowerThan(nextVersion, patch.minVersion)) {
-      return false
-    }
-
-    if (patch.ongoing) {
-      // apply ongoing patches when used next version is prerelease or NETLIFY_NEXT_FORCE_APPLY_ONGOING_PATCHES env var is used
-      if (prerelease(nextVersion) || process.env.NETLIFY_NEXT_FORCE_APPLY_ONGOING_PATCHES) {
-        return true
-      }
-
-      // apply ongoing patches for stable next versions below or equal maxStableVersion
-      return semverLowerThanOrEqual(nextVersion, patch.maxStableVersion)
-    }
-
-    // apply patches for next versions below or equal maxVersion
-    return semverLowerThanOrEqual(nextVersion, patch.maxVersion)
-  })
-}
-
-async function patchNextModules(
-  ctx: PluginContext,
-  nextVersion: string,
-  serverHandlerRequireResolve: NodeRequire['resolve'],
-): Promise<void> {
-  // apply only those patches that target used Next version
-  const moduleReplacementsToApply = getPatchesToApply(nextVersion)
-
-  if (moduleReplacementsToApply.length !== 0) {
-    await Promise.all(
-      moduleReplacementsToApply.map(async ({ nextModule, shimModule }) => {
-        try {
-          const nextModulePath = serverHandlerRequireResolve(nextModule)
-          const shimModulePath = posixJoin(ctx.pluginDir, 'dist', 'build', 'content', shimModule)
-
-          await cp(shimModulePath, nextModulePath, { force: true })
-        } catch {
-          // this is perf optimization, so failing it shouldn't break the build
-        }
-      }),
-    )
-  }
-}
-
 export const copyNextDependencies = async (ctx: PluginContext): Promise<void> => {
   await tracer.withActiveSpan('copyNextDependencies', async () => {
     const entries = await readdir(ctx.standaloneDir)
@@ -324,10 +222,6 @@ export const copyNextDependencies = async (ctx: PluginContext): Promise<void> =>
     await Promise.all(promises)
 
     const serverHandlerRequire = createRequire(posixJoin(ctx.serverHandlerDir, ':internal:'))
-
-    if (ctx.nextVersion) {
-      await patchNextModules(ctx, ctx.nextVersion, serverHandlerRequire.resolve)
-    }
 
     // detect if it might lead to a runtime issue and throw an error upfront on build time instead of silently failing during runtime
     try {
