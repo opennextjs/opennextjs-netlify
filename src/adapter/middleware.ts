@@ -4,10 +4,9 @@ import { dirname, join, parse, relative } from 'node:path/posix'
 import { glob } from 'fast-glob'
 import { pathToRegexp } from 'path-to-regexp'
 
-import { GENERATOR, PLUGIN_DIR } from './constants.js'
+import { GENERATOR, NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS, PLUGIN_DIR } from './constants.js'
 import type { FrameworksAPIConfig, NextConfigComplete, OnBuildCompleteContext } from './types.js'
 
-const NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS = '.netlify/v1/edge-functions'
 const MIDDLEWARE_FUNCTION_NAME = 'middleware'
 
 const MIDDLEWARE_FUNCTION_DIR = join(

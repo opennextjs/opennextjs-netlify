@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 
 import type { NextAdapter } from 'next-with-adapters'
 
+import { NETLIFY_FRAMEWORKS_API_CONFIG_PATH } from './constants.js'
 import { onBuildComplete as onBuildCompleteForHeaders } from './header.js'
 import {
   modifyConfig as modifyConfigForImageCDN,
@@ -11,8 +12,6 @@ import {
 import { onBuildComplete as onBuildCompleteForMiddleware } from './middleware.js'
 import { onBuildComplete as onBuildCompleteForStaticAssets } from './static-assets.js'
 import { FrameworksAPIConfig } from './types.js'
-
-const NETLIFY_FRAMEWORKS_API_CONFIG_PATH = '.netlify/v1/config.json'
 
 const adapter: NextAdapter = {
   name: 'Netlify',
