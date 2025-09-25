@@ -40,3 +40,14 @@
   non-empty `outputs.appPages` or `outputs.prerenders`). To not have special handling for that in
   adapters, only non-empty outputs should be `staticFiles` pointing to what's being written to `out`
   (or custom `distDir`) directory?
+- `output.staticFiles` entries for fully static pages router pages don't have `trailingSlash: true`
+  option applied to `pathname`. For example:
+  ```json
+  {
+    "id": "/link/rewrite-target-fullystatic",
+    "//": "Should pathname below have trailing slash, if `trailingSlash: true` is set in next.config.js?",
+    "pathname": "/link/rewrite-target-fullystatic",
+    "type": "STATIC_FILE",
+    "filePath": "/Users/misiek/dev/next-runtime-adapter/tests/fixtures/middleware-pages/.next/server/pages/link/rewrite-target-fullystatic.html"
+  }
+  ```
