@@ -23,7 +23,8 @@ export async function onBuildComplete(
           '_next',
           'data',
           buildID,
-          `${distPathname === '/' ? 'index' : distPathname}.json`,
+          // eslint-disable-next-line unicorn/no-nested-ternary
+          `${distPathname === '/' ? 'index' : distPathname.endsWith('/') ? distPathname.slice(0, -1) : distPathname}.json`,
         )
         await mkdir(dirname(dataFilePath), { recursive: true })
         await writeFile(dataFilePath, '{}')

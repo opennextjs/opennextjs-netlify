@@ -111,6 +111,10 @@ const copyHandlerDependenciesForNodeMiddleware = async (
         await handleFileOrDirectory(join(fileOrDir, fileInDir))
       }
     } else {
+      // avoid unnecessary files
+      if (fileOrDir.endsWith('.d.ts') || fileOrDir.endsWith('.js.map')) {
+        return
+      }
       const content = await readFile(fileOrDir, 'utf8')
 
       parts.push(
