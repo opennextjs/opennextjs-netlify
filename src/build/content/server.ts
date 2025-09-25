@@ -18,7 +18,7 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
 import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
 import type { FunctionsConfigManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
-import { prerelease, satisfies, lt as semverLowerThan, lte as semverLowerThanOrEqual } from 'semver'
+import { satisfies } from 'semver'
 
 import type { RunConfig } from '../../run/config.js'
 import { RUN_CONFIG_FILE } from '../../run/constants.js'
