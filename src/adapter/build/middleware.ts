@@ -20,12 +20,12 @@ const MIDDLEWARE_FUNCTION_DIR = join(
 )
 
 export async function onBuildComplete(
-  ctx: OnBuildCompleteContext,
+  nextAdapterContext: OnBuildCompleteContext,
   frameworksAPIConfigArg: FrameworksAPIConfig,
 ) {
   const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
 
-  const { middleware } = ctx.outputs
+  const { middleware } = nextAdapterContext.outputs
   if (!middleware) {
     return frameworksAPIConfig
   }
@@ -34,10 +34,10 @@ export async function onBuildComplete(
     await copyHandlerDependenciesForEdgeMiddleware(middleware)
   } else if (middleware.runtime === 'nodejs') {
     // return frameworksAPIConfig
-    await copyHandlerDependenciesForNodeMiddleware(middleware, ctx.repoRoot)
+    await copyHandlerDependenciesForNodeMiddleware(middleware, nextAdapterContext.repoRoot)
   }
 
-  await writeHandlerFile(middleware, ctx.config)
+  await writeHandlerFile(middleware, nextAdapterContext.config)
 
   return frameworksAPIConfig
 }

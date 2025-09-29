@@ -3,16 +3,17 @@ import { dirname } from 'node:path'
 
 import type { NextAdapter } from 'next-with-adapters'
 
-import { NETLIFY_FRAMEWORKS_API_CONFIG_PATH } from './constants.js'
-import { onBuildComplete as onBuildCompleteForHeaders } from './header.js'
+import { NETLIFY_FRAMEWORKS_API_CONFIG_PATH } from './build/constants.js'
+import { onBuildComplete as onBuildCompleteForHeaders } from './build/header.js'
 import {
   modifyConfig as modifyConfigForImageCDN,
   onBuildComplete as onBuildCompleteForImageCDN,
-} from './image-cdn.js'
-import { onBuildComplete as onBuildCompleteForMiddleware } from './middleware.js'
-import { onBuildComplete as onBuildCompleteForPagesAndAppHandlers } from './pages-and-app-handlers.js'
-import { onBuildComplete as onBuildCompleteForStaticAssets } from './static-assets.js'
-import { FrameworksAPIConfig } from './types.js'
+} from './build/image-cdn.js'
+import { onBuildComplete as onBuildCompleteForMiddleware } from './build/middleware.js'
+import { onBuildComplete as onBuildCompleteForPagesAndAppHandlers } from './build/pages-and-app-handlers.js'
+import { onBuildComplete as onBuildCompleteForStaticAssets } from './build/static-assets.js'
+import { NETLIFY_FRAMEWORKS_API_CONFIG_PATH } from './build/constants.js'
+import { FrameworksAPIConfig } from './build/types.js'
 
 const adapter: NextAdapter = {
   name: 'Netlify',

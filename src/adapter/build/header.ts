@@ -1,7 +1,7 @@
 import type { FrameworksAPIConfig, OnBuildCompleteContext } from './types.js'
 
 export function onBuildComplete(
-  ctx: OnBuildCompleteContext,
+  nextAdapterContext: OnBuildCompleteContext,
   frameworksAPIConfigArg: FrameworksAPIConfig,
 ) {
   const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
@@ -9,7 +9,7 @@ export function onBuildComplete(
   frameworksAPIConfig.headers ??= []
 
   frameworksAPIConfig.headers.push({
-    for: `${ctx.config.basePath}/_next/static/*`,
+    for: `${nextAdapterContext.config.basePath}/_next/static/*`,
     values: {
       'Cache-Control': 'public, max-age=31536000, immutable',
     },

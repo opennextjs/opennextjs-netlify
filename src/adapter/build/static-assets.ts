@@ -6,18 +6,18 @@ import { NEXT_RUNTIME_STATIC_ASSETS } from './constants.js'
 import type { FrameworksAPIConfig, OnBuildCompleteContext } from './types.js'
 
 export async function onBuildComplete(
-  ctx: OnBuildCompleteContext,
+  nextAdapterContext: OnBuildCompleteContext,
   frameworksAPIConfigArg: FrameworksAPIConfig,
 ) {
   const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
 
-  for (const staticFile of ctx.outputs.staticFiles) {
+  for (const staticFile of nextAdapterContext.outputs.staticFiles) {
     try {
       let distPathname = staticFile.pathname
       if (extname(distPathname) === '' && extname(staticFile.filePath) === '.html') {
         // if it's fully static page, we need to also create empty _next/data JSON file
         // on Vercel this is done in routing layer, but we can't express that routing right now on Netlify
-        const buildID = await readFile(join(ctx.distDir, 'BUILD_ID'), 'utf-8')
+        const buildID = await readFile(join(nextAdapterContext.distDir, 'BUILD_ID'), 'utf-8')
         const dataFilePath = join(
           NEXT_RUNTIME_STATIC_ASSETS,
           '_next',
@@ -31,9 +31,9 @@ export async function onBuildComplete(
 
         // FEEDBACK: should this be applied in Next.js before passing to context to adapters?
         if (distPathname !== '/') {
-          if (ctx.config.trailingSlash && !distPathname.endsWith('/')) {
+          if (nextAdapterContext.config.trailingSlash && !distPathname.endsWith('/')) {
             distPathname += '/'
-          } else if (!ctx.config.trailingSlash && distPathname.endsWith('/')) {
+          } else if (!nextAdapterContext.config.trailingSlash && distPathname.endsWith('/')) {
             distPathname = distPathname.slice(0, -1)
           }
         }

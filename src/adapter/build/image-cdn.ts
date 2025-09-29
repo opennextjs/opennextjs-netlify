@@ -5,7 +5,9 @@ import { makeRe } from 'picomatch'
 
 import type { FrameworksAPIConfig, NextConfigComplete, OnBuildCompleteContext } from './types.js'
 
-const NETLIFY_IMAGE_LOADER_FILE = fileURLToPath(import.meta.resolve(`./next-image-loader.cjs`))
+const NETLIFY_IMAGE_LOADER_FILE = fileURLToPath(
+  import.meta.resolve(`./image-cdn-next-image-loader.cjs`),
+)
 
 export function modifyConfig(config: NextConfigComplete) {
   if (config.images.loader === 'default') {
@@ -21,7 +23,7 @@ function generateRegexFromPattern(pattern: string): string {
 }
 
 export function onBuildComplete(
-  ctx: OnBuildCompleteContext,
+  nextAdapterContext: OnBuildCompleteContext,
   frameworksAPIConfigArg: FrameworksAPIConfig,
 ) {
   const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
@@ -38,7 +40,7 @@ export function onBuildComplete(
     status: 200,
   })
 
-  const { images } = ctx.config
+  const { images } = nextAdapterContext.config
   if (images.loader === 'custom' && images.loaderFile === NETLIFY_IMAGE_LOADER_FILE) {
     const { remotePatterns, domains } = images
     // if Netlify image loader is used, configure allowed remote image sources

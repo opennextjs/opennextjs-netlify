@@ -21,7 +21,7 @@ const PAGES_AND_APP_FUNCTION_DIR = join(
 )
 
 export async function onBuildComplete(
-  ctx: OnBuildCompleteContext,
+  nextAdapterContext: OnBuildCompleteContext,
   frameworksAPIConfigArg: FrameworksAPIConfig,
 ) {
   const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
@@ -30,10 +30,10 @@ export async function onBuildComplete(
   const pathnameToEntry: Record<string, string> = {}
 
   for (const outputs of [
-    ctx.outputs.pages,
-    ctx.outputs.pagesApi,
-    ctx.outputs.appPages,
-    ctx.outputs.appRoutes,
+    nextAdapterContext.outputs.pages,
+    nextAdapterContext.outputs.pagesApi,
+    nextAdapterContext.outputs.appPages,
+    nextAdapterContext.outputs.appRoutes,
   ]) {
     if (outputs) {
       for (const output of outputs) {
@@ -46,7 +46,7 @@ export async function onBuildComplete(
         }
 
         requiredFiles.add(output.filePath)
-        pathnameToEntry[output.pathname] = relative(ctx.repoRoot, output.filePath)
+        pathnameToEntry[output.pathname] = relative(nextAdapterContext.repoRoot, output.filePath)
       }
     }
   }
@@ -54,9 +54,13 @@ export async function onBuildComplete(
   await mkdir(PAGES_AND_APP_FUNCTION_DIR, { recursive: true })
 
   for (const filePath of requiredFiles) {
-    await cp(filePath, join(PAGES_AND_APP_FUNCTION_DIR, relative(ctx.repoRoot, filePath)), {
-      recursive: true,
-    })
+    await cp(
+      filePath,
+      join(PAGES_AND_APP_FUNCTION_DIR, relative(nextAdapterContext.repoRoot, filePath)),
+      {
+        recursive: true,
+      },
+    )
   }
 
   // copy needed runtime files
@@ -67,7 +71,7 @@ export async function onBuildComplete(
   const entrypoint = /* javascript */ `
   import { AsyncLocalStorage } from 'node:async_hooks'
   import { createRequire } from 'node:module'
-  import { runNextHandler } from './${RUNTIME_DIR}/dist/adapter/adapter-handler.js'
+  import { runNextHandler } from './${RUNTIME_DIR}/dist/adapter/run/pages-and-app-handler.js'
 
   globalThis.AsyncLocalStorage = AsyncLocalStorage
 
