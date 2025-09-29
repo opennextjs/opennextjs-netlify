@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import type { RemotePattern } from 'next-with-adapters/dist/shared/lib/image-config.js'
 import { makeRe } from 'picomatch'
 
-import type { FrameworksAPIConfig, NextConfigComplete, OnBuildCompleteContext } from './types.js'
+import type { NetlifyAdapterContext, NextConfigComplete, OnBuildCompleteContext } from './types.js'
 
 const NETLIFY_IMAGE_LOADER_FILE = fileURLToPath(
   import.meta.resolve(`./image-cdn-next-image-loader.cjs`),
@@ -22,15 +22,15 @@ function generateRegexFromPattern(pattern: string): string {
   return makeRe(pattern).source
 }
 
-export function onBuildComplete(
+export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
-  frameworksAPIConfigArg: FrameworksAPIConfig,
+  netlifyAdapterContext: NetlifyAdapterContext,
 ) {
-  const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
+  netlifyAdapterContext.frameworksAPIConfig ??= {}
 
   // when migrating from @netlify/plugin-nextjs@4 image redirect to ipx might be cached in the browser
-  frameworksAPIConfig.redirects ??= []
-  frameworksAPIConfig.redirects.push({
+  netlifyAdapterContext.frameworksAPIConfig.redirects ??= []
+  netlifyAdapterContext.frameworksAPIConfig.redirects.push({
     from: '/_ipx/*',
     // w and q are too short to be used as params with id-length rule
     // but we are forced to do so because of the next/image loader decides on their names
@@ -100,9 +100,8 @@ export function onBuildComplete(
 
     if (remoteImageSources.length !== 0) {
       // https://docs.netlify.com/build/frameworks/frameworks-api/#images
-      frameworksAPIConfig.images ??= { remote_images: [] }
-      frameworksAPIConfig.images.remote_images = remoteImageSources
+      netlifyAdapterContext.frameworksAPIConfig.images ??= { remote_images: [] }
+      netlifyAdapterContext.frameworksAPIConfig.images.remote_images = remoteImageSources
     }
   }
-  return frameworksAPIConfig
 }

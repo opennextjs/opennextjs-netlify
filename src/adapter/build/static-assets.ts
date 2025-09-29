@@ -1,28 +1,25 @@
 import { existsSync } from 'node:fs'
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path/posix'
 
 import { NEXT_RUNTIME_STATIC_ASSETS } from './constants.js'
-import type { FrameworksAPIConfig, OnBuildCompleteContext } from './types.js'
+import type { NetlifyAdapterContext, OnBuildCompleteContext } from './types.js'
 
 export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
-  frameworksAPIConfigArg: FrameworksAPIConfig,
+  netlifyAdapterContext: NetlifyAdapterContext,
 ) {
-  const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
-
   for (const staticFile of nextAdapterContext.outputs.staticFiles) {
     try {
       let distPathname = staticFile.pathname
       if (extname(distPathname) === '' && extname(staticFile.filePath) === '.html') {
         // if it's fully static page, we need to also create empty _next/data JSON file
         // on Vercel this is done in routing layer, but we can't express that routing right now on Netlify
-        const buildID = await readFile(join(nextAdapterContext.distDir, 'BUILD_ID'), 'utf-8')
         const dataFilePath = join(
           NEXT_RUNTIME_STATIC_ASSETS,
           '_next',
           'data',
-          buildID,
+          await netlifyAdapterContext.getBuildId(),
           // eslint-disable-next-line unicorn/no-nested-ternary
           `${distPathname === '/' ? 'index' : distPathname.endsWith('/') ? distPathname.slice(0, -1) : distPathname}.json`,
         )
@@ -59,6 +56,4 @@ export async function onBuildComplete(
       recursive: true,
     })
   }
-
-  return frameworksAPIConfig
 }

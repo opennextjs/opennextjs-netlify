@@ -9,7 +9,7 @@ import {
   NETLIFY_FRAMEWORKS_API_FUNCTIONS,
   PLUGIN_DIR,
 } from './constants.js'
-import type { FrameworksAPIConfig, OnBuildCompleteContext } from './types.js'
+import type { NetlifyAdapterContext, OnBuildCompleteContext } from './types.js'
 
 const PAGES_AND_APP_FUNCTION_INTERNAL_NAME = 'next_pages_and_app'
 
@@ -22,10 +22,9 @@ const PAGES_AND_APP_FUNCTION_DIR = join(
 
 export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
-  frameworksAPIConfigArg: FrameworksAPIConfig,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _netlifyAdapterContext: NetlifyAdapterContext,
 ) {
-  const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
-
   const requiredFiles = new Set<string>()
   const pathnameToEntry: Record<string, string> = {}
 
@@ -129,8 +128,6 @@ export async function onBuildComplete(
       2,
     ),
   )
-
-  return frameworksAPIConfig
 }
 
 const copyRuntime = async (handlerDirectory: string): Promise<void> => {

@@ -10,7 +10,7 @@ import {
   NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS,
   PLUGIN_DIR,
 } from './constants.js'
-import type { FrameworksAPIConfig, NextConfigComplete, OnBuildCompleteContext } from './types.js'
+import type { NetlifyAdapterContext, NextConfigComplete, OnBuildCompleteContext } from './types.js'
 
 const MIDDLEWARE_FUNCTION_INTERNAL_NAME = 'next_middleware'
 
@@ -21,25 +21,21 @@ const MIDDLEWARE_FUNCTION_DIR = join(
 
 export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
-  frameworksAPIConfigArg: FrameworksAPIConfig,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _netlifyAdapterContext: NetlifyAdapterContext,
 ) {
-  const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
-
   const { middleware } = nextAdapterContext.outputs
   if (!middleware) {
-    return frameworksAPIConfig
+    return
   }
 
   if (middleware.runtime === 'edge') {
     await copyHandlerDependenciesForEdgeMiddleware(middleware)
   } else if (middleware.runtime === 'nodejs') {
-    // return frameworksAPIConfig
     await copyHandlerDependenciesForNodeMiddleware(middleware, nextAdapterContext.repoRoot)
   }
 
   await writeHandlerFile(middleware, nextAdapterContext.config)
-
-  return frameworksAPIConfig
 }
 
 const copyHandlerDependenciesForEdgeMiddleware = async (

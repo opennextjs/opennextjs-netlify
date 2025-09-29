@@ -1,14 +1,13 @@
-import type { FrameworksAPIConfig, OnBuildCompleteContext } from './types.js'
+import type { NetlifyAdapterContext, OnBuildCompleteContext } from './types.js'
 
-export function onBuildComplete(
+export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
-  frameworksAPIConfigArg: FrameworksAPIConfig,
+  netlifyAdapterContext: NetlifyAdapterContext,
 ) {
-  const frameworksAPIConfig: FrameworksAPIConfig = frameworksAPIConfigArg ?? {}
+  netlifyAdapterContext.frameworksAPIConfig ??= {}
+  netlifyAdapterContext.frameworksAPIConfig.headers ??= []
 
-  frameworksAPIConfig.headers ??= []
-
-  frameworksAPIConfig.headers.push({
+  netlifyAdapterContext.frameworksAPIConfig.headers.push({
     for: `${nextAdapterContext.config.basePath}/_next/static/*`,
     values: {
       'Cache-Control': 'public, max-age=31536000, immutable',
@@ -23,6 +22,4 @@ export function onBuildComplete(
   // }
   // per https://docs.netlify.com/manage/routing/headers/#wildcards-and-placeholders-in-paths
   // this is example of something we can't currently do
-
-  return frameworksAPIConfig
 }

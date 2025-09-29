@@ -10,10 +10,9 @@ import {
   onBuildComplete as onBuildCompleteForImageCDN,
 } from './build/image-cdn.js'
 import { onBuildComplete as onBuildCompleteForMiddleware } from './build/middleware.js'
+import { createNetlifyAdapterContext } from './build/netlify-adapter-context.js'
 import { onBuildComplete as onBuildCompleteForPagesAndAppHandlers } from './build/pages-and-app-handlers.js'
 import { onBuildComplete as onBuildCompleteForStaticAssets } from './build/static-assets.js'
-import { NETLIFY_FRAMEWORKS_API_CONFIG_PATH } from './build/constants.js'
-import { FrameworksAPIConfig } from './build/types.js'
 
 const adapter: NextAdapter = {
   name: 'Netlify',
@@ -34,30 +33,21 @@ const adapter: NextAdapter = {
 
     console.log('onBuildComplete hook called')
 
-    let frameworksAPIConfig: FrameworksAPIConfig = null
+    const netlifyAdapterContext = createNetlifyAdapterContext(nextAdapterContext)
 
-    frameworksAPIConfig = onBuildCompleteForImageCDN(nextAdapterContext, frameworksAPIConfig)
-    frameworksAPIConfig = await onBuildCompleteForMiddleware(
-      nextAdapterContext,
-      frameworksAPIConfig,
-    )
-    frameworksAPIConfig = await onBuildCompleteForStaticAssets(
-      nextAdapterContext,
-      frameworksAPIConfig,
-    )
+    await onBuildCompleteForImageCDN(nextAdapterContext, netlifyAdapterContext)
+    await onBuildCompleteForMiddleware(nextAdapterContext, netlifyAdapterContext)
+    await onBuildCompleteForStaticAssets(nextAdapterContext, netlifyAdapterContext)
     // TODO: verifyNetlifyForms
-    frameworksAPIConfig = onBuildCompleteForHeaders(nextAdapterContext, frameworksAPIConfig)
-    frameworksAPIConfig = await onBuildCompleteForPagesAndAppHandlers(
-      nextAdapterContext,
-      frameworksAPIConfig,
-    )
+    await onBuildCompleteForHeaders(nextAdapterContext, netlifyAdapterContext)
+    await onBuildCompleteForPagesAndAppHandlers(nextAdapterContext, netlifyAdapterContext)
 
-    if (frameworksAPIConfig) {
+    if (netlifyAdapterContext.frameworksAPIConfig) {
       // write out config if there is any
       await mkdir(dirname(NETLIFY_FRAMEWORKS_API_CONFIG_PATH), { recursive: true })
       await writeFile(
         NETLIFY_FRAMEWORKS_API_CONFIG_PATH,
-        JSON.stringify(frameworksAPIConfig, null, 2),
+        JSON.stringify(netlifyAdapterContext.frameworksAPIConfig, null, 2),
       )
     }
   },
