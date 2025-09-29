@@ -1,4 +1,5 @@
-import { rm } from 'fs/promises'
+import { rm } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 
 import type { NetlifyPluginOptions } from '@netlify/build'
 import { trace } from '@opentelemetry/api'
@@ -6,17 +7,9 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 
 import { restoreBuildCache, saveBuildCache } from './build/cache.js'
 import { copyPrerenderedContent } from './build/content/prerendered.js'
-import {
-  copyStaticAssets,
-  copyStaticContent,
-  copyStaticExport,
-  publishStaticDir,
-  setHeadersConfig,
-  unpublishStaticDir,
-} from './build/content/static.js'
-import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/edge.js'
+import { copyStaticExport, publishStaticDir, unpublishStaticDir } from './build/content/static.js'
+import { clearStaleEdgeHandlers } from './build/functions/edge.js'
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
-import { setImageConfig } from './build/image-cdn.js'
 import { PluginContext } from './build/plugin-context.js'
 import {
   verifyAdvancedAPIRoutes,
@@ -50,8 +43,6 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
   }
 
   await tracer.withActiveSpan('onPreBuild', async () => {
-    // Enable Next.js standalone mode at build time
-    process.env.NEXT_PRIVATE_STANDALONE = 'true'
     const ctx = new PluginContext(options)
     if (options.constants.IS_LOCAL) {
       // Only clear directory if we are running locally as then we might have stale functions from previous
@@ -63,6 +54,11 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
       await restoreBuildCache(ctx)
     }
   })
+
+  // We will have a build plugin that will contain the adapter, we will still use some build plugin features
+  // for operations that are more idiomatic to do in build plugin rather than adapter due to helpers we can
+  // use in a build plugin context.
+  process.env.NEXT_ADAPTER_PATH = fileURLToPath(import.meta.resolve(`./adapter/adapter.js`))
 }
 
 export const onBuild = async (options: NetlifyPluginOptions) => {
@@ -85,20 +81,15 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
 
     // static exports only need to be uploaded to the CDN and setup /_next/image handler
     if (ctx.buildConfig.output === 'export') {
-      return Promise.all([copyStaticExport(ctx), setHeadersConfig(ctx), setImageConfig(ctx)])
+      return Promise.all([copyStaticExport(ctx)])
     }
 
     await verifyAdvancedAPIRoutes(ctx)
     await verifyNetlifyFormsWorkaround(ctx)
 
     await Promise.all([
-      copyStaticAssets(ctx),
-      copyStaticContent(ctx),
-      copyPrerenderedContent(ctx),
-      createServerHandler(ctx),
-      createEdgeHandlers(ctx),
-      setHeadersConfig(ctx),
-      setImageConfig(ctx),
+      copyPrerenderedContent(ctx), // maybe this
+      createServerHandler(ctx), // not this while we use standalone
     ])
   })
 }

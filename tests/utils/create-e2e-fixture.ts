@@ -323,7 +323,7 @@ export const fixtureFactories = {
       buildCommand: 'next build --turbopack',
     }),
   outputExport: () => createE2EFixture('output-export'),
-  ouputExportPublishOut: () =>
+  outputExportPublishOut: () =>
     createE2EFixture('output-export', {
       publishDirectory: 'out',
     }),
