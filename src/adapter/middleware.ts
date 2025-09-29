@@ -4,14 +4,19 @@ import { dirname, join, parse, relative } from 'node:path/posix'
 import { glob } from 'fast-glob'
 import { pathToRegexp } from 'path-to-regexp'
 
-import { GENERATOR, NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS, PLUGIN_DIR } from './constants.js'
+import {
+  DISPLAY_NAME_MIDDLEWARE,
+  GENERATOR,
+  NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS,
+  PLUGIN_DIR,
+} from './constants.js'
 import type { FrameworksAPIConfig, NextConfigComplete, OnBuildCompleteContext } from './types.js'
 
-const MIDDLEWARE_FUNCTION_NAME = 'middleware'
+const MIDDLEWARE_FUNCTION_INTERNAL_NAME = 'next_middleware'
 
 const MIDDLEWARE_FUNCTION_DIR = join(
   NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS,
-  MIDDLEWARE_FUNCTION_NAME,
+  MIDDLEWARE_FUNCTION_INTERNAL_NAME,
 )
 
 export async function onBuildComplete(
@@ -199,7 +204,7 @@ const writeHandlerFile = async (
     export const config = ${JSON.stringify({
       cache: undefined,
       generator: GENERATOR,
-      name: 'Next.js Middleware Handler',
+      name: DISPLAY_NAME_MIDDLEWARE,
       pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.regexp),
     })}
     `,

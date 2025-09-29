@@ -89,7 +89,7 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
 
     await Promise.all([
       copyPrerenderedContent(ctx), // maybe this
-      createServerHandler(ctx), // not this while we use standalone
+      // createServerHandler(ctx), // not this while we use standalone
     ])
   })
 }

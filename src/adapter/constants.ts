@@ -11,4 +11,8 @@ export const GENERATOR = `${packageJSON.name}@${packageJSON.version}`
 
 export const NETLIFY_FRAMEWORKS_API_CONFIG_PATH = '.netlify/v1/config.json'
 export const NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS = '.netlify/v1/edge-functions'
+export const NETLIFY_FRAMEWORKS_API_FUNCTIONS = '.netlify/v1/functions'
 export const NEXT_RUNTIME_STATIC_ASSETS = '.netlify/static'
+
+export const DISPLAY_NAME_MIDDLEWARE = 'Next.js Middleware Handler'
+export const DISPLAY_NAME_PAGES_AND_APP = 'Next.js Pages and App Router Handler'

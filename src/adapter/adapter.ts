@@ -10,6 +10,7 @@ import {
   onBuildComplete as onBuildCompleteForImageCDN,
 } from './image-cdn.js'
 import { onBuildComplete as onBuildCompleteForMiddleware } from './middleware.js'
+import { onBuildComplete as onBuildCompleteForPagesAndAppHandlers } from './pages-and-app-handlers.js'
 import { onBuildComplete as onBuildCompleteForStaticAssets } from './static-assets.js'
 import { FrameworksAPIConfig } from './types.js'
 
@@ -45,6 +46,10 @@ const adapter: NextAdapter = {
     )
     // TODO: verifyNetlifyForms
     frameworksAPIConfig = onBuildCompleteForHeaders(nextAdapterContext, frameworksAPIConfig)
+    frameworksAPIConfig = await onBuildCompleteForPagesAndAppHandlers(
+      nextAdapterContext,
+      frameworksAPIConfig,
+    )
 
     if (frameworksAPIConfig) {
       // write out config if there is any
