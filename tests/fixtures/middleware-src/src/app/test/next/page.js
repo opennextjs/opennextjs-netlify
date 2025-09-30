@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 
-export default function Page() {
-  const headersList = headers()
+export default async function Page() {
+  const headersList = await headers()
   const message = headersList.get('x-hello-from-middleware-req')
 
   return (

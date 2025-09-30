@@ -4,6 +4,6 @@ export function generateStaticParams() {
   return [{ slug: 'first' }, { slug: 'second' }]
 }
 
-export const GET = (_req: NextRequest, { params }) => {
-  return NextResponse.json({ params })
+export const GET = async (_req: NextRequest, { params }) => {
+  return NextResponse.json({ params: await params })
 }
