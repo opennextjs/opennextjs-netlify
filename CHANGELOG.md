@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.13.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.3...v5.13.4) (2025-10-01)
+
+
+### Bug Fixes
+
+* exclude `musl` binaries from function bundle when building on Netlify with `pnpm` ([#3145](https://github.com/opennextjs/opennextjs-netlify/issues/3145)) ([d11382c](https://github.com/opennextjs/opennextjs-netlify/commit/d11382c06c6c2e6d3e8c40fe4cfd47dc9df00384))
+
 ## [5.13.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.2...v5.13.3) (2025-09-16)
 
 
