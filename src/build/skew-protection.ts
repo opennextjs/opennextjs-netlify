@@ -6,7 +6,7 @@ import type { Span } from '@opentelemetry/api'
 import type { PluginContext } from './plugin-context.js'
 
 // eslint-disable-next-line no-shadow
-const enum EnabledOrDisabledReason {
+export const enum EnabledOrDisabledReason {
   OPT_OUT_DEFAULT = 'off-default',
   OPT_OUT_NO_VALID_DEPLOY_ID = 'off-no-valid-deploy-id',
   OPT_OUT_NO_VALID_DEPLOY_ID_ENV_VAR = 'off-no-valid-deploy-id-env-var',

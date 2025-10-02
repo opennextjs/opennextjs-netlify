@@ -5,7 +5,11 @@ import type { Span } from '@opentelemetry/api'
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest'
 
 import type { PluginContext } from './plugin-context.js'
-import { setSkewProtection, shouldEnableSkewProtection } from './skew-protection.js'
+import {
+  EnabledOrDisabledReason,
+  setSkewProtection,
+  shouldEnableSkewProtection,
+} from './skew-protection.js'
 
 // Mock fs promises
 vi.mock('node:fs/promises', () => ({
@@ -52,7 +56,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: false,
-        enabledOrDisabledReason: 'off-default',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_DEFAULT,
       })
     })
   })
@@ -65,7 +69,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: true,
-        enabledOrDisabledReason: 'on-env-var',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
       })
     })
 
@@ -76,7 +80,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: true,
-        enabledOrDisabledReason: 'on-env-var',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
       })
     })
   })
@@ -89,7 +93,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: false,
-        enabledOrDisabledReason: 'off-env-var',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_ENV_VAR,
       })
     })
 
@@ -100,7 +104,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: false,
-        enabledOrDisabledReason: 'off-env-var',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_ENV_VAR,
       })
     })
   })
@@ -113,7 +117,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: true,
-        enabledOrDisabledReason: 'on-ff',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_FF,
       })
     })
 
@@ -124,7 +128,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: false,
-        enabledOrDisabledReason: 'off-default',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_DEFAULT,
       })
     })
   })
@@ -138,7 +142,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: false,
-        enabledOrDisabledReason: 'off-no-valid-deploy-id',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID,
       })
     })
 
@@ -150,7 +154,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: false,
-        enabledOrDisabledReason: 'off-no-valid-deploy-id',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID,
       })
     })
 
@@ -163,7 +167,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: false,
-        enabledOrDisabledReason: 'off-no-valid-deploy-id-env-var',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID_ENV_VAR,
       })
     })
   })
@@ -177,7 +181,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: false,
-        enabledOrDisabledReason: 'off-env-var',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_ENV_VAR,
       })
     })
 
@@ -189,7 +193,7 @@ describe('shouldEnableSkewProtection', () => {
 
       expect(result).toEqual({
         enabled: true,
-        enabledOrDisabledReason: 'on-env-var',
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
       })
     })
   })
@@ -248,7 +252,10 @@ describe('setSkewProtection', () => {
   it('should set span attribute and return early when disabled', async () => {
     await setSkewProtection(mockCtx, mockSpan)
 
-    expect(mockSpan.setAttribute).toHaveBeenCalledWith('skewProtection', 'off-default')
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      'skewProtection',
+      EnabledOrDisabledReason.OPT_OUT_DEFAULT,
+    )
     expect(mkdir).not.toHaveBeenCalled()
     expect(writeFile).not.toHaveBeenCalled()
     expect(consoleSpy.log).not.toHaveBeenCalled()
@@ -264,7 +271,7 @@ describe('setSkewProtection', () => {
 
     expect(mockSpan.setAttribute).toHaveBeenCalledWith(
       'skewProtection',
-      'off-no-valid-deploy-id-env-var',
+      EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID_ENV_VAR,
     )
     expect(consoleSpy.warn).toHaveBeenCalledWith(
       'NETLIFY_NEXT_SKEW_PROTECTION environment variable is set to true, but skew protection is currently unavailable for CLI deploys. Skew protection will not be enabled.',
@@ -280,7 +287,10 @@ describe('setSkewProtection', () => {
 
     await setSkewProtection(mockCtx, mockSpan)
 
-    expect(mockSpan.setAttribute).toHaveBeenCalledWith('skewProtection', 'on-env-var')
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      'skewProtection',
+      EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+    )
     expect(consoleSpy.log).toHaveBeenCalledWith(
       'Setting up Next.js Skew Protection due to NETLIFY_NEXT_SKEW_PROTECTION=true environment variable.',
     )
@@ -319,7 +329,10 @@ describe('setSkewProtection', () => {
 
     await setSkewProtection(mockCtx, mockSpan)
 
-    expect(mockSpan.setAttribute).toHaveBeenCalledWith('skewProtection', 'on-ff')
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      'skewProtection',
+      EnabledOrDisabledReason.OPT_IN_FF,
+    )
     expect(consoleSpy.log).toHaveBeenCalledWith('Setting up Next.js Skew Protection.')
     expect(process.env.NEXT_DEPLOYMENT_ID).toBe('test-deploy-id')
     expect(mkdir).toHaveBeenCalledWith('/test/path', { recursive: true })
