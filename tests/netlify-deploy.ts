@@ -4,6 +4,7 @@ import fs from 'fs-extra'
 import { Span } from 'next/src/trace'
 import { tmpdir } from 'node:os'
 import path from 'path'
+import { satisfies as satisfiesVersionRange } from 'semver'
 import { NextInstance } from './base'
 
 async function packNextRuntimeImpl() {
@@ -57,6 +58,28 @@ export class NextDeployInstance extends NextInstance {
     this._isCurrentlyDeploying = true
 
     const setupStartTime = Date.now()
+
+    console.log({
+      files: this.files,
+      RESOLVED_NEXT_VERSION: process.env.RESOLVED_NEXT_VERSION,
+    })
+
+    if (
+      typeof this.files === 'string' &&
+      this.files.includes('back-forward-cache') &&
+      process.env.RESOLVED_NEXT_VERSION &&
+      satisfiesVersionRange(process.env.RESOLVED_NEXT_VERSION, '<=15.5.4')
+    ) {
+      require('console').log('Pinning @types/react(-dom) for back-forward-cache test fixture')
+      // back-forward-cache test fixture is failing types checking because:
+      //   - @types/react(-dom) types are not pinned
+      //   - fixture uses react `unstable_Activity` export which since fixture was introduced is no longer unstable
+      //     and types were updated for that and no longer provide types for that export (instead provide for `Activity`)
+      //     this adds the pinning of types to version of types that still had `unstable_Activity` type
+      this.dependencies ??= {}
+      this.dependencies['@types/react'] = '19.1.1'
+      this.dependencies['@types/react-dom'] = '19.1.2'
+    }
 
     // create the test site
     await super.createTestDir({ parentSpan, skipInstall: true })
