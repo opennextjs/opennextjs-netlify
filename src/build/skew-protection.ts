@@ -20,6 +20,24 @@ const optInOptions = new Set([
   EnabledOrDisabledReason.OPT_IN_ENV_VAR,
 ])
 
+export const skewProtectionConfig = {
+  patterns: ['.*'],
+  sources: [
+    {
+      type: 'cookie',
+      name: '__vdpl',
+    },
+    {
+      type: 'header',
+      name: 'X-Deployment-Id',
+    },
+    {
+      type: 'query',
+      name: 'dpl',
+    },
+  ],
+}
+
 export function shouldEnableSkewProtection(ctx: PluginContext) {
   let enabledOrDisabledReason: EnabledOrDisabledReason = EnabledOrDisabledReason.OPT_OUT_DEFAULT
 
@@ -85,28 +103,5 @@ export const setSkewProtection = async (ctx: PluginContext, span: Span) => {
   await mkdir(dirname(ctx.skewProtectionConfigPath), {
     recursive: true,
   })
-  await writeFile(
-    ctx.skewProtectionConfigPath,
-    JSON.stringify(
-      {
-        patterns: ['.*'],
-        sources: [
-          {
-            type: 'cookie',
-            name: '__vdpl',
-          },
-          {
-            type: 'header',
-            name: 'X-Deployment-Id',
-          },
-          {
-            type: 'query',
-            name: 'dpl',
-          },
-        ],
-      },
-      null,
-      2,
-    ),
-  )
+  await writeFile(ctx.skewProtectionConfigPath, JSON.stringify(skewProtectionConfig))
 }

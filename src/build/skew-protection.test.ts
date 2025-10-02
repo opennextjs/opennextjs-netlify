@@ -9,6 +9,7 @@ import {
   EnabledOrDisabledReason,
   setSkewProtection,
   shouldEnableSkewProtection,
+  skewProtectionConfig,
 } from './skew-protection.js'
 
 // Mock fs promises
@@ -298,27 +299,7 @@ describe('setSkewProtection', () => {
     expect(mkdir).toHaveBeenCalledWith('/test/path', { recursive: true })
     expect(writeFile).toHaveBeenCalledWith(
       '/test/path/skew-protection.json',
-      JSON.stringify(
-        {
-          patterns: ['.*'],
-          sources: [
-            {
-              type: 'cookie',
-              name: '__vdpl',
-            },
-            {
-              type: 'header',
-              name: 'X-Deployment-Id',
-            },
-            {
-              type: 'query',
-              name: 'dpl',
-            },
-          ],
-        },
-        null,
-        2,
-      ),
+      JSON.stringify(skewProtectionConfig),
     )
   })
 
