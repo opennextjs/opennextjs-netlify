@@ -83,6 +83,10 @@ export class NextDeployInstance extends NextInstance {
       this.dependencies['@types/react-dom'] = '19.1.2'
     }
 
+    if (!this.buildCommand && this.buildArgs && this.buildArgs.length > 0) {
+      this.buildCommand = `next build ${this.buildArgs.join(' ')}`
+    }
+
     // create the test site
     await super.createTestDir({ parentSpan, skipInstall: true })
 
