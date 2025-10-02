@@ -59,6 +59,14 @@ export class NextDeployInstance extends NextInstance {
 
     const setupStartTime = Date.now()
 
+    const { runtimePackageName, runtimePackageTarballPath } = await packNextRuntime()
+
+    this.dependencies = {
+      ...(this.dependencies || {}),
+      // add the runtime package as a dependency
+      [runtimePackageName]: `file:${runtimePackageTarballPath}`,
+    }
+
     if (
       typeof this.files === 'string' &&
       this.files.includes('back-forward-cache') &&
@@ -71,7 +79,6 @@ export class NextDeployInstance extends NextInstance {
       //   - fixture uses react `unstable_Activity` export which since fixture was introduced is no longer unstable
       //     and types were updated for that and no longer provide types for that export (instead provide for `Activity`)
       //     this adds the pinning of types to version of types that still had `unstable_Activity` type
-      this.dependencies ??= {}
       this.dependencies['@types/react'] = '19.1.1'
       this.dependencies['@types/react-dom'] = '19.1.2'
     }
@@ -79,37 +86,17 @@ export class NextDeployInstance extends NextInstance {
     // create the test site
     await super.createTestDir({ parentSpan, skipInstall: true })
 
-    // If the test fixture has node modules we need to move them aside then merge them in after
-
-    const nodeModules = path.join(this.testDir, 'node_modules')
-    const nodeModulesBak = `${nodeModules}.bak`
-
-    if (fs.existsSync(nodeModules)) {
-      await fs.rename(nodeModules, nodeModulesBak)
-    }
-
-    const { runtimePackageName, runtimePackageTarballPath } = await packNextRuntime()
-
     // install dependencies
-    await execa('npm', ['i', runtimePackageTarballPath, '--legacy-peer-deps'], {
+    await execa('pnpm', ['install', '--strict-peer-dependencies=false', '--no-frozen-lockfile'], {
       cwd: this.testDir,
       stdio: 'inherit',
     })
-
-    if (fs.existsSync(nodeModulesBak)) {
-      // move the contents of the fixture node_modules into the installed modules
-      for (const file of await fs.readdir(nodeModulesBak)) {
-        await fs.move(path.join(nodeModulesBak, file), path.join(nodeModules, file), {
-          overwrite: true,
-        })
-      }
-    }
 
     // use next runtime package installed by the test runner
     if (!fs.existsSync(path.join(this.testDir, 'netlify.toml'))) {
       const toml = /* toml */ `
           [build]
-          command = "npm run build"
+          command = "pnpm run build"
           publish = ".next"
 
           [build.environment]
