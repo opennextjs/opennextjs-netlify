@@ -50,9 +50,17 @@ export function shouldEnableSkewProtection(ctx: PluginContext) {
     process.env.NETLIFY_NEXT_SKEW_PROTECTION === 'false' ||
     process.env.NETLIFY_NEXT_SKEW_PROTECTION === '0'
   ) {
-    enabledOrDisabledReason = EnabledOrDisabledReason.OPT_OUT_ENV_VAR
+    return {
+      enabled: false,
+      enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_ENV_VAR,
+    }
   } else if (ctx.featureFlags?.['next-runtime-skew-protection']) {
     enabledOrDisabledReason = EnabledOrDisabledReason.OPT_IN_FF
+  } else {
+    return {
+      enabled: false,
+      enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_DEFAULT,
+    }
   }
 
   if (
@@ -61,13 +69,16 @@ export function shouldEnableSkewProtection(ctx: PluginContext) {
   ) {
     // We can't proceed without a valid DEPLOY_ID, because Next.js does inline deploy ID at build time
     // This should only be the case for CLI deploys
-    enabledOrDisabledReason =
-      enabledOrDisabledReason === EnabledOrDisabledReason.OPT_IN_ENV_VAR && ctx.constants.IS_LOCAL
-        ? // this case is singled out to provide visible feedback to users that env var has no effect
-          EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID_ENV_VAR
-        : // this is silent disablement to avoid spam logs for users opted in via feature flag
-          // that don't explicitly opt in via env var
-          EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID
+    return {
+      enabled: false,
+      enabledOrDisabledReason:
+        enabledOrDisabledReason === EnabledOrDisabledReason.OPT_IN_ENV_VAR && ctx.constants.IS_LOCAL
+          ? // this case is singled out to provide visible feedback to users that env var has no effect
+            EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID_ENV_VAR
+          : // this is silent disablement to avoid spam logs for users opted in via feature flag
+            // that don't explicitly opt in via env var
+            EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID,
+    }
   }
 
   return {
