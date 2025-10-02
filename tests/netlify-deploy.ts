@@ -59,6 +59,14 @@ export class NextDeployInstance extends NextInstance {
 
     const setupStartTime = Date.now()
 
+    const { runtimePackageName, runtimePackageTarballPath } = await packNextRuntime()
+
+    this.dependencies = {
+      ...(this.dependencies || {}),
+      // add the runtime package as a dependency
+      [runtimePackageName]: `file:${runtimePackageTarballPath}`,
+    }
+
     if (
       typeof this.files === 'string' &&
       this.files.includes('back-forward-cache') &&
@@ -71,7 +79,6 @@ export class NextDeployInstance extends NextInstance {
       //   - fixture uses react `unstable_Activity` export which since fixture was introduced is no longer unstable
       //     and types were updated for that and no longer provide types for that export (instead provide for `Activity`)
       //     this adds the pinning of types to version of types that still had `unstable_Activity` type
-      this.dependencies ??= {}
       this.dependencies['@types/react'] = '19.1.1'
       this.dependencies['@types/react-dom'] = '19.1.2'
     }
@@ -88,10 +95,13 @@ export class NextDeployInstance extends NextInstance {
       await fs.rename(nodeModules, nodeModulesBak)
     }
 
-    const { runtimePackageName, runtimePackageTarballPath } = await packNextRuntime()
-
     // install dependencies
-    await execa('npm', ['i', runtimePackageTarballPath, '--legacy-peer-deps'], {
+    // --force is used to match behavior of `pnpm install --strict-peer-dependencies=false` used by Vercel
+    // there is a test fixture that have `@babel/preset-flow` as a dependency which has a peer dependency of `@babel/core@^7.0.0-0`,
+    // but `@babel/core` is not specified as dependency, so we need to automatically attempt to install peer dependencies
+    // but also not fail in case of peer dependency versions not matching for other fixtures, so `--legacy-peer-deps` is not good option here
+    // https://github.com/vercel/next.js/blob/7453d200579512a6574f9c53edd716e5cc01615c/test/e2e/babel/index.test.js#L7-L9
+    await execa('npm', ['install', '--force'], {
       cwd: this.testDir,
       stdio: 'inherit',
     })
