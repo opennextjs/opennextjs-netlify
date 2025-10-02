@@ -207,6 +207,11 @@ export class PluginContext {
     return join(this.edgeFunctionsDir, EDGE_HANDLER_NAME)
   }
 
+  /** Absolute path to the skew protection config */
+  get skewProtectionConfigPath(): string {
+    return this.resolveFromPackagePath('.netlify/v1/skew-protection.json')
+  }
+
   constructor(options: NetlifyPluginOptions) {
     this.constants = options.constants
     this.featureFlags = options.featureFlags
