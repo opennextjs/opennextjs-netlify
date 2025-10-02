@@ -58,40 +58,36 @@ export class NextDeployInstance extends NextInstance {
 
     const setupStartTime = Date.now()
 
-    // create the test site
-    await super.createTestDir({ parentSpan, skipInstall: true })
-
-    // If the test fixture has node modules we need to move them aside then merge them in after
-
-    const nodeModules = path.join(this.testDir, 'node_modules')
-    const nodeModulesBak = `${nodeModules}.bak`
-
-    if (fs.existsSync(nodeModules)) {
-      await fs.rename(nodeModules, nodeModulesBak)
-    }
-
     const { runtimePackageName, runtimePackageTarballPath } = await packNextRuntime()
 
+    this.dependencies = {
+      ...(this.dependencies || {}),
+      // add the runtime package as a dependency
+      [runtimePackageName]: `file:${runtimePackageTarballPath}`,
+    }
+
+    // create the test site
+    await super.createTestDir({
+      parentSpan,
+      skipInstall: true,
+    })
+
+    const nodeModules = path.join(this.testDir, 'node_modules')
+    if (fs.existsSync(nodeModules)) {
+      require('console').log(`!!! Fixture already has node_modules`)
+    }
+
     // install dependencies
-    await execa('npm', ['i', runtimePackageTarballPath, '--legacy-peer-deps'], {
+    await execa('pnpm', ['install', '--strict-peer-dependencies=false', '--no-frozen-lockfile'], {
       cwd: this.testDir,
       stdio: 'inherit',
     })
-
-    if (fs.existsSync(nodeModulesBak)) {
-      // move the contents of the fixture node_modules into the installed modules
-      for (const file of await fs.readdir(nodeModulesBak)) {
-        await fs.move(path.join(nodeModulesBak, file), path.join(nodeModules, file), {
-          overwrite: true,
-        })
-      }
-    }
 
     // use next runtime package installed by the test runner
     if (!fs.existsSync(path.join(this.testDir, 'netlify.toml'))) {
       const toml = /* toml */ `
           [build]
-          command = "npm run build"
+          command = "pnpm run build"
           publish = ".next"
 
           [build.environment]
