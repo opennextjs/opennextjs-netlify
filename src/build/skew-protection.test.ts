@@ -62,50 +62,52 @@ describe('shouldEnableSkewProtection', () => {
     })
   })
 
-  describe('environment variable opt-in', () => {
-    it('should enable when NETLIFY_NEXT_SKEW_PROTECTION is "true"', () => {
-      process.env.NETLIFY_NEXT_SKEW_PROTECTION = 'true'
+  describe('environment variable handling', () => {
+    describe('opt-in', () => {
+      it('should enable when NETLIFY_NEXT_SKEW_PROTECTION is "true"', () => {
+        process.env.NETLIFY_NEXT_SKEW_PROTECTION = 'true'
 
-      const result = shouldEnableSkewProtection(mockCtx)
+        const result = shouldEnableSkewProtection(mockCtx)
 
-      expect(result).toEqual({
-        enabled: true,
-        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+        expect(result).toEqual({
+          enabled: true,
+          enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+        })
+      })
+
+      it('should enable when NETLIFY_NEXT_SKEW_PROTECTION is "1"', () => {
+        process.env.NETLIFY_NEXT_SKEW_PROTECTION = '1'
+
+        const result = shouldEnableSkewProtection(mockCtx)
+
+        expect(result).toEqual({
+          enabled: true,
+          enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+        })
       })
     })
 
-    it('should enable when NETLIFY_NEXT_SKEW_PROTECTION is "1"', () => {
-      process.env.NETLIFY_NEXT_SKEW_PROTECTION = '1'
+    describe('opt-out', () => {
+      it('should disable when NETLIFY_NEXT_SKEW_PROTECTION is "false"', () => {
+        process.env.NETLIFY_NEXT_SKEW_PROTECTION = 'false'
 
-      const result = shouldEnableSkewProtection(mockCtx)
+        const result = shouldEnableSkewProtection(mockCtx)
 
-      expect(result).toEqual({
-        enabled: true,
-        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+        expect(result).toEqual({
+          enabled: false,
+          enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_ENV_VAR,
+        })
       })
-    })
-  })
 
-  describe('environment variable opt-out', () => {
-    it('should disable when NETLIFY_NEXT_SKEW_PROTECTION is "false"', () => {
-      process.env.NETLIFY_NEXT_SKEW_PROTECTION = 'false'
+      it('should disable when NETLIFY_NEXT_SKEW_PROTECTION is "0"', () => {
+        process.env.NETLIFY_NEXT_SKEW_PROTECTION = '0'
 
-      const result = shouldEnableSkewProtection(mockCtx)
+        const result = shouldEnableSkewProtection(mockCtx)
 
-      expect(result).toEqual({
-        enabled: false,
-        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_ENV_VAR,
-      })
-    })
-
-    it('should disable when NETLIFY_NEXT_SKEW_PROTECTION is "0"', () => {
-      process.env.NETLIFY_NEXT_SKEW_PROTECTION = '0'
-
-      const result = shouldEnableSkewProtection(mockCtx)
-
-      expect(result).toEqual({
-        enabled: false,
-        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_ENV_VAR,
+        expect(result).toEqual({
+          enabled: false,
+          enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_ENV_VAR,
+        })
       })
     })
   })
