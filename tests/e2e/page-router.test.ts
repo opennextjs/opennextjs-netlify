@@ -174,12 +174,12 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
         )
 
         if (fallbackWasServed) {
-          const loading = await page.textContent('[data-testid="loading"]')
+          const loading = await page.locator('[data-testid="loading"]').textContent()
           expect(loading, 'Fallback should be shown').toBe('Loading...')
         }
 
-        const date1 = await page.textContent('[data-testid="date-now"]')
-        const h1 = await page.textContent('h1')
+        const date1 = await page.locator('[data-testid="date-now"]').textContent()
+        const h1 = await page.locator('h1').textContent()
         expect(h1).toBe(expectedH1Content)
 
         // check json route
@@ -238,7 +238,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
         )
 
         // the page is cached
-        const date2 = await page.textContent('[data-testid="date-now"]')
+        const date2 = await page.locator('[data-testid="date-now"]').textContent()
         expect(date2).toBe(date1)
 
         // check json route
@@ -299,7 +299,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
         expect(headers3?.['x-nextjs-cache']).toBeUndefined()
 
         // the page has now an updated date
-        const date3 = await page.textContent('[data-testid="date-now"]')
+        const date3 = await page.locator('[data-testid="date-now"]').textContent()
         expect(date3).not.toBe(date2)
 
         // check json route
@@ -366,7 +366,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
       },
     )
     expect(response1?.status()).toBe(200)
-    const date1 = (await page.textContent('[data-testid="date-now"]')) ?? ''
+    const date1 = (await page.locator('[data-testid="date-now"]').textContent()) ?? ''
 
     // ensure response was produced before invocation (served from cache)
     expect(date1.localeCompare(beforeFetch)).toBeLessThan(0)
@@ -391,7 +391,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
       },
     )
     expect(response2?.status()).toBe(200)
-    const date2 = (await page.textContent('[data-testid="date-now"]')) ?? ''
+    const date2 = (await page.locator('[data-testid="date-now"]').textContent()) ?? ''
 
     // ensure response was produced after initial invocation
     expect(beforeFetch.localeCompare(date2)).toBeLessThan(0)
@@ -416,7 +416,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     )
 
     // ensure response was NOT produced before invocation
-    const date1 = (await page.textContent('[data-testid="date-now"]')) ?? ''
+    const date1 = (await page.locator('[data-testid="date-now"]').textContent()) ?? ''
     expect(date1.localeCompare(beforeFirstFetch)).toBeGreaterThan(0)
 
     // allow page to get stale
@@ -431,7 +431,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
       /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
     )
 
-    const date2 = (await page.textContent('[data-testid="date-now"]')) ?? ''
+    const date2 = (await page.locator('[data-testid="date-now"]').textContent()) ?? ''
     expect(date2).toBe(date1)
 
     // wait a bit to ensure background work has a chance to finish
@@ -450,7 +450,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
       /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
     )
 
-    const date3 = (await page.textContent('[data-testid="date-now"]')) ?? ''
+    const date3 = (await page.locator('[data-testid="date-now"]').textContent()) ?? ''
     expect(date3.localeCompare(date2)).toBeGreaterThan(0)
   })
 
@@ -469,7 +469,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('p')).toBe('Custom 404 page')
+    await expect(page.locator('p')).toHaveText('Custom 404 page')
 
     // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
     // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that
@@ -493,7 +493,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('p')).toBe('Custom 404 page')
+    await expect(page.locator('p')).toHaveText('Custom 404 page')
 
     expect(headers['debug-netlify-cdn-cache-control']).toBe(
       nextVersionSatisfies('>=15.0.0-canary.187')
@@ -748,12 +748,12 @@ test.describe('Page Router with basePath and i18n', () => {
           )
 
           if (fallbackWasServedImplicitLocale) {
-            const loading = await page.textContent('[data-testid="loading"]')
+            const loading = await page.locator('[data-testid="loading"]').textContent()
             expect(loading, 'Fallback should be shown').toBe('Loading...')
           }
 
-          const date1ImplicitLocale = await page.textContent('[data-testid="date-now"]')
-          const h1ImplicitLocale = await page.textContent('h1')
+          const date1ImplicitLocale = await page.locator('[data-testid="date-now"]').textContent()
+          const h1ImplicitLocale = await page.locator('h1').textContent()
           expect(h1ImplicitLocale).toBe(expectedH1Content)
 
           const response1ExplicitLocale = await pollUntilHeadersMatch(
@@ -790,12 +790,12 @@ test.describe('Page Router with basePath and i18n', () => {
           )
 
           if (fallbackWasServedExplicitLocale) {
-            const loading = await page.textContent('[data-testid="loading"]')
+            const loading = await page.locator('[data-testid="loading"]').textContent()
             expect(loading, 'Fallback should be shown').toBe('Loading...')
           }
 
-          const date1ExplicitLocale = await page.textContent('[data-testid="date-now"]')
-          const h1ExplicitLocale = await page.textContent('h1')
+          const date1ExplicitLocale = await page.locator('[data-testid="date-now"]').textContent()
+          const h1ExplicitLocale = await page.locator('h1').textContent()
           expect(h1ExplicitLocale).toBe(expectedH1Content)
 
           // implicit and explicit locale paths should be the same (same cached response)
@@ -861,7 +861,7 @@ test.describe('Page Router with basePath and i18n', () => {
           )
 
           // the page is cached
-          const date2ImplicitLocale = await page.textContent('[data-testid="date-now"]')
+          const date2ImplicitLocale = await page.locator('[data-testid="date-now"]').textContent()
           expect(date2ImplicitLocale).toBe(date1ImplicitLocale)
 
           const response2ExplicitLocale = await pollUntilHeadersMatch(
@@ -893,7 +893,7 @@ test.describe('Page Router with basePath and i18n', () => {
           )
 
           // the page is cached
-          const date2ExplicitLocale = await page.textContent('[data-testid="date-now"]')
+          const date2ExplicitLocale = await page.locator('[data-testid="date-now"]').textContent()
           expect(date2ExplicitLocale).toBe(date1ExplicitLocale)
 
           // check json route
@@ -961,7 +961,7 @@ test.describe('Page Router with basePath and i18n', () => {
           expect(headers3ImplicitLocale?.['x-nextjs-cache']).toBeUndefined()
 
           // the page has now an updated date
-          const date3ImplicitLocale = await page.textContent('[data-testid="date-now"]')
+          const date3ImplicitLocale = await page.locator('[data-testid="date-now"]').textContent()
           expect(date3ImplicitLocale).not.toBe(date2ImplicitLocale)
 
           const response3ExplicitLocale = await pollUntilHeadersMatch(
@@ -984,7 +984,7 @@ test.describe('Page Router with basePath and i18n', () => {
           expect(headers3ExplicitLocale?.['x-nextjs-cache']).toBeUndefined()
 
           // the page has now an updated date
-          const date3ExplicitLocale = await page.textContent('[data-testid="date-now"]')
+          const date3ExplicitLocale = await page.locator('[data-testid="date-now"]').textContent()
           expect(date3ExplicitLocale).not.toBe(date2ExplicitLocale)
 
           // implicit and explicit locale paths should be the same (same cached response)
@@ -1057,7 +1057,7 @@ test.describe('Page Router with basePath and i18n', () => {
           expect(headers4ImplicitLocale?.['x-nextjs-cache']).toBeUndefined()
 
           // the page has now an updated date
-          const date4ImplicitLocale = await page.textContent('[data-testid="date-now"]')
+          const date4ImplicitLocale = await page.locator('[data-testid="date-now"]').textContent()
           expect(date4ImplicitLocale).not.toBe(date3ImplicitLocale)
 
           const response4ExplicitLocale = await pollUntilHeadersMatch(
@@ -1080,7 +1080,7 @@ test.describe('Page Router with basePath and i18n', () => {
           expect(headers4ExplicitLocale?.['x-nextjs-cache']).toBeUndefined()
 
           // the page has now an updated date
-          const date4ExplicitLocale = await page.textContent('[data-testid="date-now"]')
+          const date4ExplicitLocale = await page.locator('[data-testid="date-now"]').textContent()
           expect(date4ExplicitLocale).not.toBe(date3ExplicitLocale)
 
           // implicit and explicit locale paths should be the same (same cached response)
@@ -1173,12 +1173,12 @@ test.describe('Page Router with basePath and i18n', () => {
           )
 
           if (fallbackWasServed) {
-            const loading = await page.textContent('[data-testid="loading"]')
+            const loading = await page.locator('[data-testid="loading"]').textContent()
             expect(loading, 'Fallback should be shown').toBe('Loading...')
           }
 
-          const date1 = await page.textContent('[data-testid="date-now"]')
-          const h1 = await page.textContent('h1')
+          const date1 = await page.locator('[data-testid="date-now"]').textContent()
+          const h1 = await page.locator('h1').textContent()
           expect(h1).toBe(expectedH1Content)
 
           // check json route
@@ -1241,7 +1241,7 @@ test.describe('Page Router with basePath and i18n', () => {
           )
 
           // the page is cached
-          const date2 = await page.textContent('[data-testid="date-now"]')
+          const date2 = await page.locator('[data-testid="date-now"]').textContent()
           expect(date2).toBe(date1)
 
           // check json route
@@ -1309,7 +1309,7 @@ test.describe('Page Router with basePath and i18n', () => {
           expect(headers3?.['x-nextjs-cache']).toBeUndefined()
 
           // the page has now an updated date
-          const date3 = await page.textContent('[data-testid="date-now"]')
+          const date3 = await page.locator('[data-testid="date-now"]').textContent()
           expect(date3).not.toBe(date2)
 
           // check json route
@@ -1360,7 +1360,7 @@ test.describe('Page Router with basePath and i18n', () => {
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('p')).toBe('Custom 404 page for locale: en')
+    await expect(page.locator('p')).toHaveText('Custom 404 page for locale: en')
 
     expect(headers['debug-netlify-cdn-cache-control']).toMatch(
       /no-cache, no-store, max-age=0, must-revalidate, durable/m,
@@ -1378,7 +1378,7 @@ test.describe('Page Router with basePath and i18n', () => {
     const headers = response?.headers() || {}
     expect(response?.status()).toBe(404)
 
-    expect(await page.textContent('p')).toBe('Custom 404 page for locale: en')
+    await expect(page.locator('p')).toHaveText('Custom 404 page for locale: en')
 
     // Prior to v14.2.4 notFound pages are not cacheable
     // https://github.com/vercel/next.js/pull/66674

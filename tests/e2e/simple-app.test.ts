@@ -227,7 +227,7 @@ test('requesting a non existing page route that needs to be fetched from the blo
   const headers = response?.headers() || {}
   expect(response?.status()).toBe(404)
 
-  expect(await page.textContent('h1')).toBe('404 Not Found')
+  await expect(page.locator('h1')).toHaveText('404 Not Found')
 
   // https://github.com/vercel/next.js/pull/66674 made changes to returned cache-control header,
   // before that 404 page would have `private` directive, after that (14.2.4 and canary.24) it
@@ -254,7 +254,7 @@ test('requesting a non existing page route that needs to be fetched from the blo
   const headers = response?.headers() || {}
   expect(response?.status()).toBe(404)
 
-  expect(await page.textContent('h1')).toBe('404 Not Found')
+  await expect(page.locator('h1')).toHaveText('404 Not Found')
 
   expect(headers['debug-netlify-cdn-cache-control']).toBe(
     nextVersionSatisfies('>=15.0.0-canary.187')
