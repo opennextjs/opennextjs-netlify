@@ -1,5 +1,5 @@
 import { expect, type Locator, type Response } from '@playwright/test'
-import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
+import { hasDefaultTurbopackBuilds, nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 
 const expectImageWasLoaded = async (locator: Locator) => {
@@ -273,6 +273,8 @@ test('Compressed rewrites are readable', async ({ simple }) => {
 })
 
 test('can require CJS module that is not bundled', async ({ simple }) => {
+  // setup for this test only works with webpack builds due to usage of ` __non_webpack_require__` to avoid bundling a file
+  test.skip(hasDefaultTurbopackBuilds(), 'Setup for this test only works with webpack builds')
   const resp = await fetch(`${simple.url}/api/cjs-file-with-js-extension`)
 
   expect(resp.status).toBe(200)
