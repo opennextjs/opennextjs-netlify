@@ -394,14 +394,14 @@ export const fixtureFactories = {
     createE2EFixture('nx-integrated', {
       packageManger: 'pnpm',
       packagePath: 'apps/next-app',
-      buildCommand: 'nx run next-app:build',
+      buildCommand: 'nx run next-app:build --verbose',
       publishDirectory: 'dist/apps/next-app/.next',
     }),
   nxIntegratedDistDir: () =>
     createE2EFixture('nx-integrated', {
       packageManger: 'pnpm',
       packagePath: 'apps/custom-dist-dir',
-      buildCommand: 'nx run custom-dist-dir:build',
+      buildCommand: 'nx run custom-dist-dir:build --verbose',
       publishDirectory: 'dist/apps/custom-dist-dir/dist',
     }),
   cliBeforeRegionalBlobsSupport: () =>
