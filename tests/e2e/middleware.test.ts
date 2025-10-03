@@ -246,6 +246,11 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
               const pageResponse = await page.goto(`${edgeOrNodeMiddlewarePages.url}/link`)
               expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
 
+              // wait for hydration to finish before doing client navigation
+              await expect(page.getByTestId('hydration')).toHaveText('hydrated', {
+                timeout: 10_000,
+              })
+
               await page.evaluate(() => {
                 // set some value to window to check later if browser did reload and lost this state
                 ;(window as ExtendedWindow).didReload = false
@@ -304,6 +309,11 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
                     `${edgeOrNodeMiddlewareI18n.url}${pageWithLinksPathname}`,
                   )
                   expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+
+                  // wait for hydration to finish before doing client navigation
+                  await expect(page.getByTestId('hydration')).toHaveText('hydrated', {
+                    timeout: 10_000,
+                  })
 
                   await page.evaluate(() => {
                     // set some value to window to check later if browser did reload and lost this state
