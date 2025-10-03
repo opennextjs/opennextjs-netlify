@@ -31,7 +31,7 @@ import {
 } from '../../src/build/plugin-context.js'
 import { BLOB_TOKEN } from './constants.mjs'
 import { type FixtureTestContext } from './contexts.js'
-import { setNextVersionInFixture } from './next-version-helpers.mjs'
+import { hasDefaultTurbopackBuilds, setNextVersionInFixture } from './next-version-helpers.mjs'
 
 const bootstrapURL = await getBootstrapURL()
 const actualCwd = await vi.importActual<typeof import('process')>('process').then((p) => p.cwd())
@@ -569,5 +569,8 @@ export async function invokeSandboxedFunction(
 }
 
 export const EDGE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-middleware'
-export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = '___netlify-edge-handler-src-middleware'
+// Turbopack has different output than webpack
+export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = hasDefaultTurbopackBuilds()
+  ? '___netlify-edge-handler-src-middleware'
+  : EDGE_MIDDLEWARE_FUNCTION_NAME
 export const NODE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-node-middleware'
