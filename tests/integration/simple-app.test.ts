@@ -35,6 +35,7 @@ import {
   startMockBlobStore,
 } from '../utils/helpers.js'
 import {
+  hasDefaultTurbopackBuilds,
   nextVersionSatisfies,
   shouldHaveAppRouterGlobalErrorInPrerenderManifest,
   shouldHaveAppRouterNotFoundInPrerenderManifest,
@@ -421,19 +422,23 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
   },
 )
 
-test<FixtureTestContext>('can require CJS module that is not bundled', async (ctx) => {
-  await createFixture('simple', ctx)
-  await runPlugin(ctx)
+// setup for this test only works with webpack builds due to usage of ` __non_webpack_require__` to avoid bundling a file
+test.skipIf(hasDefaultTurbopackBuilds())<FixtureTestContext>(
+  'can require CJS module that is not bundled',
+  async (ctx) => {
+    await createFixture('simple', ctx)
+    await runPlugin(ctx)
 
-  const response = await invokeFunction(ctx, { url: '/api/cjs-file-with-js-extension' })
+    const response = await invokeFunction(ctx, { url: '/api/cjs-file-with-js-extension' })
 
-  expect(response.statusCode).toBe(200)
+    expect(response.statusCode).toBe(200)
 
-  const parsedBody = JSON.parse(response.body)
+    const parsedBody = JSON.parse(response.body)
 
-  expect(parsedBody.notBundledCJSModule.isBundled).toEqual(false)
-  expect(parsedBody.bundledCJSModule.isBundled).toEqual(true)
-})
+    expect(parsedBody.notBundledCJSModule.isBundled).toEqual(false)
+    expect(parsedBody.bundledCJSModule.isBundled).toEqual(true)
+  },
+)
 
 describe('next patching', async () => {
   const { cp: originalCp, appendFile } = (await vi.importActual(

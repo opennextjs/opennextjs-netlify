@@ -96,7 +96,7 @@ test.describe('app router on-demand revalidation', () => {
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
       )
 
-      const date1 = await page.locator('[data-testid="date-now"]').textContent()
+      const date1 = await page.getByTestId("date-now").textContent()
 
       const h1 = await page.locator('h1').textContent()
       expect(h1).toBe(expectedH1Content)
@@ -127,7 +127,7 @@ test.describe('app router on-demand revalidation', () => {
       )
 
       // the page is cached
-      const date2 = await page.locator('[data-testid="date-now"]').textContent()
+      const date2 = await page.getByTestId("date-now").textContent()
       expect(date2).toBe(date1)
 
       const revalidate = await page.goto(new URL(revalidateApiPath, serverComponents.url).href)
@@ -159,7 +159,7 @@ test.describe('app router on-demand revalidation', () => {
       )
 
       // the page has now an updated date
-      const date3 = await page.locator('[data-testid="date-now"]').textContent()
+      const date3 = await page.getByTestId("date-now").textContent()
       expect(date3).not.toBe(date2)
 
       const response4 = await pollUntilHeadersMatch(new URL(pagePath, serverComponents.url).href, {
@@ -188,7 +188,7 @@ test.describe('app router on-demand revalidation', () => {
       )
 
       // the page is cached
-      const date4 = await page.locator('[data-testid="date-now"]').textContent()
+      const date4 = await page.getByTestId("date-now").textContent()
       expect(date4).toBe(date3)
     })
   }
