@@ -1,4 +1,4 @@
-import { ImageResponse } from 'next/og'
+import { ImageResponse } from '@vercel/og'
 
 export async function GET() {
   return new ImageResponse(<div>hi</div>, {
