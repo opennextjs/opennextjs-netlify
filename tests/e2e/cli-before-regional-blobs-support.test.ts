@@ -17,7 +17,7 @@ test('should serve 404 page when requesting non existing page (no matching route
   const headers = response?.headers() || {}
   expect(response?.status()).toBe(404)
 
-  expect(await page.textContent('h1')).toBe('404')
+  await expect(page.locator('h1')).toHaveText('404')
 
   // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
   // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that it

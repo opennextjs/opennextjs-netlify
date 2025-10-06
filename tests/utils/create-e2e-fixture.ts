@@ -69,7 +69,10 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
     }
     console.log('\n\n\n🪵  Deploy logs:')
     console.log(logs)
-    // on failures we don't delete the deploy
+    // on failures we don't delete the deploy, but we do cleanup the fixture from filesystem in CI
+    if (process.env.CI) {
+      return cleanup(isolatedFixtureRoot, undefined)
+    }
   }
   try {
     const [packageName] = await Promise.all([
@@ -392,14 +395,12 @@ export const fixtureFactories = {
   serverComponents: () => createE2EFixture('server-components'),
   nxIntegrated: () =>
     createE2EFixture('nx-integrated', {
-      packageManger: 'pnpm',
       packagePath: 'apps/next-app',
       buildCommand: 'nx run next-app:build',
       publishDirectory: 'dist/apps/next-app/.next',
     }),
   nxIntegratedDistDir: () =>
     createE2EFixture('nx-integrated', {
-      packageManger: 'pnpm',
       packagePath: 'apps/custom-dist-dir',
       buildCommand: 'nx run custom-dist-dir:build',
       publishDirectory: 'dist/apps/custom-dist-dir/dist',

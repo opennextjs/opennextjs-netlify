@@ -41,8 +41,8 @@ test.describe('[PNPM] Package manager', () => {
         : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
     )
 
-    const date1 = await page.textContent('[data-testid="date-now"]')
-    const h1 = await page.textContent('h1')
+    const date1 = await page.getByTestId('date-now').textContent()
+    const h1 = await page.locator('h1').textContent()
     expect(h1).toBe('Show #71')
 
     const response2 = await pollUntilHeadersMatch(
@@ -74,7 +74,7 @@ test.describe('[PNPM] Package manager', () => {
     )
 
     // the page is cached
-    const date2 = await page.textContent('[data-testid="date-now"]')
+    const date2 = await page.getByTestId('date-now').textContent()
     expect(date2).toBe(date1)
 
     const revalidate = await page.goto(new URL('/api/revalidate', turborepo.url).href)
@@ -104,7 +104,7 @@ test.describe('[PNPM] Package manager', () => {
     expect(headers3?.['x-nextjs-cache']).toBeUndefined()
 
     // the page has now an updated date
-    const date3 = await page.textContent('[data-testid="date-now"]')
+    const date3 = await page.getByTestId('date-now').textContent()
     expect(date3).not.toBe(date2)
   })
 })
@@ -149,8 +149,8 @@ test.describe('[NPM] Package manager', () => {
         : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
     )
 
-    const date1 = await page.textContent('[data-testid="date-now"]')
-    const h1 = await page.textContent('h1')
+    const date1 = await page.getByTestId('date-now').textContent()
+    const h1 = await page.locator('h1').textContent()
     expect(h1).toBe('Show #71')
 
     const response2 = await pollUntilHeadersMatch(
@@ -182,7 +182,7 @@ test.describe('[NPM] Package manager', () => {
     )
 
     // the page is cached
-    const date2 = await page.textContent('[data-testid="date-now"]')
+    const date2 = await page.getByTestId('date-now').textContent()
     expect(date2).toBe(date1)
 
     const revalidate = await page.goto(new URL('/api/revalidate', turborepoNPM.url).href)
@@ -212,7 +212,7 @@ test.describe('[NPM] Package manager', () => {
     expect(headers3?.['x-nextjs-cache']).toBeUndefined()
 
     // the page has now an updated date
-    const date3 = await page.textContent('[data-testid="date-now"]')
+    const date3 = await page.getByTestId('date-now').textContent()
     expect(date3).not.toBe(date2)
   })
 
