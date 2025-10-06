@@ -106,7 +106,7 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         `server/*`,
         `server/chunks/**/*`,
         `server/edge-chunks/**/*`,
-        `server/edge/chunks/**/*`,
+        `server/edge/**/*`,
         `server/+(app|pages)/**/*.js`,
       ],
       {
