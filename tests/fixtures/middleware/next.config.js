@@ -23,11 +23,7 @@ const nextConfig = {
   // without turbopack configuration, so we add a turbopack configuration here to ensure this fixture
   // works with default build bundler for all tested versions
   // see https://github.com/vercel/next.js/blob/ba5a0ca79944b4c8a59d80d677bfedaf0fef33d6/packages/next/src/lib/turbopack-warning.ts#L159-L177
-  turbopack: {
-    // there need to be some keys here, as empty object despite currently being suggesting is not actually allowing build to go through
-    // so we'll set root (which serves same purpose as outputFileTracingRoot more generally)
-    root: __dirname,
-  },
+  turbopack: {},
   outputFileTracingRoot: __dirname,
 }
 

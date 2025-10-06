@@ -2,9 +2,9 @@ import { execaCommand } from 'execa'
 import fg from 'fast-glob'
 import { exec } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { appendFile, copyFile, cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { cpus } from 'os'
@@ -69,9 +69,9 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
     }
     console.log('\n\n\n🪵  Deploy logs:')
     console.log(logs)
-    // on failures locally we don't delete the deploy
+    // on failures we don't delete the deploy, but we do cleanup the fixture from filesystem in CI
     if (process.env.CI) {
-      return cleanup(isolatedFixtureRoot, deployID)
+      return cleanup(isolatedFixtureRoot, undefined)
     }
   }
   try {
@@ -277,24 +277,7 @@ async function deploySite(
   }
 
   const siteDir = join(isolatedFixtureRoot, cwd)
-  try {
-    await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
-  } catch (error: unknown) {
-    // try to collect zips if they exist
-    const functionsPath = join(isolatedFixtureRoot, packagePath ?? '', '.netlify/functions')
-    const zipPaths = await fg.glob('**/*.zip', {
-      cwd: functionsPath,
-      dot: true,
-    })
-    if (zipPaths.length) {
-      const debugDir = join('debug-artifacts', isolatedFixtureRoot)
-      await mkdir(debugDir, { recursive: true })
-      for (const path of zipPaths) {
-        await cp(join(functionsPath, path), join(debugDir, basename(path)))
-      }
-    }
-    throw error
-  }
+  await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
 
   const { siteName, deployID } =
@@ -413,13 +396,13 @@ export const fixtureFactories = {
   nxIntegrated: () =>
     createE2EFixture('nx-integrated', {
       packagePath: 'apps/next-app',
-      buildCommand: 'nx run next-app:build --verbose',
+      buildCommand: 'nx run next-app:build',
       publishDirectory: 'dist/apps/next-app/.next',
     }),
   nxIntegratedDistDir: () =>
     createE2EFixture('nx-integrated', {
       packagePath: 'apps/custom-dist-dir',
-      buildCommand: 'nx run custom-dist-dir:build --verbose',
+      buildCommand: 'nx run custom-dist-dir:build',
       publishDirectory: 'dist/apps/custom-dist-dir/dist',
     }),
   cliBeforeRegionalBlobsSupport: () =>
