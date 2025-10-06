@@ -2,9 +2,9 @@ import { execaCommand } from 'execa'
 import fg from 'fast-glob'
 import { exec } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { appendFile, copyFile, cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { cpus } from 'os'
@@ -69,7 +69,10 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
     }
     console.log('\n\n\n🪵  Deploy logs:')
     console.log(logs)
-    // on failures we don't delete the deploy
+    // on failures locally we don't delete the deploy
+    if (process.env.CI) {
+      return cleanup(isolatedFixtureRoot, deployID)
+    }
   }
   try {
     const [packageName] = await Promise.all([
@@ -274,7 +277,23 @@ async function deploySite(
   }
 
   const siteDir = join(isolatedFixtureRoot, cwd)
-  await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
+  try {
+    await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
+  } catch (error: unknown) {
+    // try to collect zips if they exist
+    const functionsPath = join(isolatedFixtureRoot, packagePath ?? '', '.netlify/functions')
+    const zipPaths = await fg.glob('**/*.zip', {
+      cwd: functionsPath,
+      dot: true,
+    })
+    if (zipPaths.length) {
+      const debugDir = join('debug-artifacts', isolatedFixtureRoot)
+      await mkdir(debugDir, { recursive: true })
+      for (const path of zipPaths) {
+        await cp(join(functionsPath, path), join(debugDir, basename(path)))
+      }
+    }
+  }
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
 
   const { siteName, deployID } =

@@ -10,7 +10,7 @@ export default defineConfig({
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: Boolean(process.env.CI),
   /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 0 : 0,
   /* Limit the number of workers on CI, use default locally */
   workers: process.env.CI ? 3 : undefined,
   globalSetup: './tests/test-setup-e2e.ts',
