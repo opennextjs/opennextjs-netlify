@@ -293,6 +293,7 @@ async function deploySite(
         await cp(join(functionsPath, path), join(debugDir, basename(path)))
       }
     }
+    throw error
   }
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
 
@@ -411,14 +412,12 @@ export const fixtureFactories = {
   serverComponents: () => createE2EFixture('server-components'),
   nxIntegrated: () =>
     createE2EFixture('nx-integrated', {
-      packageManger: 'pnpm',
       packagePath: 'apps/next-app',
       buildCommand: 'nx run next-app:build --verbose',
       publishDirectory: 'dist/apps/next-app/.next',
     }),
   nxIntegratedDistDir: () =>
     createE2EFixture('nx-integrated', {
-      packageManger: 'pnpm',
       packagePath: 'apps/custom-dist-dir',
       buildCommand: 'nx run custom-dist-dir:build --verbose',
       publishDirectory: 'dist/apps/custom-dist-dir/dist',
