@@ -16,6 +16,7 @@ import {
 } from './build/content/static.js'
 import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/edge.js'
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
+import { checkBundleSize } from './build/functions/utils.js'
 import { setImageConfig } from './build/image-cdn.js'
 import { PluginContext } from './build/plugin-context.js'
 import {
@@ -110,7 +111,10 @@ export const onPostBuild = async (options: NetlifyPluginOptions) => {
   }
 
   await tracer.withActiveSpan('onPostBuild', async () => {
-    await publishStaticDir(new PluginContext(options))
+    const ctx = new PluginContext(options)
+
+    await publishStaticDir(ctx)
+    await checkBundleSize(ctx)
   })
 }
 
