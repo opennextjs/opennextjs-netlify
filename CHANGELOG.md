@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.13.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.4...v5.13.5) (2025-10-06)
+
+
+### Bug Fixes
+
+* bundle edge-runtime assets for turbopack builds ([a6063c9](https://github.com/opennextjs/opennextjs-netlify/commit/a6063c921de95ab6e48c7ea6cb3e513d2cb63577))
+* exclude `musl` binaries from function bundle when building on Netlify with `pnpm` monorepos ([a6063c9](https://github.com/opennextjs/opennextjs-netlify/commit/a6063c921de95ab6e48c7ea6cb3e513d2cb63577))
+
 ## [5.13.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.3...v5.13.4) (2025-10-01)
 
 
