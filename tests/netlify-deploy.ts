@@ -23,6 +23,7 @@ async function packNextRuntimeImpl() {
 }
 
 let packNextRuntimePromise: ReturnType<typeof packNextRuntimeImpl> | null = null
+let nextRuntimePacked = false
 function packNextRuntime() {
   if (!packNextRuntimePromise) {
     packNextRuntimePromise = packNextRuntimeImpl()
@@ -38,11 +39,56 @@ export class NextDeployInstance extends NextInstance {
   private _shouldDeleteDeploy: boolean = false
   private _isCurrentlyDeploying: boolean = false
   private _deployOutput: string = ''
+  private _setupStartTime = Date.now()
+  private _intervalsToClear: NodeJS.Timeout[] = []
 
   public get buildId() {
     // get deployment ID via fetch since we can't access
     // build artifacts directly
     return this._buildId
+  }
+
+  private packNextRuntime() {
+    if (!packNextRuntimePromise) {
+      if (!nextRuntimePacked) {
+        this._deployOutput += this.getTimestampPrefix() + 'Pack Next Runtime ...\n'
+      }
+      packNextRuntimePromise = packNextRuntimeImpl()
+      packNextRuntimePromise.then(() => {
+        nextRuntimePacked = true
+      })
+      if (!nextRuntimePacked) {
+        this._deployOutput += this.getTimestampPrefix() + 'Pack Next Runtime DONE\n'
+      }
+    }
+
+    return packNextRuntimePromise
+  }
+
+  private clearIntervals() {
+    for (const interval of this._intervalsToClear) {
+      clearInterval(interval)
+    }
+    this._intervalsToClear = []
+  }
+
+  private getTimestampPrefix() {
+    return `[${new Date().toISOString()}] (+${((Date.now() - this._setupStartTime) / 1000).toFixed(3)}s) `
+  }
+
+  private ps(pid) {
+    const netlifyStatusPromise = execa('ps', ['-p', pid])
+
+    netlifyStatusPromise.stdout.on('data', this.handleOutput.bind(this))
+    netlifyStatusPromise.stderr.on('data', this.handleOutput.bind(this))
+  }
+
+  private handleOutput(chunk) {
+    const timestampPrefix = this.getTimestampPrefix()
+
+    this._deployOutput +=
+      (this._deployOutput === '' || this._deployOutput.endsWith('\n') ? timestampPrefix : '') +
+      chunk.toString().replace(/\n(?=.)/gm, `\n${timestampPrefix}`)
   }
 
   public async setup(parentSpan: Span) {
@@ -56,10 +102,10 @@ export class NextDeployInstance extends NextInstance {
 
     this._isCurrentlyDeploying = true
 
-    const setupStartTime = Date.now()
-
+    this._deployOutput += this.getTimestampPrefix() + 'Setting up test dir ...\n'
     // create the test site
     await super.createTestDir({ parentSpan, skipInstall: true })
+    this._deployOutput += this.getTimestampPrefix() + 'Setting up test dir DONE\n'
 
     // If the test fixture has node modules we need to move them aside then merge them in after
 
@@ -67,24 +113,34 @@ export class NextDeployInstance extends NextInstance {
     const nodeModulesBak = `${nodeModules}.bak`
 
     if (fs.existsSync(nodeModules)) {
+      this._deployOutput += this.getTimestampPrefix() + 'Rename node_modules ...\n'
       await fs.rename(nodeModules, nodeModulesBak)
+      this._deployOutput += this.getTimestampPrefix() + 'Rename node_modules DONE\n'
     }
 
-    const { runtimePackageName, runtimePackageTarballPath } = await packNextRuntime()
+    const { runtimePackageName, runtimePackageTarballPath } = await this.packNextRuntime()
 
     // install dependencies
-    await execa('npm', ['i', runtimePackageTarballPath, '--legacy-peer-deps'], {
+    this._deployOutput += this.getTimestampPrefix() + 'Install dependencies ...\n'
+    const installResPromise = execa('npm', ['i', runtimePackageTarballPath, '--legacy-peer-deps'], {
       cwd: this.testDir,
-      stdio: 'inherit',
     })
+
+    installResPromise.stdout.on('data', this.handleOutput.bind(this))
+    installResPromise.stderr.on('data', this.handleOutput.bind(this))
+
+    await installResPromise
+    this._deployOutput += this.getTimestampPrefix() + 'Install dependencies DONE\n'
 
     if (fs.existsSync(nodeModulesBak)) {
       // move the contents of the fixture node_modules into the installed modules
+      this._deployOutput += this.getTimestampPrefix() + 'Move fixture node_modules ...\n'
       for (const file of await fs.readdir(nodeModulesBak)) {
         await fs.move(path.join(nodeModulesBak, file), path.join(nodeModules, file), {
           overwrite: true,
         })
       }
+      this._deployOutput += this.getTimestampPrefix() + 'Move fixture node_modules DONE\n'
     }
 
     // use next runtime package installed by the test runner
@@ -117,7 +173,12 @@ export class NextDeployInstance extends NextInstance {
 
     // ensure project is linked
     try {
-      await execa('npx', ['netlify', 'status', '--json'])
+      const netlifyStatusPromise = execa('npx', ['netlify', 'status', '--json'])
+
+      netlifyStatusPromise.stdout.on('data', this.handleOutput.bind(this))
+      netlifyStatusPromise.stderr.on('data', this.handleOutput.bind(this))
+
+      await netlifyStatusPromise
     } catch (err) {
       if (err.message.includes("You don't appear to be in a folder that is linked to a site")) {
         throw new Error(`Site is not linked. Please set "NETLIFY_AUTH_TOKEN" and "NETLIFY_SITE_ID"`)
@@ -144,14 +205,74 @@ export class NextDeployInstance extends NextInstance {
       },
     )
 
-    const handleOutput = (chunk) => {
-      this._deployOutput += chunk
-    }
+    this._deployOutput +=
+      this.getTimestampPrefix() + `Started deploy, PID: ${deployResPromise.pid}\n`
+    require('console').log(`Started deploy, PID: ${deployResPromise.pid}`)
 
-    deployResPromise.stdout.on('data', handleOutput)
-    deployResPromise.stderr.on('data', handleOutput)
+    deployResPromise.stdout.on('data', this.handleOutput.bind(this))
+    deployResPromise.stderr.on('data', this.handleOutput.bind(this))
+
+    deployResPromise.on('error', (err) => {
+      this._deployOutput += this.getTimestampPrefix() + `Error during deployment: ${err.message}\n`
+      require('console').error(`Error during deployment: ${err.message}`)
+    })
+
+    deployResPromise.on('spawn', (err) => {
+      this._deployOutput += this.getTimestampPrefix() + `Process spawned\n`
+      require('console').error(`Process spawned`)
+    })
+
+    deployResPromise.on('disconnect', (err) => {
+      this._deployOutput += this.getTimestampPrefix() + `Process disconnected\n`
+      require('console').error(`Process disconnected`)
+    })
+
+    deployResPromise.on('close', (code, signal) => {
+      this._deployOutput +=
+        this.getTimestampPrefix() + `Process closed with code: ${code} / signal: ${signal}\n`
+      require('console').error(`Process closed with code: ${code} / signal: ${signal}`)
+    })
+
+    deployResPromise.on('exit', (code, signal) => {
+      this._deployOutput +=
+        this.getTimestampPrefix() + `Process exited with code: ${code} / signal: ${signal}\n`
+      require('console').error(`Process exited with code: ${code} / signal: ${signal}`)
+    })
+
+    this._intervalsToClear.push(
+      setInterval(() => {
+        this._deployOutput +=
+          this.getTimestampPrefix() +
+          `Waiting for netlify deploy process to finish ... (killed: ${deployResPromise.killed}, connected: ${deployResPromise.connected})\n`
+      }, 5000),
+    )
+
+    this._intervalsToClear.push(
+      setInterval(() => {
+        this.ps(deployResPromise.pid)
+      }, 30_000),
+    )
+
+    deployResPromise
+      .then((result) => {
+        require('console').log(`Netlify deploy process finished.`)
+        this._deployOutput += this.getTimestampPrefix() + 'Netlify deploy process finished.\n'
+      })
+      .catch((err) => {
+        require('console').log(`Netlify deploy process failed. ` + err)
+        this._deployOutput += this.getTimestampPrefix() + 'Netlify deploy process failed. ' + err
+      })
+      .finally(() => {
+        require('console').log(`Netlify deploy process finally.`)
+        this._deployOutput += this.getTimestampPrefix() + 'Netlify deploy process finally.\n'
+        this.clearIntervals()
+      })
 
     const deployRes = await deployResPromise
+
+    this.clearIntervals()
+
+    require('console').log(`Deploy finished. Processing output...`)
 
     if (deployRes.exitCode !== 0) {
       // clear deploy output to avoid printing it again in destroy()
@@ -184,7 +305,7 @@ export class NextDeployInstance extends NextInstance {
       }
     } catch (err) {
       require('console').error(err)
-      throw new Error(`Failed to parse deploy output: ${deployRes.stdout}`)
+      throw new Error(`Failed to parse deploy output: "${deployRes.stdout}"`)
     }
 
     this._buildId = (
@@ -195,12 +316,13 @@ export class NextDeployInstance extends NextInstance {
     ).trim()
 
     require('console').log(`Got buildId: ${this._buildId}`)
-    require('console').log(`Setup time: ${(Date.now() - setupStartTime) / 1000.0}s`)
+    require('console').log(`Setup time: ${(Date.now() - this._setupStartTime) / 1000.0}s`)
 
     this._isCurrentlyDeploying = false
   }
 
   public async destroy(): Promise<void> {
+    this.clearIntervals()
     if (this._shouldDeleteDeploy) {
       require('console').log(`Deleting project with deploy_id ${this._deployId}`)
 
