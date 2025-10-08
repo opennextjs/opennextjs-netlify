@@ -124,6 +124,24 @@ jobs:
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ matrix.version_spec.selector }}' is '$NODE_VERSION'"
 
+      - name: Decide default bundler
+        id: decide-default-bundler
+        shell: bash
+        run: |
+          # we run tests with default bundler for given Next.js version
+          # some tests have webpack/turbopack specific assertions or skips
+          # so we need to set IS_WEBPACK_TEST, IS_TURBOPACK_TEST env vars accordingly
+          # to ensure tests assert behavior of the default bundler
+          DEFAULT_BUNDLER="webpack"
+          if [ "${{ matrix.version_spec.selector }}" = "canary" ]; then
+            # this is not ideal, because we set turbopack default just when explicitly using canary tag as target
+            # but next@canary are still on 15 major, so we can't yet use major version of resolved next version
+            # as condition
+            DEFAULT_BUNDLER="turbopack"
+          fi
+          echo "default_bundler=$DEFAULT_BUNDLER" >> $GITHUB_OUTPUT
+          echo "Default bundler for 'next@${{ matrix.version_spec.selector }}' is '$DEFAULT_BUNDLER'"
+
       - name: setup node
         uses: actions/setup-node@v5
         with:
@@ -219,6 +237,8 @@ jobs:
           # a given alias at a time), resulting in cascading timeouts.
           DEPLOY_ALIAS: vercel-next-e2e-${{ matrix.version_spec.selector }}-${{ matrix.group }}
           NEXT_RESOLVED_VERSION: ${{ matrix.version_spec.version }}
+          IS_WEBPACK_TEST: ${{ steps.decide-default-bundler.outputs.default_bundler == 'webpack' && '1' || '' }}
+          IS_TURBOPACK_TEST: ${{ steps.decide-default-bundler.outputs.default_bundler == 'turbopack' && '1' || '' }}
         run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e
         working-directory: ${{ env.next-path }}
 
@@ -227,7 +247,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-result-${{matrix.version_spec.selector}}-${{ matrix.group }}
-          path: ${{ env.next-path }}/test/test-junit-report/*.xml
+          path: ${{ env.next-path }}/test/${{steps.decide-default-bundler.outputs.default_bundler == 'turbopack' && 'turbopack-test-junit-report' || 'test-junit-report'}}/*.xml
   publish-test-results:
     name: 'E2E Test Summary (${{matrix.version_spec.selector}})'
     needs:
