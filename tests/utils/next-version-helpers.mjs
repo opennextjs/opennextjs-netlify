@@ -49,6 +49,10 @@ export function hasNodeMiddlewareSupport() {
   return nextVersionSatisfies(isNextCanary() ? '>=15.2.0' : '>=15.5.0')
 }
 
+export function hasDefaultTurbopackBuilds() {
+  return nextVersionSatisfies('>=15.6.0-canary.40')
+}
+
 /**
  * Check if current next version requires React 19
  * @param {string} version Next version

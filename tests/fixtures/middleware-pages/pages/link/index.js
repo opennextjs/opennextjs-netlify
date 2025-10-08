@@ -1,6 +1,12 @@
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
 export default function Page() {
+  const [isHydrated, setIsHydrated] = useState(false)
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
+
   return (
     <div>
       <h1>Page with Links</h1>
@@ -62,6 +68,7 @@ export default function Page() {
           </ul>
         </li>
       </ul>
+      <pre data-testid="hydration">{isHydrated ? 'hydrated' : 'hydrating'}</pre>
     </div>
   )
 }

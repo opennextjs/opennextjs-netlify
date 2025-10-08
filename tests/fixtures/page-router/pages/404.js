@@ -1,3 +1,3 @@
 export default function NotFound() {
-  return <p>Custom 404 page</p>
+  return <p data-testid="custom-404">Custom 404 page</p>
 }

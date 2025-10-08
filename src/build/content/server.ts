@@ -106,7 +106,7 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         `server/*`,
         `server/chunks/**/*`,
         `server/edge-chunks/**/*`,
-        `server/edge/chunks/**/*`,
+        `server/edge/**/*`,
         `server/+(app|pages)/**/*.js`,
       ],
       {
@@ -291,6 +291,8 @@ async function patchNextModules(
 export const copyNextDependencies = async (ctx: PluginContext): Promise<void> => {
   await tracer.withActiveSpan('copyNextDependencies', async () => {
     const entries = await readdir(ctx.standaloneDir)
+    const filter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
+
     const promises: Promise<void>[] = entries.map(async (entry) => {
       // copy all except the distDir (.next) folder as this is handled in a separate function
       // this will include the node_modules folder as well
@@ -299,7 +301,6 @@ export const copyNextDependencies = async (ctx: PluginContext): Promise<void> =>
       }
       const src = join(ctx.standaloneDir, entry)
       const dest = join(ctx.serverHandlerDir, entry)
-      const filter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
       await cp(src, dest, {
         recursive: true,
         verbatimSymlinks: true,
@@ -321,7 +322,7 @@ export const copyNextDependencies = async (ctx: PluginContext): Promise<void> =>
     // see: https://github.com/vercel/next.js/issues/50072
     if (existsSync(rootSrcDir) && ctx.standaloneRootDir !== ctx.standaloneDir) {
       promises.push(
-        cp(rootSrcDir, rootDestDir, { recursive: true, verbatimSymlinks: true }).then(() =>
+        cp(rootSrcDir, rootDestDir, { recursive: true, verbatimSymlinks: true, filter }).then(() =>
           recreateNodeModuleSymlinks(resolve('node_modules'), rootDestDir),
         ),
       )
