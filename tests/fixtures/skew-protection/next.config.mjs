@@ -26,7 +26,7 @@ const nextConfig = {
     )
     return config
   },
-
+  turbopack: {},
   compiler: {
     // this is same as above webpack config, but this will apply to turbopack builds as well
     // so just future proofing it here
