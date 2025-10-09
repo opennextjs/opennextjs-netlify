@@ -36,6 +36,7 @@ import {
 } from '../utils/helpers.js'
 import {
   hasDefaultTurbopackBuilds,
+  isExperimentalPPRHardDeprecated,
   nextVersionSatisfies,
   shouldHaveAppRouterGlobalErrorInPrerenderManifest,
   shouldHaveAppRouterNotFoundInPrerenderManifest,
@@ -403,7 +404,7 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
         '/1',
         '/2',
         '/404',
-        '/[dynamic]',
+        isExperimentalPPRHardDeprecated() ? undefined : '/[dynamic]',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/index',
