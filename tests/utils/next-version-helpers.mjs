@@ -53,6 +53,11 @@ export function hasDefaultTurbopackBuilds() {
   return nextVersionSatisfies('>=15.6.0-canary.40')
 }
 
+export function shouldHaveSlashIndexTagForIndexPage() {
+  // https://github.com/vercel/next.js/pull/84586
+  return nextVersionSatisfies('>=v15.6.0-canary.50')
+}
+
 /**
  * Check if current next version requires React 19
  * @param {string} version Next version
