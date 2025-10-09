@@ -2,7 +2,8 @@ import type { OutgoingHttpHeaders } from 'http'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
 import type { Context } from '@netlify/functions'
-import { Span } from '@opentelemetry/api'
+import { withActiveSpan } from '@netlify/otel'
+import type { Span } from '@netlify/otel/opentelemetry'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
 import { getRunConfig, setRunConfig } from '../config.js'
@@ -67,7 +68,7 @@ export default async (
   const tracer = getTracer()
 
   if (!nextHandler) {
-    await tracer.withActiveSpan('initialize next server', async () => {
+    await withActiveSpan(tracer, 'initialize next server', async () => {
       const { getMockedRequestHandler } = await nextImportPromise
       const url = new URL(request.url)
 
@@ -80,7 +81,7 @@ export default async (
     })
   }
 
-  return await tracer.withActiveSpan('generate response', async (span) => {
+  return await withActiveSpan(tracer, 'generate response', async (span) => {
     const { req, res } = toReqRes(request)
 
     // Work around a bug in http-proxy in next@<14.0.2
@@ -104,7 +105,7 @@ export default async (
       getLogger().withError(error).error('next handler error')
       console.error(error)
       resProxy.statusCode = 500
-      span.setAttribute('http.status_code', 500)
+      span?.setAttribute('http.status_code', 500)
       resProxy.end('Internal Server Error')
     })
 

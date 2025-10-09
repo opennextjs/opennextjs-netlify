@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 
+import { withActiveSpan } from '@netlify/otel'
 // @ts-expect-error no types installed
 import { patchFs } from 'fs-monkey'
 
@@ -91,8 +92,7 @@ export async function getMockedRequestHandler(
    */
   const initAsyncLocalStorage = new AsyncLocalStorage<typeof initContext>()
 
-  const tracer = getTracer()
-  return tracer.withActiveSpan('mocked request handler', async () => {
+  return withActiveSpan(getTracer(), 'mocked request handler', async () => {
     const ofs = { ...fs }
 
     async function readFileFallbackBlobStore(...fsargs: Parameters<FS['promises']['readFile']>) {

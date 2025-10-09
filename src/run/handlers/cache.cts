@@ -5,7 +5,8 @@ import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
-import { type Span } from '@opentelemetry/api'
+import { withActiveSpan } from '@netlify/otel'
+import type { Span } from '@netlify/otel/opentelemetry'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 
@@ -68,7 +69,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   private captureResponseCacheLastModified(
     cacheValue: NetlifyCacheHandlerValue,
     key: string,
-    getCacheKeySpan: Span,
+    getCacheKeySpan?: Span,
   ) {
     if (cacheValue.value?.kind === 'FETCH') {
       return
@@ -256,17 +257,17 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   async get(
     ...args: Parameters<CacheHandlerForMultipleVersions['get']>
   ): ReturnType<CacheHandlerForMultipleVersions['get']> {
-    return this.tracer.withActiveSpan('get cache key', async (span) => {
+    return withActiveSpan(this.tracer, 'get cache key', async (span) => {
       const [key, context = {}] = args
       getLogger().debug(`[NetlifyCacheHandler.get]: ${key}`)
 
-      span.setAttributes({ key })
+      span?.setAttributes({ key })
 
       const blob = await this.cacheStore.get<NetlifyCacheHandlerValue>(key, 'blobStore.get')
 
       // if blob is null then we don't have a cache entry
       if (!blob) {
-        span.addEvent('Cache miss', { key })
+        span?.addEvent('Cache miss', { key })
         return null
       }
 
@@ -275,7 +276,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       if (getRequestContext()?.isBackgroundRevalidation && typeof ttl === 'number' && ttl < 0) {
         // background revalidation request should allow data that is not yet stale,
         // but opt to discard STALE data, so that Next.js generate fresh response
-        span.addEvent('Discarding stale entry due to SWR background revalidation request', {
+        span?.addEvent('Discarding stale entry due to SWR background revalidation request', {
           key,
           ttl,
         })
@@ -297,7 +298,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       )
 
       if (staleByTags) {
-        span.addEvent('Stale', { staleByTags, key, ttl })
+        span?.addEvent('Stale', { staleByTags, key, ttl })
         return null
       }
 
@@ -311,7 +312,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       switch (blob.value?.kind) {
         case 'FETCH':
-          span.addEvent('FETCH', {
+          span?.addEvent('FETCH', {
             lastModified: blob.lastModified,
             revalidate: context.revalidate,
             ttl,
@@ -323,7 +324,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
         case 'ROUTE':
         case 'APP_ROUTE': {
-          span.addEvent(blob.value?.kind, {
+          span?.addEvent(blob.value?.kind, {
             lastModified: blob.lastModified,
             status: blob.value.status,
             revalidate: blob.value.revalidate,
@@ -349,7 +350,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
             requestContext.pageHandlerRevalidate = revalidate
           }
 
-          span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
+          span?.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
           await this.injectEntryToPrerenderManifest(key, blob.value)
 
@@ -366,7 +367,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
           const { revalidate, rscData, segmentData, ...restOfPageValue } = blob.value
 
-          span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
+          span?.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
           await this.injectEntryToPrerenderManifest(key, blob.value)
 
@@ -387,7 +388,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           }
         }
         default:
-          span.recordException(new Error(`Unknown cache entry kind: ${blob.value?.kind}`))
+          span?.recordException(new Error(`Unknown cache entry kind: ${blob.value?.kind}`))
       }
       return null
     })
@@ -439,10 +440,10 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   async set(...args: Parameters<CacheHandlerForMultipleVersions['set']>) {
-    return this.tracer.withActiveSpan('set cache key', async (span) => {
+    return this.tracer?.withActiveSpan('set cache key', async (span: Span) => {
       const [key, data, context] = args
       const lastModified = Date.now()
-      span.setAttributes({ key, lastModified })
+      span?.setAttributes({ key, lastModified })
 
       getLogger().debug(`[NetlifyCacheHandler.set]: ${key}`)
 
