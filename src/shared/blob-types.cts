@@ -1,6 +1,15 @@
 import { type NetlifyCacheHandlerValue } from './cache-types.cjs'
 
-export type TagManifest = { revalidatedAt: number }
+export type TagManifest = {
+  /**
+   * Timestamp when tag was revalidated. Used to determine if a tag is stale.
+   */
+  staleAt: number
+  /**
+   * Timestamp when tagged cache entry should no longer serve stale content.
+   */
+  expiredAt: number
+}
 
 export type HtmlBlob = {
   html: string
@@ -13,9 +22,11 @@ export const isTagManifest = (value: BlobType): value is TagManifest => {
   return (
     typeof value === 'object' &&
     value !== null &&
-    'revalidatedAt' in value &&
-    typeof value.revalidatedAt === 'number' &&
-    Object.keys(value).length === 1
+    'staleAt' in value &&
+    typeof value.staleAt === 'number' &&
+    'expiredAt' in value &&
+    typeof value.expiredAt === 'number' &&
+    Object.keys(value).length === 2
   )
 }
 
