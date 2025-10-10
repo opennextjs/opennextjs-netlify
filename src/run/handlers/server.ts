@@ -62,7 +62,7 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
 export default async (
   request: Request,
   _context: Context,
-  topLevelSpan: Span,
+  topLevelSpan: Span | undefined,
   requestContext: RequestContext,
 ) => {
   const tracer = getTracer()
@@ -114,7 +114,7 @@ export default async (
     const response = await toComputeResponse(resProxy)
 
     if (requestContext.responseCacheKey) {
-      topLevelSpan.setAttribute('responseCacheKey', requestContext.responseCacheKey)
+      topLevelSpan?.setAttribute('responseCacheKey', requestContext.responseCacheKey)
     }
 
     const nextCache = response.headers.get('x-nextjs-cache')
@@ -136,7 +136,7 @@ export default async (
 
     const netlifyVary = response.headers.get('netlify-vary') ?? undefined
     const netlifyCdnCacheControl = response.headers.get('netlify-cdn-cache-control') ?? undefined
-    topLevelSpan.setAttributes({
+    topLevelSpan?.setAttributes({
       'x-nextjs-cache': nextCache ?? undefined,
       isServedFromNextCache,
       netlifyVary,
@@ -152,7 +152,7 @@ export default async (
           (!isRSCRequest && contentType?.includes('text/html'))) ??
         false
 
-      topLevelSpan.setAttributes({
+      topLevelSpan?.setAttributes({
         isRSCRequest,
         isCacheableAppPage: true,
         contentType,
