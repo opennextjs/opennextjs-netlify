@@ -1,7 +1,8 @@
-import { getTracer as otelGetTracer, withActiveSpan as otelWithActiveSpan } from '@netlify/otel'
+import { getTracer as otelGetTracer } from '@netlify/otel'
 // Here we need to actually import `trace` from @opentelemetry/api to add extra wrappers
 // other places should import `getTracer` from this module
-import { trace, type Span, type Tracer, type SugaredTracer } from '@netlify/otel/opentelemetry'
+import { trace } from '@netlify/otel/opentelemetry'
+import type { Span } from '@netlify/otel/opentelemetry'
 
 import { getRequestContext, type RequestContext } from './request-context.cjs'
 
@@ -35,14 +36,11 @@ function spanHook(span: Span): Span {
   return span
 }
 
-// // startSpan and startActiveSpan don't automatically handle span ending and error handling
-// // so this typing just tries to enforce not using those methods in our code
-// // we should be using withActiveSpan (and optionally withSpan) instead
-// export type RuntimeTracer = Omit<SugaredTracer, 'startSpan' | 'startActiveSpan'>
+type NetlifyOtelTracer = NonNullable<ReturnType<typeof otelGetTracer>>
 
-let tracer: SugaredTracer | undefined
+let tracer: NetlifyOtelTracer | undefined
 
-export function getTracer(): SugaredTracer | undefined {
+export function getTracer(): NetlifyOtelTracer | undefined {
   if (tracer) return;
 
   const baseTracer = otelGetTracer('Next.js Runtime')
@@ -53,8 +51,8 @@ export function getTracer(): SugaredTracer | undefined {
   // while preserving OTEL api
   const startSpan = baseTracer.startSpan.bind(baseTracer)
   baseTracer.startSpan = (
-    ...args: Parameters<Tracer['startSpan']>
-  ): ReturnType<Tracer['startSpan']> => {
+    ...args: Parameters<NetlifyOtelTracer['startSpan']>
+  ): ReturnType<NetlifyOtelTracer['startSpan']> => {
     const span = startSpan(...args)
     spanMeta.set(span, { start: performance.now(), name: args[0] })
     return spanHook(span)
@@ -64,8 +62,8 @@ export function getTracer(): SugaredTracer | undefined {
 
   // @ts-expect-error Target signature provides too few arguments. Expected 4 or more, but got 2.
   baseTracer.startActiveSpan = (
-    ...args: Parameters<Tracer['startActiveSpan']>
-  ): ReturnType<Tracer['startActiveSpan']> => {
+    ...args: Parameters<NetlifyOtelTracer['startActiveSpan']>
+  ): ReturnType<NetlifyOtelTracer['startActiveSpan']> => {
     const [name, ...restOfArgs] = args
 
     const augmentedArgs = restOfArgs.map((arg) => {
