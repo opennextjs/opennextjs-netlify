@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 
-import { LRUCache } from 'lru-cache'
 import { withActiveSpan } from '@netlify/otel'
+import { LRUCache } from 'lru-cache'
 import type {
   CacheEntry,
   // only supporting latest variant (https://github.com/vercel/next.js/pull/76687)
