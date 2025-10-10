@@ -2,7 +2,6 @@ import type { OutgoingHttpHeaders } from 'http'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
 import type { Context } from '@netlify/functions'
-import { withActiveSpan } from '@netlify/otel'
 import type { Span } from '@netlify/otel/opentelemetry'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
@@ -18,7 +17,7 @@ import { nextResponseProxy } from '../revalidate.js'
 import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
 import { getLogger, type RequestContext } from './request-context.cjs'
-import { getTracer, recordWarning } from './tracer.cjs'
+import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
 // make use of global fetch before Next.js applies any patching

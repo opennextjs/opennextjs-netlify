@@ -1,6 +1,5 @@
 import { Buffer } from 'node:buffer'
 
-import { withActiveSpan } from '@netlify/otel'
 import { LRUCache } from 'lru-cache'
 import type {
   CacheEntry,
@@ -15,7 +14,7 @@ import {
   isAnyTagStale,
   markTagsAsStaleAndPurgeEdgeCache,
 } from './tags-handler.cjs'
-import { getTracer } from './tracer.cjs'
+import { getTracer, withActiveSpan } from './tracer.cjs'
 
 // Most of this code is copied and adapted from Next.js default 'use cache' handler implementation
 // https://github.com/vercel/next.js/blob/84fde91e03918344c5d356986914ab68a5083462/packages/next/src/server/lib/cache-handlers/default.ts

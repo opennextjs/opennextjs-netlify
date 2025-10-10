@@ -2,10 +2,9 @@
 // Remaining modules in storage directory are implementation details
 // and should not be used directly outside of this directory.
 // There is eslint `no-restricted-imports` rule to enforce this.
-import { withActiveSpan } from '@netlify/otel'
 
 import { type BlobType } from '../../shared/blob-types.cjs'
-import { getTracer } from '../handlers/tracer.cjs'
+import { getTracer, withActiveSpan } from '../handlers/tracer.cjs'
 
 import { getRegionalBlobStore } from './regional-blob-store.cjs'
 import { getRequestScopedInMemoryCache } from './request-scoped-in-memory-cache.cjs'

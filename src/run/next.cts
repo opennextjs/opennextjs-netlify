@@ -2,7 +2,6 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 
-import { withActiveSpan } from '@netlify/otel'
 // @ts-expect-error no types installed
 import { patchFs } from 'fs-monkey'
 
@@ -10,7 +9,7 @@ import { HtmlBlob } from '../shared/blob-types.cjs'
 
 import type { NextConfigForMultipleVersions } from './config.js'
 import { getRequestContext } from './handlers/request-context.cjs'
-import { getTracer } from './handlers/tracer.cjs'
+import { getTracer, withActiveSpan } from './handlers/tracer.cjs'
 import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
 // https://github.com/vercel/next.js/pull/68193/files#diff-37243d614f1f5d3f7ea50bbf2af263f6b1a9a4f70e84427977781e07b02f57f1R49

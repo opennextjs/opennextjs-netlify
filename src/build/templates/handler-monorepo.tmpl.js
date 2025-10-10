@@ -1,10 +1,8 @@
-import { withActiveSpan } from '@netlify/otel'
-
 import {
   createRequestContext,
   runWithRequestContext,
 } from '{{cwd}}/.netlify/dist/run/handlers/request-context.cjs'
-import { getTracer } from '{{cwd}}/.netlify/dist/run/handlers/tracer.cjs'
+import { getTracer, withActiveSpan } from '{{cwd}}/.netlify/dist/run/handlers/tracer.cjs'
 
 process.chdir('{{cwd}}')
 

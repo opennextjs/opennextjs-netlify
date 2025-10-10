@@ -100,3 +100,5 @@ export function recordWarning(warning: Error, span?: Span) {
     warning: true,
   })
 }
+
+export { withActiveSpan } from '@netlify/otel'

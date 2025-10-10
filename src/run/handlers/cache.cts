@@ -5,7 +5,6 @@ import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
-import { withActiveSpan } from '@netlify/otel'
 import type { Span } from '@netlify/otel/opentelemetry'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
@@ -27,7 +26,7 @@ import {
 
 import { getLogger, getRequestContext } from './request-context.cjs'
 import { isAnyTagStale, markTagsAsStaleAndPurgeEdgeCache, purgeEdgeCache } from './tags-handler.cjs'
-import { getTracer, recordWarning } from './tracer.cjs'
+import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
 
 let memoizedPrerenderManifest: PrerenderManifest
 

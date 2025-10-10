@@ -1,11 +1,9 @@
-import { withActiveSpan } from '@netlify/otel'
-
 import {
   createRequestContext,
   runWithRequestContext,
 } from './.netlify/dist/run/handlers/request-context.cjs'
 import serverHandler from './.netlify/dist/run/handlers/server.js'
-import { getTracer } from './.netlify/dist/run/handlers/tracer.cjs'
+import { getTracer, withActiveSpan } from './.netlify/dist/run/handlers/tracer.cjs'
 
 // Set feature flag for regional blobs
 process.env.USE_REGIONAL_BLOBS = '{{useRegionalBlobs}}'
