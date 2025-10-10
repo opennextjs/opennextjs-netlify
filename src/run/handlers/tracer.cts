@@ -41,11 +41,11 @@ type NetlifyOtelTracer = NonNullable<ReturnType<typeof otelGetTracer>>
 let tracer: NetlifyOtelTracer | undefined
 
 export function getTracer(): NetlifyOtelTracer | undefined {
-  if (tracer) return
+  if (tracer) return tracer
 
   const baseTracer = otelGetTracer('Next.js Runtime')
 
-  if (!baseTracer) return
+  if (!baseTracer) return undefined
 
   // we add hooks to capture span start and end events to be able to add server-timings
   // while preserving OTEL api
