@@ -4,7 +4,7 @@ import { BlobType, HtmlBlob, isHtmlBlob, isTagManifest, TagManifest } from './bl
 
 describe('isTagManifest', () => {
   it(`returns true for TagManifest instance`, () => {
-    const value: TagManifest = { revalidatedAt: 0 }
+    const value: TagManifest = { staleAt: 0, expiredAt: 0 }
     expect(isTagManifest(value)).toBe(true)
   })
 
@@ -21,7 +21,7 @@ describe('isHtmlBlob', () => {
   })
 
   it(`returns false for non-HtmlBlob instance`, () => {
-    const value: BlobType = { revalidatedAt: 0 }
+    const value: BlobType = { staleAt: 0, expiredAt: 0 }
     expect(isHtmlBlob(value)).toBe(false)
   })
 })

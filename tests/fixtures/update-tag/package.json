@@ -1,0 +1,24 @@
+{
+  "name": "update-tag",
+  "description": "Testing updated tags/caching APIs for next@16",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "next build",
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "canary",
+    "@types/react": "^19.2.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "semver": "^7.7.2"
+  },
+  "test": {
+    "dependencies": {
+      "next": ">=16.0.0-alpha.0"
+    }
+  },
+  "devDependencies": {}
+}
