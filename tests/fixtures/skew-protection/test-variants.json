@@ -1,0 +1,9 @@
+{
+  "variant-b": {
+    "files": {
+      "variant-config.mjs": "variant-config-b.mjs",
+      "public/local-image.png": "public/local-image-b.png",
+      "public/variant.txt": "public/variant-b.txt"
+    }
+  }
+}
