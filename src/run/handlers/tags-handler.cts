@@ -11,47 +11,55 @@ import { getLogger, getRequestContext } from './request-context.cjs'
 
 const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 
-/**
- * Get timestamp of the last revalidation for a tag
- */
-async function getTagRevalidatedAt(
+async function getTagManifest(
   tag: string,
   cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore,
-): Promise<number | null> {
+): Promise<TagManifest | null> {
   const tagManifest = await cacheStore.get<TagManifest>(tag, 'tagManifest.get')
   if (!tagManifest) {
     return null
   }
-  return tagManifest.revalidatedAt
+  return tagManifest
 }
 
 /**
  * Get the most recent revalidation timestamp for a list of tags
  */
-export async function getMostRecentTagRevalidationTimestamp(tags: string[]) {
+export async function getMostRecentTagExpirationTimestamp(tags: string[]) {
   if (tags.length === 0) {
     return 0
   }
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
 
-  const timestampsOrNulls = await Promise.all(
-    tags.map((tag) => getTagRevalidatedAt(tag, cacheStore)),
-  )
+  const timestampsOrNulls = await Promise.all(tags.map((tag) => getTagManifest(tag, cacheStore)))
 
-  const timestamps = timestampsOrNulls.filter((timestamp) => timestamp !== null)
-  if (timestamps.length === 0) {
+  const expirationTimestamps = timestampsOrNulls
+    .filter((timestamp) => timestamp !== null)
+    .map((manifest) => manifest.expiredAt)
+  if (expirationTimestamps.length === 0) {
     return 0
   }
-  return Math.max(...timestamps)
+  return Math.max(...expirationTimestamps)
 }
 
+export type TagStaleOrExpired =
+  // FRESH
+  | { stale: false; expired: false }
+  // STALE
+  | { stale: true; expired: false; expireAt: number }
+  // EXPIRED (should be treated similarly to MISS)
+  | { stale: true; expired: true }
+
 /**
- * Check if any of the tags were invalidated since the given timestamp
+ * Check if any of the tags expired since the given timestamp
  */
-export function isAnyTagStale(tags: string[], timestamp: number): Promise<boolean> {
+export function isAnyTagStaleOrExpired(
+  tags: string[],
+  timestamp: number,
+): Promise<TagStaleOrExpired> {
   if (tags.length === 0 || !timestamp) {
-    return Promise.resolve(false)
+    return Promise.resolve({ stale: false, expired: false })
   }
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
@@ -60,37 +68,74 @@ export function isAnyTagStale(tags: string[], timestamp: number): Promise<boolea
   //    but we will only do actual blob read once withing a single request due to cacheStore
   //    memoization.
   //    Additionally, we will resolve the promise as soon as we find first
-  //    stale tag, so that we don't wait for all of them to resolve (but keep all
+  //    expired tag, so that we don't wait for all of them to resolve (but keep all
   //    running in case future `CacheHandler.get` calls would be able to use results).
-  //    "Worst case" scenario is none of tag was invalidated in which case we need to wait
-  //    for all blob store checks to finish before we can be certain that no tag is stale.
-  return new Promise<boolean>((resolve, reject) => {
-    const tagManifestPromises: Promise<boolean>[] = []
+  //    "Worst case" scenario is none of tag was expired in which case we need to wait
+  //    for all blob store checks to finish before we can be certain that no tag is expired.
+  return new Promise<TagStaleOrExpired>((resolve, reject) => {
+    const tagManifestPromises: Promise<TagStaleOrExpired>[] = []
 
     for (const tag of tags) {
-      const lastRevalidationTimestampPromise = getTagRevalidatedAt(tag, cacheStore)
+      const tagManifestPromise = getTagManifest(tag, cacheStore)
 
       tagManifestPromises.push(
-        lastRevalidationTimestampPromise.then((lastRevalidationTimestamp) => {
-          if (!lastRevalidationTimestamp) {
+        tagManifestPromise.then((tagManifest) => {
+          if (!tagManifest) {
             // tag was never revalidated
-            return false
+            return { stale: false, expired: false }
           }
-          const isStale = lastRevalidationTimestamp >= timestamp
-          if (isStale) {
-            // resolve outer promise immediately if any of the tags is stale
-            resolve(true)
-            return true
+          const stale = tagManifest.staleAt >= timestamp
+          const expired = tagManifest.expiredAt >= timestamp && tagManifest.expiredAt <= Date.now()
+
+          if (expired && stale) {
+            const expiredResult: TagStaleOrExpired = {
+              stale,
+              expired,
+            }
+            // resolve outer promise immediately if any of the tags is expired
+            resolve(expiredResult)
+            return expiredResult
           }
-          return false
+
+          if (stale) {
+            const staleResult: TagStaleOrExpired = {
+              stale,
+              expired,
+              expireAt: tagManifest.expiredAt,
+            }
+            return staleResult
+          }
+          return { stale: false, expired: false }
         }),
       )
     }
 
-    // make sure we resolve promise after all blobs are checked (if we didn't resolve as stale yet)
+    // make sure we resolve promise after all blobs are checked (if we didn't resolve as expired yet)
     Promise.all(tagManifestPromises)
-      .then((tagManifestAreStale) => {
-        resolve(tagManifestAreStale.some((tagIsStale) => tagIsStale))
+      .then((tagManifestsAreStaleOrExpired) => {
+        let result: TagStaleOrExpired = { stale: false, expired: false }
+
+        for (const tagResult of tagManifestsAreStaleOrExpired) {
+          if (tagResult.expired) {
+            // if any of the tags is expired, the whole thing is expired
+            result = tagResult
+            break
+          }
+
+          if (tagResult.stale) {
+            result = {
+              stale: true,
+              expired: false,
+              expireAt:
+                // make sure to use expireAt that is lowest of all tags
+                result.stale && !result.expired && typeof result.expireAt === 'number'
+                  ? Math.min(result.expireAt, tagResult.expireAt)
+                  : tagResult.expireAt,
+            }
+          }
+        }
+
+        resolve(result)
       })
       .catch(reject)
   })
@@ -122,15 +167,21 @@ export function purgeEdgeCache(tagOrTags: string | string[]): Promise<void> {
   })
 }
 
-async function doRevalidateTagAndPurgeEdgeCache(tags: string[]): Promise<void> {
-  getLogger().withFields({ tags }).debug('doRevalidateTagAndPurgeEdgeCache')
+async function doRevalidateTagAndPurgeEdgeCache(
+  tags: string[],
+  durations?: { expire?: number },
+): Promise<void> {
+  getLogger().withFields({ tags, durations }).debug('doRevalidateTagAndPurgeEdgeCache')
 
   if (tags.length === 0) {
     return
   }
 
+  const now = Date.now()
+
   const tagManifest: TagManifest = {
-    revalidatedAt: Date.now(),
+    staleAt: now,
+    expiredAt: now + (durations?.expire ? durations.expire * 1000 : 0),
   }
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
@@ -148,10 +199,13 @@ async function doRevalidateTagAndPurgeEdgeCache(tags: string[]): Promise<void> {
   await purgeEdgeCache(tags)
 }
 
-export function markTagsAsStaleAndPurgeEdgeCache(tagOrTags: string | string[]) {
+export function markTagsAsStaleAndPurgeEdgeCache(
+  tagOrTags: string | string[],
+  durations?: { expire?: number },
+) {
   const tags = getCacheTagsFromTagOrTags(tagOrTags)
 
-  const revalidateTagPromise = doRevalidateTagAndPurgeEdgeCache(tags)
+  const revalidateTagPromise = doRevalidateTagAndPurgeEdgeCache(tags, durations)
 
   const requestContext = getRequestContext()
   if (requestContext) {

@@ -10,8 +10,8 @@ import type {
 
 import { getLogger } from './request-context.cjs'
 import {
-  getMostRecentTagRevalidationTimestamp,
-  isAnyTagStale,
+  getMostRecentTagExpirationTimestamp,
+  isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
 } from './tags-handler.cjs'
 import { getTracer } from './tracer.cjs'
@@ -127,7 +127,9 @@ export const NetlifyDefaultUseCacheHandler = {
           return undefined
         }
 
-        if (await isAnyTagStale(entry.tags, entry.timestamp)) {
+        const { stale } = await isAnyTagStaleOrExpired(entry.tags, entry.timestamp)
+
+        if (stale) {
           getLogger()
             .withFields({ cacheKey, ttl, status: 'STALE BY TAG' })
             .debug(`[NetlifyDefaultUseCacheHandler] get result`)
@@ -229,7 +231,7 @@ export const NetlifyDefaultUseCacheHandler = {
           tags,
         })
 
-        const expiration = await getMostRecentTagRevalidationTimestamp(tags)
+        const expiration = await getMostRecentTagExpirationTimestamp(tags)
 
         getLogger()
           .withFields({ tags, expiration })
