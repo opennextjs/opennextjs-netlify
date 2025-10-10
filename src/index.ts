@@ -1,8 +1,7 @@
 import { rm } from 'fs/promises'
 
 import type { NetlifyPluginOptions } from '@netlify/build'
-import { trace } from '@opentelemetry/api'
-import { wrapTracer } from '@opentelemetry/api/experimental'
+import { getTracer, withActiveSpan } from '@netlify/otel'
 
 import { restoreBuildCache, saveBuildCache } from './build/cache.js'
 import { copyPrerenderedContent } from './build/content/prerendered.js'
@@ -27,7 +26,7 @@ import {
 const skipPlugin =
   process.env.NETLIFY_NEXT_PLUGIN_SKIP === 'true' || process.env.NETLIFY_NEXT_PLUGIN_SKIP === '1'
 const skipText = 'Skipping Next.js plugin due to NETLIFY_NEXT_PLUGIN_SKIP environment variable.'
-const tracer = wrapTracer(trace.getTracer('Next.js runtime'))
+const tracer = getTracer('Next.js runtime')
 
 export const onPreDev = async (options: NetlifyPluginOptions) => {
   if (skipPlugin) {
@@ -35,7 +34,7 @@ export const onPreDev = async (options: NetlifyPluginOptions) => {
     return
   }
 
-  await tracer.withActiveSpan('onPreDev', async () => {
+  await withActiveSpan(tracer, 'onPreDev', async () => {
     const context = new PluginContext(options)
 
     // Blob files left over from `ntl build` interfere with `ntl dev` when working with regional blobs
@@ -49,7 +48,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     return
   }
 
-  await tracer.withActiveSpan('onPreBuild', async () => {
+  await withActiveSpan(tracer, 'onPreBuild', async () => {
     // Enable Next.js standalone mode at build time
     process.env.NEXT_PRIVATE_STANDALONE = 'true'
     const ctx = new PluginContext(options)
@@ -71,12 +70,12 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
     return
   }
 
-  await tracer.withActiveSpan('onBuild', async (span) => {
+  await withActiveSpan(tracer, 'onBuild', async (span) => {
     const ctx = new PluginContext(options)
 
     verifyPublishDir(ctx)
 
-    span.setAttribute('next.buildConfig', JSON.stringify(ctx.buildConfig))
+    span?.setAttribute('next.buildConfig', JSON.stringify(ctx.buildConfig))
 
     // only save the build cache if not run via the CLI
     if (!options.constants.IS_LOCAL) {
@@ -109,7 +108,7 @@ export const onPostBuild = async (options: NetlifyPluginOptions) => {
     return
   }
 
-  await tracer.withActiveSpan('onPostBuild', async () => {
+  await withActiveSpan(tracer, 'onPostBuild', async () => {
     await publishStaticDir(new PluginContext(options))
   })
 }
@@ -120,7 +119,7 @@ export const onSuccess = async () => {
     return
   }
 
-  await tracer.withActiveSpan('onSuccess', async () => {
+  await withActiveSpan(tracer, 'onSuccess', async () => {
     const prewarm = [process.env.DEPLOY_URL, process.env.DEPLOY_PRIME_URL, process.env.URL].filter(
       // If running locally then the deploy ID is a placeholder value. Filtering for `https://0--` removes it.
       (url?: string): url is string => Boolean(url && !url.startsWith('https://0--')),
@@ -135,7 +134,7 @@ export const onEnd = async (options: NetlifyPluginOptions) => {
     return
   }
 
-  await tracer.withActiveSpan('onEnd', async () => {
+  await withActiveSpan(tracer, 'onEnd', async () => {
     await unpublishStaticDir(new PluginContext(options))
   })
 }

@@ -2,7 +2,7 @@ import type { OutgoingHttpHeaders } from 'http'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
 import type { Context } from '@netlify/functions'
-import { Span } from '@opentelemetry/api'
+import type { Span } from '@netlify/otel/opentelemetry'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
 import { getRunConfig, setRunConfig } from '../config.js'
@@ -17,7 +17,7 @@ import { nextResponseProxy } from '../revalidate.js'
 import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
 import { getLogger, type RequestContext } from './request-context.cjs'
-import { getTracer, recordWarning } from './tracer.cjs'
+import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
 // make use of global fetch before Next.js applies any patching
@@ -61,13 +61,13 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
 export default async (
   request: Request,
   _context: Context,
-  topLevelSpan: Span,
+  topLevelSpan: Span | undefined,
   requestContext: RequestContext,
 ) => {
   const tracer = getTracer()
 
   if (!nextHandler) {
-    await tracer.withActiveSpan('initialize next server', async () => {
+    await withActiveSpan(tracer, 'initialize next server', async () => {
       const { getMockedRequestHandler } = await nextImportPromise
       const url = new URL(request.url)
 
@@ -80,7 +80,7 @@ export default async (
     })
   }
 
-  return await tracer.withActiveSpan('generate response', async (span) => {
+  return await withActiveSpan(tracer, 'generate response', async (span) => {
     const { req, res } = toReqRes(request)
 
     // Work around a bug in http-proxy in next@<14.0.2
@@ -104,7 +104,7 @@ export default async (
       getLogger().withError(error).error('next handler error')
       console.error(error)
       resProxy.statusCode = 500
-      span.setAttribute('http.status_code', 500)
+      span?.setAttribute('http.status_code', 500)
       resProxy.end('Internal Server Error')
     })
 
@@ -113,7 +113,7 @@ export default async (
     const response = await toComputeResponse(resProxy)
 
     if (requestContext.responseCacheKey) {
-      topLevelSpan.setAttribute('responseCacheKey', requestContext.responseCacheKey)
+      topLevelSpan?.setAttribute('responseCacheKey', requestContext.responseCacheKey)
     }
 
     const nextCache = response.headers.get('x-nextjs-cache')
@@ -135,7 +135,7 @@ export default async (
 
     const netlifyVary = response.headers.get('netlify-vary') ?? undefined
     const netlifyCdnCacheControl = response.headers.get('netlify-cdn-cache-control') ?? undefined
-    topLevelSpan.setAttributes({
+    topLevelSpan?.setAttributes({
       'x-nextjs-cache': nextCache ?? undefined,
       isServedFromNextCache,
       netlifyVary,
@@ -151,7 +151,7 @@ export default async (
           (!isRSCRequest && contentType?.includes('text/html'))) ??
         false
 
-      topLevelSpan.setAttributes({
+      topLevelSpan?.setAttributes({
         isRSCRequest,
         isCacheableAppPage: true,
         contentType,
