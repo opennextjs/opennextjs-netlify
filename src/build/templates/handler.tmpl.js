@@ -1,3 +1,5 @@
+import { withActiveSpan } from '@netlify/otel'
+
 import {
   createRequestContext,
   runWithRequestContext,
@@ -13,8 +15,8 @@ export default async function handler(req, context) {
   const tracer = getTracer()
 
   const handlerResponse = await runWithRequestContext(requestContext, () => {
-    return tracer.withActiveSpan('Next.js Server Handler', async (span) => {
-      span.setAttributes({
+    return withActiveSpan(tracer, 'Next.js Server Handler', async (span) => {
+      span?.setAttributes({
         'account.id': context.account.id,
         'deploy.id': context.deploy.id,
         'request.id': context.requestId,
@@ -26,7 +28,7 @@ export default async function handler(req, context) {
         cwd: process.cwd(),
       })
       const response = await serverHandler(req, context, span, requestContext)
-      span.setAttributes({
+      span?.setAttributes({
         'http.status_code': response.status,
       })
       return response
