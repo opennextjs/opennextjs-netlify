@@ -234,7 +234,7 @@ test('requesting a non existing page route that needs to be fetched from the blo
   // would not ... and then https://github.com/vercel/next.js/pull/69802 changed it back again
   // (14.2.10 and canary.147)
   const shouldHavePrivateDirective = nextVersionSatisfies(
-    '<14.2.4 || >=14.2.10 <15.0.0-canary.24 || ^15.0.0-canary.147',
+    '<14.2.4 || >=14.2.10 <15.0.0-canary.24 || >=15.0.0-canary.147',
   )
 
   expect(headers['debug-netlify-cdn-cache-control']).toBe(
