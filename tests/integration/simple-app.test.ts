@@ -36,9 +36,11 @@ import {
 } from '../utils/helpers.js'
 import {
   hasDefaultTurbopackBuilds,
+  isExperimentalPPRHardDeprecated,
   nextVersionSatisfies,
   shouldHaveAppRouterGlobalErrorInPrerenderManifest,
   shouldHaveAppRouterNotFoundInPrerenderManifest,
+  shouldHaveSlashIndexTagForIndexPage,
 } from '../utils/next-version-helpers.mjs'
 
 const mockedCp = cp as Mock<(typeof import('node:fs/promises'))['cp']>
@@ -205,7 +207,11 @@ test<FixtureTestContext>('index should be normalized within the cacheHandler and
   await runPlugin(ctx)
   const index = await invokeFunction(ctx, { url: '/' })
   expect(index.statusCode).toBe(200)
-  expect(index.headers?.['netlify-cache-tag']).toBe('_N_T_/layout,_N_T_/page,_N_T_/')
+  expect(index.headers?.['netlify-cache-tag']).toBe(
+    shouldHaveSlashIndexTagForIndexPage()
+      ? '_N_T_/layout,_N_T_/page,_N_T_/,_N_T_/index'
+      : '_N_T_/layout,_N_T_/page,_N_T_/',
+  )
 })
 
 // with 15.0.0-canary.187 and later Next.js no longer produce `stale-while-revalidate` directive
@@ -398,7 +404,7 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
         '/1',
         '/2',
         '/404',
-        '/[dynamic]',
+        isExperimentalPPRHardDeprecated() ? undefined : '/[dynamic]',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/index',
