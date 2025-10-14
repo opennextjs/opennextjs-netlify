@@ -2,7 +2,8 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
-import { getTracer, withActiveSpan } from '@netlify/otel'
+import { trace } from '@opentelemetry/api'
+import { wrapTracer } from '@opentelemetry/api/experimental'
 import { glob } from 'fast-glob'
 
 import {
@@ -12,11 +13,11 @@ import {
 } from '../content/server.js'
 import { PluginContext, SERVER_HANDLER_NAME } from '../plugin-context.js'
 
-const tracer = getTracer('Next runtime')
+const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
 /** Copies the runtime dist folder to the lambda */
 const copyHandlerDependencies = async (ctx: PluginContext) => {
-  await withActiveSpan(tracer, 'copyHandlerDependencies', async (span) => {
+  await tracer.withActiveSpan('copyHandlerDependencies', async (span) => {
     const promises: Promise<void>[] = []
     // if the user specified some files to include in the lambda
     // we need to copy them to the functions-internal folder
@@ -30,7 +31,7 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
       posixJoin(ctx.relativeAppDir, '.env.production.local'),
     )
 
-    span?.setAttribute('next.includedFiles', includedFiles.join(','))
+    span.setAttribute('next.includedFiles', includedFiles.join(','))
 
     const resolvedFiles = await Promise.all(
       includedFiles.map((globPattern) => glob(globPattern, { cwd: process.cwd() })),
@@ -136,7 +137,7 @@ export const clearStaleServerHandlers = async (ctx: PluginContext) => {
  * Create a Netlify function to run the Next.js server
  */
 export const createServerHandler = async (ctx: PluginContext) => {
-  await withActiveSpan(tracer, 'createServerHandler', async () => {
+  await tracer.withActiveSpan('createServerHandler', async () => {
     await mkdir(join(ctx.serverHandlerRuntimeModulesDir), { recursive: true })
 
     await copyNextServerCode(ctx)

@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
-import { getTracer, withActiveSpan } from '@netlify/otel'
+import { trace } from '@opentelemetry/api'
+import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
 
 import type { HtmlBlob } from '../../shared/blob-types.cjs'
@@ -10,13 +11,13 @@ import { encodeBlobKey } from '../../shared/blobkey.js'
 import { PluginContext } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 
-const tracer = getTracer('Next runtime')
+const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
 /**
  * Assemble the static content for being uploaded to the blob storage
  */
 export const copyStaticContent = async (ctx: PluginContext): Promise<void> => {
-  return withActiveSpan(tracer, 'copyStaticContent', async () => {
+  return tracer.withActiveSpan('copyStaticContent', async () => {
     const srcDir = join(ctx.publishDir, 'server/pages')
     const destDir = ctx.blobDir
 
@@ -57,7 +58,7 @@ export const copyStaticContent = async (ctx: PluginContext): Promise<void> => {
  * Copy static content to the static dir so it is uploaded to the CDN
  */
 export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
-  return withActiveSpan(tracer, 'copyStaticAssets', async (span): Promise<void> => {
+  return tracer.withActiveSpan('copyStaticAssets', async (span): Promise<void> => {
     try {
       await rm(ctx.staticDir, { recursive: true, force: true })
       const { basePath } = await ctx.getRoutesManifest()
@@ -72,7 +73,7 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
         })
       }
     } catch (error) {
-      span?.end()
+      span.end()
       ctx.failBuild('Failed copying static assets', error)
     }
   })
@@ -93,7 +94,7 @@ export const setHeadersConfig = async (ctx: PluginContext): Promise<void> => {
 }
 
 export const copyStaticExport = async (ctx: PluginContext): Promise<void> => {
-  await withActiveSpan(tracer, 'copyStaticExport', async () => {
+  await tracer.withActiveSpan('copyStaticExport', async () => {
     if (!ctx.exportDetail?.outDirectory) {
       ctx.failBuild('Export directory not found')
     }

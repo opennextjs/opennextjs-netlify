@@ -64,6 +64,7 @@
     "@netlify/otel": "^4.3.0",
     "@netlify/serverless-functions-api": "^2.5.0",
     "@netlify/zip-it-and-ship-it": "^14.1.8",
+    "@opentelemetry/api": "^1.8.0",
     "@playwright/test": "^1.43.1",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^20.12.7",

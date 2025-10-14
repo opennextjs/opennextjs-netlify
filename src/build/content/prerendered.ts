@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { getTracer, withActiveSpan } from '@netlify/otel'
+import { trace } from '@opentelemetry/api'
+import { wrapTracer } from '@opentelemetry/api/experimental'
 import { glob } from 'fast-glob'
 import type { RouteMetadata } from 'next-with-cache-handler-v2/dist/export/routes/types.js'
 import pLimit from 'p-limit'
@@ -20,7 +21,7 @@ import type {
 import type { PluginContext } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 
-const tracer = getTracer('Next runtime')
+const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
 /**
  * Write a cache entry to the blob upload directory.
@@ -157,7 +158,7 @@ const buildFetchCacheValue = async (
  * Upload prerendered content to the blob store
  */
 export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> => {
-  return withActiveSpan(tracer, 'copyPrerenderedContent', async () => {
+  return tracer.withActiveSpan('copyPrerenderedContent', async () => {
     try {
       // ensure the blob directory exists
       await mkdir(ctx.blobDir, { recursive: true })

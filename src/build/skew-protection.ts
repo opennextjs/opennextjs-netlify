@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import type { Span } from '@netlify/otel/opentelemetry'
+import type { Span } from '@opentelemetry/api'
 
 import type { PluginContext } from './plugin-context.js'
 
@@ -87,10 +87,10 @@ export function shouldEnableSkewProtection(ctx: PluginContext) {
   }
 }
 
-export const setSkewProtection = async (ctx: PluginContext, span?: Span) => {
+export const setSkewProtection = async (ctx: PluginContext, span: Span) => {
   const { enabled, enabledOrDisabledReason } = shouldEnableSkewProtection(ctx)
 
-  span?.setAttribute('skewProtection', enabledOrDisabledReason)
+  span.setAttribute('skewProtection', enabledOrDisabledReason)
 
   if (!enabled) {
     if (enabledOrDisabledReason === EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID_ENV_VAR) {

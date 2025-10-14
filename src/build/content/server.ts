@@ -13,7 +13,8 @@ import { createRequire } from 'node:module'
 import { dirname, join, resolve, sep } from 'node:path'
 import { join as posixJoin, sep as posixSep } from 'node:path/posix'
 
-import { getTracer, withActiveSpan } from '@netlify/otel'
+import { trace } from '@opentelemetry/api'
+import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
 import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
 import type { FunctionsConfigManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
@@ -23,7 +24,7 @@ import type { RunConfig } from '../../run/config.js'
 import { RUN_CONFIG_FILE } from '../../run/constants.js'
 import type { PluginContext, RequiredServerFilesManifest } from '../plugin-context.js'
 
-const tracer = getTracer('Next runtime')
+const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
 const toPosixPath = (path: string) => path.split(sep).join(posixSep)
 
@@ -35,7 +36,7 @@ function isError(error: unknown): error is NodeJS.ErrnoException {
  * Copy App/Pages Router Javascript needed by the server handler
  */
 export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
-  await withActiveSpan(tracer, 'copyNextServerCode', async () => {
+  await tracer.withActiveSpan('copyNextServerCode', async () => {
     // update the dist directory inside the required-server-files.json to work with
     // nx monorepos and other setups where the dist directory is modified
     const reqServerFilesPath = join(
@@ -288,7 +289,7 @@ async function patchNextModules(
 }
 
 export const copyNextDependencies = async (ctx: PluginContext): Promise<void> => {
-  await withActiveSpan(tracer, 'copyNextDependencies', async () => {
+  await tracer.withActiveSpan('copyNextDependencies', async () => {
     const entries = await readdir(ctx.standaloneDir)
     const filter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
 
