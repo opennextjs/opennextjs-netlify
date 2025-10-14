@@ -196,6 +196,8 @@ test.describe('app router on-demand revalidation (pre Next 16 APIs)', () => {
 
 if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
   test.describe('app router on-demand revalidation (Next 16 APIs)', () => {
+    test.describe.configure({ mode: 'parallel' })
+
     for (const { label, prerendered, pagePathSuffix, tagSuffix, expectedH1Content } of [
       {
         label: 'prerendered page with static path',
