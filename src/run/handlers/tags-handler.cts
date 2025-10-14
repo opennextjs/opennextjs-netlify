@@ -32,11 +32,11 @@ export async function getMostRecentTagExpirationTimestamp(tags: string[]) {
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
 
-  const timestampsOrNulls = await Promise.all(tags.map((tag) => getTagManifest(tag, cacheStore)))
+  const manifestsOrNulls = await Promise.all(tags.map((tag) => getTagManifest(tag, cacheStore)))
 
-  const expirationTimestamps = timestampsOrNulls
+  const expirationTimestamps = manifestsOrNulls
     .filter((manifest) => manifest !== null)
-    .map((manifest) => manifest.expiredAt)
+    .map((manifest) => manifest.expireAt)
   if (expirationTimestamps.length === 0) {
     return 0
   }
@@ -57,7 +57,7 @@ export type TagStaleOrExpiredStatus =
 export function isAnyTagStaleOrExpired(
   tags: string[],
   timestamp: number,
-): Promise<TagStaleOrExpired> {
+): Promise<TagStaleOrExpiredStatus> {
   if (tags.length === 0 || !timestamp) {
     return Promise.resolve({ stale: false, expired: false })
   }
@@ -72,8 +72,8 @@ export function isAnyTagStaleOrExpired(
   //    running in case future `CacheHandler.get` calls would be able to use results).
   //    "Worst case" scenario is none of tag was expired in which case we need to wait
   //    for all blob store checks to finish before we can be certain that no tag is expired.
-  return new Promise<TagStaleOrExpired>((resolve, reject) => {
-    const tagManifestPromises: Promise<TagStaleOrExpired>[] = []
+  return new Promise<TagStaleOrExpiredStatus>((resolve, reject) => {
+    const tagManifestPromises: Promise<TagStaleOrExpiredStatus>[] = []
 
     for (const tag of tags) {
       const tagManifestPromise = getTagManifest(tag, cacheStore)
@@ -85,10 +85,10 @@ export function isAnyTagStaleOrExpired(
             return { stale: false, expired: false }
           }
           const stale = tagManifest.staleAt >= timestamp
-          const expired = tagManifest.expiredAt >= timestamp && tagManifest.expiredAt <= Date.now()
+          const expired = tagManifest.expireAt >= timestamp && tagManifest.expireAt <= Date.now()
 
           if (expired && stale) {
-            const expiredResult: TagStaleOrExpired = {
+            const expiredResult: TagStaleOrExpiredStatus = {
               stale,
               expired,
             }
@@ -98,10 +98,10 @@ export function isAnyTagStaleOrExpired(
           }
 
           if (stale) {
-            const staleResult: TagStaleOrExpired = {
+            const staleResult: TagStaleOrExpiredStatus = {
               stale,
               expired,
-              expireAt: tagManifest.expiredAt,
+              expireAt: tagManifest.expireAt,
             }
             return staleResult
           }
@@ -113,7 +113,7 @@ export function isAnyTagStaleOrExpired(
     // make sure we resolve promise after all blobs are checked (if we didn't resolve as expired yet)
     Promise.all(tagManifestPromises)
       .then((tagManifestsAreStaleOrExpired) => {
-        let result: TagStaleOrExpired = { stale: false, expired: false }
+        let result: TagStaleOrExpiredStatus = { stale: false, expired: false }
 
         for (const tagResult of tagManifestsAreStaleOrExpired) {
           if (tagResult.expired) {
@@ -181,7 +181,7 @@ async function doRevalidateTagAndPurgeEdgeCache(
 
   const tagManifest: TagManifest = {
     staleAt: now,
-    expiredAt: now + (durations?.expire ? durations.expire * 1000 : 0),
+    expireAt: now + (durations?.expire ? durations.expire * 1000 : 0),
   }
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })

@@ -29,7 +29,7 @@ import {
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
   purgeEdgeCache,
-  type TagStaleOrExpired,
+  type TagStaleOrExpiredStatus,
 } from './tags-handler.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'
 
@@ -505,7 +505,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     cacheEntry: NetlifyCacheHandlerValue,
     tags: string[] = [],
     softTags: string[] = [],
-  ): TagStaleOrExpired | Promise<TagStaleOrExpired> {
+  ): TagStaleOrExpiredStatus | Promise<TagStaleOrExpiredStatus> {
     let cacheTags: string[] = []
 
     if (cacheEntry.value?.kind === 'FETCH') {
