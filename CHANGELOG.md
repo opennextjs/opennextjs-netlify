@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.14.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.5...v5.14.0) (2025-10-14)
+
+
+### Features
+
+* skew protection ([#3147](https://github.com/opennextjs/opennextjs-netlify/issues/3147)) ([95be9b9](https://github.com/opennextjs/opennextjs-netlify/commit/95be9b99f7b889e39195c074b39a726981506ed0))
+* support revalidateTag with SWR behavior ([#3173](https://github.com/opennextjs/opennextjs-netlify/issues/3173)) ([d24f15e](https://github.com/opennextjs/opennextjs-netlify/commit/d24f15ee595be1d01f44504983b70b01f96bb1b1))
+
 ## [5.13.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.4...v5.13.5) (2025-10-06)
 
 
