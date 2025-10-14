@@ -8,7 +8,7 @@ export type TagManifest = {
   /**
    * Timestamp when tagged cache entry should no longer serve stale content.
    */
-  expiredAt: number
+  expireAt: number
 }
 
 export type HtmlBlob = {

@@ -35,7 +35,7 @@ export async function getMostRecentTagExpirationTimestamp(tags: string[]) {
   const timestampsOrNulls = await Promise.all(tags.map((tag) => getTagManifest(tag, cacheStore)))
 
   const expirationTimestamps = timestampsOrNulls
-    .filter((timestamp) => timestamp !== null)
+    .filter((manifest) => manifest !== null)
     .map((manifest) => manifest.expiredAt)
   if (expirationTimestamps.length === 0) {
     return 0
@@ -43,7 +43,7 @@ export async function getMostRecentTagExpirationTimestamp(tags: string[]) {
   return Math.max(...expirationTimestamps)
 }
 
-export type TagStaleOrExpired =
+export type TagStaleOrExpiredStatus =
   // FRESH
   | { stale: false; expired: false }
   // STALE
