@@ -31,7 +31,9 @@ const e2eOnlyFixtures = new Set([
   // see https://github.com/opennextjs/opennextjs-netlify/actions/runs/13268839161/job/37043172448?pr=2749#step:12:78
   'middleware-og',
   'middleware-single-matcher',
+  'next-16-tag-revalidation',
   'nx-integrated',
+  'skew-protection',
   'turborepo',
   'turborepo-npm',
   'unstable-cache',

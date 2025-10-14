@@ -25,7 +25,13 @@ import {
 } from '../storage/storage.cjs'
 
 import { getLogger, getRequestContext } from './request-context.cjs'
-import { isAnyTagStale, markTagsAsStaleAndPurgeEdgeCache, purgeEdgeCache } from './tags-handler.cjs'
+import {
+  isAnyTagStaleOrExpired,
+  markTagsAsStaleAndPurgeEdgeCache,
+  purgeEdgeCache,
+  type RevalidateTagDurations,
+  type TagStaleOrExpiredStatus,
+} from './tags-handler.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'
 
 let memoizedPrerenderManifest: PrerenderManifest
@@ -290,18 +296,25 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         return null
       }
 
-      const staleByTags = await this.checkCacheEntryStaleByTags(
+      const { stale: staleByTags, expired: expiredByTags } = await this.checkCacheEntryStaleByTags(
         blob,
         context.tags,
         context.softTags,
       )
 
-      if (staleByTags) {
-        span.addEvent('Stale', { staleByTags, key, ttl })
+      if (expiredByTags) {
+        span.addEvent('Expired', { expiredByTags, key, ttl })
         return null
       }
 
       this.captureResponseCacheLastModified(blob, key, span)
+
+      if (staleByTags) {
+        span.addEvent('Stale', { staleByTags, key, ttl })
+        // note that we modify this after we capture last modified to ensure that Age is correct
+        // but we still let Next.js know that entry is stale
+        blob.lastModified = -1 // indicate that the entry is stale
+      }
 
       // Next sets a kind/kindHint and fetchUrl for data requests, however fetchUrl was found to be most reliable across versions
       const isDataRequest = Boolean(context.fetchUrl)
@@ -477,8 +490,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     })
   }
 
-  async revalidateTag(tagOrTags: string | string[]) {
-    return markTagsAsStaleAndPurgeEdgeCache(tagOrTags)
+  async revalidateTag(tagOrTags: string | string[], durations?: RevalidateTagDurations) {
+    return markTagsAsStaleAndPurgeEdgeCache(tagOrTags, durations)
   }
 
   resetRequestCache() {
@@ -493,7 +506,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     cacheEntry: NetlifyCacheHandlerValue,
     tags: string[] = [],
     softTags: string[] = [],
-  ) {
+  ): TagStaleOrExpiredStatus | Promise<TagStaleOrExpiredStatus> {
     let cacheTags: string[] = []
 
     if (cacheEntry.value?.kind === 'FETCH') {
@@ -508,7 +521,10 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       cacheTags =
         (cacheEntry.value.headers?.[NEXT_CACHE_TAGS_HEADER] as string)?.split(/,|%2c/gi) || []
     } else {
-      return false
+      return {
+        stale: false,
+        expired: false,
+      }
     }
 
     // 1. Check if revalidateTags array passed from Next.js contains any of cacheEntry tags
@@ -516,14 +532,17 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       // TODO: test for this case
       for (const tag of this.revalidatedTags) {
         if (cacheTags.includes(tag)) {
-          return true
+          return {
+            stale: true,
+            expired: true,
+          }
         }
       }
     }
 
     // 2. If any in-memory tags don't indicate that any of tags was invalidated
     //    we will check blob store.
-    return isAnyTagStale(cacheTags, cacheEntry.lastModified)
+    return isAnyTagStaleOrExpired(cacheTags, cacheEntry.lastModified)
   }
 }
 
