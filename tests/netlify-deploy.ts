@@ -71,7 +71,7 @@ export class NextDeployInstance extends NextInstance {
       typeof this.files === 'string' &&
       this.files.includes('back-forward-cache') &&
       process.env.NEXT_RESOLVED_VERSION &&
-      satisfiesVersionRange(process.env.NEXT_RESOLVED_VERSION, '<=15.5.4')
+      satisfiesVersionRange(process.env.NEXT_RESOLVED_VERSION, '<15.6.0')
     ) {
       require('console').log('Pinning @types/react(-dom) for back-forward-cache test fixture')
       // back-forward-cache test fixture is failing types checking because:
