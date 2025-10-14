@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-import type { Span } from '@opentelemetry/api'
+import type { Span } from '@netlify/otel/opentelemetry'
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest'
 
 import type { PluginContext } from './plugin-context.js'
