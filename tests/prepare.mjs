@@ -33,6 +33,7 @@ const e2eOnlyFixtures = new Set([
   'middleware-single-matcher',
   'next-16-tag-revalidation',
   'nx-integrated',
+  'skew-protection',
   'turborepo',
   'turborepo-npm',
   'unstable-cache',

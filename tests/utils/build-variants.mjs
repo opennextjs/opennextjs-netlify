@@ -52,7 +52,10 @@ const variants = {
 }
 
 // build variants declared by args or build everything if not args provided
-const variantsToBuild = argv.length > 2 ? argv.slice(2) : Object.keys(variants)
+const variantsToBuild =
+  argv.length > 2 ? argv.slice(2).filter((arg) => !arg.startsWith('--')) : Object.keys(variants)
+
+const flags = argv.slice(2).filter((arg) => arg.startsWith('--'))
 
 /** @type {string[]} */
 const notExistingVariants = []
@@ -118,12 +121,6 @@ for (const variantToBuild of variantsToBuild) {
     }
   }
 
-  const buildCommand = variant.buildCommand ?? 'next build'
-  const distDir = variant.distDir ?? '.next'
-  console.warn(
-    `[build-variants] Building ${variantToBuild} variant with \`${buildCommand}\` to \`${distDir}\``,
-  )
-
   for (const [target, source] of Object.entries(variant.files ?? {})) {
     const targetBackup = `${target}.bak`
     // create backup
@@ -138,6 +135,17 @@ for (const variantToBuild of variantsToBuild) {
       await rm(targetBackup, { force: true })
     })
   }
+
+  if (flags.includes('--apply-file-changes-only')) {
+    console.warn(`[build-variants] Applied file changes for ${variantToBuild} variant`)
+    continue
+  }
+
+  const buildCommand = variant.buildCommand ?? 'next build'
+  const distDir = variant.distDir ?? '.next'
+  console.warn(
+    `[build-variants] Building ${variantToBuild} variant with \`${buildCommand}\` to \`${distDir}\``,
+  )
 
   const result = await execaCommand(buildCommand, {
     env: {

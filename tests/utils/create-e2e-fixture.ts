@@ -1,3 +1,4 @@
+import AdmZip from 'adm-zip'
 import { execaCommand } from 'execa'
 import fg from 'fast-glob'
 import { exec } from 'node:child_process'
@@ -45,6 +46,25 @@ interface E2EConfig {
    * Site ID to deploy to. Defaults to the `NETLIFY_SITE_ID` environment variable or a default site.
    */
   siteId?: string
+  /**
+   * If set to true, instead of using CLI to deploy, we will zip the source files and trigger build from zip.
+   */
+  useBuildbot?: boolean
+  /**
+   * Runs before deploying the site if defined.
+   */
+  onPreDeploy?: (isolatedFixtureRoot: string) => Promise<void>
+  /**
+   * Buildbot mode specific callback that will be called once the build starts.
+   * Useful for scenario of triggering multiple consecutive builds, to be able to schedule builds
+   * before previous one finish completely. If multiple builds are scheduled at the same time, some
+   * of them might be skipped and this callback allows to avoid this scenario.
+   */
+  onBuildStart?: () => Promise<void> | void
+  /**
+   * Environment variables that will be added to `netlify.toml` if set.
+   */
+  env?: Record<string, string>
 }
 
 /**
@@ -83,6 +103,9 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
     await setNextVersionInFixture(isolatedFixtureRoot, NEXT_VERSION)
     await installRuntime(packageName, isolatedFixtureRoot, config)
     await verifyFixture(isolatedFixtureRoot, config)
+    await config.onPreDeploy?.(isolatedFixtureRoot)
+
+    const deploySite = config.useBuildbot ? deploySiteWithBuildbot : deploySiteWithCLI
 
     const result = await deploySite(isolatedFixtureRoot, config)
 
@@ -160,6 +183,13 @@ async function buildAndPackRuntime(
       `[build]
 command = "${buildCommand}"
 publish = "${publishDirectory ?? join(siteRelDir, '.next')}"
+${
+  config.env
+    ? `[build.environment]\n${Object.entries(config.env)
+        .map(([key, value]) => `${key} = "${value}"`)
+        .join('\n')}`
+    : ''
+}
 
 [[plugins]]
 package = "${name}"
@@ -263,7 +293,7 @@ async function verifyFixture(isolatedFixtureRoot: string, { expectedCliVersion }
   }
 }
 
-async function deploySite(
+export async function deploySiteWithCLI(
   isolatedFixtureRoot: string,
   { packagePath, cwd = '', siteId = SITE_ID }: E2EConfig,
 ): Promise<DeployResult> {
@@ -296,6 +326,91 @@ async function deploySite(
   }
 }
 
+export async function deploySiteWithBuildbot(
+  isolatedFixtureRoot: string,
+  { packagePath, siteId = SITE_ID, publishDirectory = '.next', onBuildStart }: E2EConfig,
+): Promise<DeployResult> {
+  if (packagePath) {
+    // It's likely possible to support this, just skipping implementing it until there's a need
+    // throwing just to be explicit that this was not done to avoid potential confusion if things
+    // don't work
+    throw new Error('packagePath is not currently supported when deploying with buildbot')
+  }
+
+  if (!process.env.NETLIFY_AUTH_TOKEN) {
+    // we use CLI (ntl api) for most of operations, but build zip upload seems impossible with CLI
+    // and we do need to use API directly and we do need token for that
+    throw new Error('NETLIFY_AUTH_TOKEN is required for buildbot deploy, but it was not set')
+  }
+
+  console.log(`🚀 Packing source files and triggering deploy`)
+
+  const newZip = new AdmZip()
+  newZip.addLocalFolder(isolatedFixtureRoot, '', (entry) => {
+    if (
+      // don't include node_modules / .git / publish dir in zip
+      entry.startsWith('node_modules') ||
+      entry.startsWith('.git') ||
+      entry.startsWith(publishDirectory)
+    ) {
+      return false
+    }
+    return true
+  })
+
+  const result = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}/builds`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/zip',
+      Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
+    },
+    // @ts-expect-error sigh, it works
+    body: newZip.toBuffer(),
+  })
+  const { deploy_id } = await result.json()
+
+  let didRunOnBuildStartCallback = false
+  const runOnBuildStartCallbackOnce = onBuildStart
+    ? () => {
+        if (!didRunOnBuildStartCallback) {
+          didRunOnBuildStartCallback = true
+          return onBuildStart()
+        }
+      }
+    : () => {}
+
+  // poll for status
+  while (true) {
+    const { stdout } = await execaCommand(
+      `npx netlify api getDeploy --data=${JSON.stringify({ deploy_id })}`,
+    )
+    const { state } = JSON.parse(stdout)
+
+    if (state === 'error' || state === 'rejected') {
+      await runOnBuildStartCallbackOnce()
+      throw new Error(
+        `The deploy failed https://app.netlify.com/projects/${siteId}/deploys/${deploy_id}`,
+      )
+    }
+    if (state === 'ready') {
+      await runOnBuildStartCallbackOnce()
+      break
+    }
+
+    if (state === 'building') {
+      await runOnBuildStartCallbackOnce()
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5000))
+  }
+
+  return {
+    deployID: deploy_id,
+    url: `https://${deploy_id}--${siteId}.netlify.app`, // this is not nice, but it does work
+    logs: '',
+  }
+}
+
 export async function deleteDeploy(deployID?: string): Promise<void> {
   if (!deployID) {
     return
@@ -315,8 +430,36 @@ async function cleanup(dest: string, deployId?: string): Promise<void> {
   await Promise.allSettled([deleteDeploy(deployId), rm(dest, { recursive: true, force: true })])
 }
 
-function getBuildFixtureVariantCommand(variantName: string) {
+export function getBuildFixtureVariantCommand(variantName: string) {
   return `node ${fileURLToPath(new URL(`./build-variants.mjs`, import.meta.url))} ${variantName}`
+}
+
+export async function createSite(siteConfig?: { name: string }) {
+  const cmd = `npx netlify api createSiteInTeam --data=${JSON.stringify({
+    account_slug: 'netlify-integration-testing',
+    body: siteConfig ?? {},
+  })}`
+
+  const { stdout } = await execaCommand(cmd)
+  const { site_id, ssl_url, admin_url } = JSON.parse(stdout)
+
+  console.log(`🚀 Created site ${ssl_url} / ${admin_url}`)
+
+  return {
+    siteId: site_id as string,
+    url: ssl_url as string,
+    adminUrl: admin_url as string,
+  }
+}
+
+export async function deleteSite(siteId: string) {
+  const cmd = `npx netlify api deleteSite --data=${JSON.stringify({ site_id: siteId })}`
+  await execaCommand(cmd)
+}
+
+export async function publishDeploy(siteId: string, deployID: string) {
+  const cmd = `npx netlify api restoreSiteDeploy --data=${JSON.stringify({ site_id: siteId, deploy_id: deployID })}`
+  await execaCommand(cmd)
 }
 
 export const fixtureFactories = {
