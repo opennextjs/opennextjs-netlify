@@ -29,6 +29,7 @@ import {
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
   purgeEdgeCache,
+  type RevalidateTagDurations,
   type TagStaleOrExpiredStatus,
 } from './tags-handler.cjs'
 import { getTracer, recordWarning } from './tracer.cjs'
@@ -489,7 +490,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     })
   }
 
-  async revalidateTag(tagOrTags: string | string[], durations?: { expire?: number }) {
+  async revalidateTag(tagOrTags: string | string[], durations?: RevalidateTagDurations) {
     return markTagsAsStaleAndPurgeEdgeCache(tagOrTags, durations)
   }
 

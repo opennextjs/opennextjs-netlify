@@ -167,9 +167,18 @@ export function purgeEdgeCache(tagOrTags: string | string[]): Promise<void> {
   })
 }
 
+// shape of this type comes from Next.js https://github.com/vercel/next.js/blob/fffa2831b61fa74852736eeaad2f17fbdd553bce/packages/next/src/server/lib/incremental-cache/index.ts#L78
+// and we use it internally
+export type RevalidateTagDurations = {
+  /**
+   * Number of seconds after which tagged cache entries should no longer serve stale content.
+   */
+  expire?: number
+}
+
 async function doRevalidateTagAndPurgeEdgeCache(
   tags: string[],
-  durations?: { expire?: number },
+  durations?: RevalidateTagDurations,
 ): Promise<void> {
   getLogger().withFields({ tags, durations }).debug('doRevalidateTagAndPurgeEdgeCache')
 
@@ -201,7 +210,7 @@ async function doRevalidateTagAndPurgeEdgeCache(
 
 export function markTagsAsStaleAndPurgeEdgeCache(
   tagOrTags: string | string[],
-  durations?: { expire?: number },
+  durations?: RevalidateTagDurations,
 ) {
   const tags = getCacheTagsFromTagOrTags(tagOrTags)
 
