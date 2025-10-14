@@ -17,6 +17,7 @@ import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/ed
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
 import { setImageConfig } from './build/image-cdn.js'
 import { PluginContext } from './build/plugin-context.js'
+import { setSkewProtection } from './build/skew-protection.js'
 import {
   verifyAdvancedAPIRoutes,
   verifyNetlifyFormsWorkaround,
@@ -48,7 +49,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     return
   }
 
-  await withActiveSpan(tracer, 'onPreBuild', async () => {
+  await withActiveSpan(tracer, 'onPreBuild', async (span) => {
     // Enable Next.js standalone mode at build time
     process.env.NEXT_PRIVATE_STANDALONE = 'true'
     const ctx = new PluginContext(options)
@@ -61,6 +62,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     } else {
       await restoreBuildCache(ctx)
     }
+    await setSkewProtection(ctx, span)
   })
 }
 
