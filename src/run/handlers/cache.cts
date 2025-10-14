@@ -452,7 +452,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   async set(...args: Parameters<CacheHandlerForMultipleVersions['set']>) {
-    return this.tracer?.withActiveSpan('set cache key', async (span: Span) => {
+    return withActiveSpan(this.tracer, 'set cache key', async (span?: Span) => {
       const [key, data, context] = args
       const lastModified = Date.now()
       span?.setAttributes({ key, lastModified })
