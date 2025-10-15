@@ -21,6 +21,7 @@ export type RequestContext = {
   serverTiming?: string
   routeHandlerRevalidate?: NetlifyCachedRouteValue['revalidate']
   pageHandlerRevalidate?: NetlifyCachedRouteValue['revalidate']
+  ongoingRevalidations?: Map<string, Promise<void>>
   /**
    * Track promise running in the background and need to be waited for.
    * Uses `context.waitUntil` if available, otherwise stores promises to
