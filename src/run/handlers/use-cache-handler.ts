@@ -5,14 +5,16 @@ import type {
   CacheEntry,
   // only supporting latest variant (https://github.com/vercel/next.js/pull/76687)
   // first released in v15.3.0-canary.13
-  CacheHandlerV2 as CacheHandler,
+  CacheHandlerV2,
 } from 'next-with-cache-handler-v2/dist/server/lib/cache-handlers/types.js'
+import type { CacheHandler as CacheHandlerWithUpdateTag } from 'next-with-cache-handler-v3/dist/server/lib/cache-handlers/types.js'
 
 import { getLogger } from './request-context.cjs'
 import {
   getMostRecentTagExpirationTimestamp,
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
+  RevalidateTagDurations,
 } from './tags-handler.cjs'
 import { getTracer } from './tracer.cjs'
 
@@ -38,6 +40,8 @@ type PrivateCacheEntry = {
 type CacheHandleLRUCache = LRUCache<string, PrivateCacheEntry>
 type PendingSets = Map<string, Promise<void>>
 
+type MultiVersionCacheHandler = CacheHandlerV2 & CacheHandlerWithUpdateTag
+
 const LRU_CACHE_GLOBAL_KEY = Symbol.for('nf-use-cache-handler-lru-cache')
 const PENDING_SETS_GLOBAL_KEY = Symbol.for('nf-use-cache-handler-pending-sets')
 const cacheHandlersSymbol = Symbol.for('@next/cache-handlers')
@@ -51,8 +55,8 @@ const extendedGlobalThis = globalThis as typeof globalThis & {
 
   // Used by Next.js to provide implementation of cache handlers
   [cacheHandlersSymbol]?: {
-    RemoteCache?: CacheHandler
-    DefaultCache?: CacheHandler
+    RemoteCache?: MultiVersionCacheHandler
+    DefaultCache?: MultiVersionCacheHandler
   }
 }
 
@@ -86,10 +90,10 @@ function getPendingSets(): PendingSets {
 const tmpResolvePendingBeforeCreatingAPromise = () => {}
 
 export const NetlifyDefaultUseCacheHandler = {
-  get(cacheKey: string): ReturnType<CacheHandler['get']> {
+  get(cacheKey: string): ReturnType<MultiVersionCacheHandler['get']> {
     return getTracer().withActiveSpan(
       'DefaultUseCacheHandler.get',
-      async (span): ReturnType<CacheHandler['get']> => {
+      async (span): ReturnType<MultiVersionCacheHandler['get']> => {
         getLogger().withFields({ cacheKey }).debug(`[NetlifyDefaultUseCacheHandler] get`)
         span.setAttributes({
           cacheKey,
@@ -127,45 +131,54 @@ export const NetlifyDefaultUseCacheHandler = {
           return undefined
         }
 
-        const { stale } = await isAnyTagStaleOrExpired(entry.tags, entry.timestamp)
+        const { stale, expired } = await isAnyTagStaleOrExpired(entry.tags, entry.timestamp)
 
-        if (stale) {
+        if (expired) {
           getLogger()
-            .withFields({ cacheKey, ttl, status: 'STALE BY TAG' })
+            .withFields({ cacheKey, ttl, status: 'EXPIRED BY TAG' })
             .debug(`[NetlifyDefaultUseCacheHandler] get result`)
 
           span.setAttributes({
-            cacheStatus: 'stale tag, discarded',
+            cacheStatus: 'expired tag, discarded',
             ttl,
           })
           return undefined
         }
 
+        let { revalidate, value } = entry
+        if (stale) {
+          revalidate = -1
+        }
+
         // returning entry will cause stream to be consumed
         // so we need to clone it first, so in-memory cache can
         // be used again
-        const [returnStream, newSaved] = entry.value.tee()
+        const [returnStream, newSaved] = value.tee()
         entry.value = newSaved
 
         getLogger()
-          .withFields({ cacheKey, ttl, status: 'HIT' })
+          .withFields({ cacheKey, ttl, status: stale ? 'STALE' : 'HIT' })
           .debug(`[NetlifyDefaultUseCacheHandler] get result`)
         span.setAttributes({
-          cacheStatus: 'hit',
+          cacheStatus: stale ? 'stale' : 'hit',
           ttl,
         })
 
         return {
           ...entry,
+          revalidate,
           value: returnStream,
         }
       },
     )
   },
-  set(cacheKey: string, pendingEntry: Promise<CacheEntry>): ReturnType<CacheHandler['set']> {
+  set(
+    cacheKey: string,
+    pendingEntry: Promise<CacheEntry>,
+  ): ReturnType<MultiVersionCacheHandler['set']> {
     return getTracer().withActiveSpan(
       'DefaultUseCacheHandler.set',
-      async (span): ReturnType<CacheHandler['set']> => {
+      async (span): ReturnType<MultiVersionCacheHandler['set']> => {
         getLogger().withFields({ cacheKey }).debug(`[NetlifyDefaultUseCacheHandler]: set`)
         span.setAttributes({
           cacheKey,
@@ -223,10 +236,15 @@ export const NetlifyDefaultUseCacheHandler = {
     // we would need to check more tags than current request needs
     // while blocking pipeline
   },
-  getExpiration: function (...tags: string[]): ReturnType<CacheHandler['getExpiration']> {
+  getExpiration: function (
+    // supporting both (...tags: string[]) and (tags: string[]) signatures
+    ...notNormalizedTags: string[] | string[][]
+  ): ReturnType<MultiVersionCacheHandler['getExpiration']> {
     return getTracer().withActiveSpan(
       'DefaultUseCacheHandler.getExpiration',
-      async (span): ReturnType<CacheHandler['getExpiration']> => {
+      async (span): ReturnType<MultiVersionCacheHandler['getExpiration']> => {
+        const tags = notNormalizedTags.flat()
+
         span.setAttributes({
           tags,
         })
@@ -244,10 +262,11 @@ export const NetlifyDefaultUseCacheHandler = {
       },
     )
   },
-  expireTags(...tags: string[]): ReturnType<CacheHandler['expireTags']> {
+  // this is for CacheHandlerV2
+  expireTags(...tags: string[]): ReturnType<MultiVersionCacheHandler['expireTags']> {
     return getTracer().withActiveSpan(
       'DefaultUseCacheHandler.expireTags',
-      async (span): ReturnType<CacheHandler['expireTags']> => {
+      async (span): ReturnType<MultiVersionCacheHandler['expireTags']> => {
         getLogger().withFields({ tags }).debug(`[NetlifyDefaultUseCacheHandler] expireTags`)
         span.setAttributes({
           tags,
@@ -257,7 +276,26 @@ export const NetlifyDefaultUseCacheHandler = {
       },
     )
   },
-} satisfies CacheHandler
+  // this is for CacheHandlerV3 / Next 16
+  updateTags(
+    tags: string[],
+    durations: RevalidateTagDurations,
+  ): ReturnType<MultiVersionCacheHandler['updateTags']> {
+    return getTracer().withActiveSpan(
+      'DefaultUseCacheHandler.updateTags',
+      async (span): ReturnType<MultiVersionCacheHandler['updateTags']> => {
+        getLogger()
+          .withFields({ tags, durations })
+          .debug(`[NetlifyDefaultUseCacheHandler] updateTags`)
+        span.setAttributes({
+          tags,
+          durations: JSON.stringify(durations),
+        })
+        await markTagsAsStaleAndPurgeEdgeCache(tags, durations)
+      },
+    )
+  },
+} satisfies MultiVersionCacheHandler
 
 export function configureUseCacheHandlers() {
   extendedGlobalThis[cacheHandlersSymbol] = {
