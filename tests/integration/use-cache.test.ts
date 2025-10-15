@@ -290,6 +290,54 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
                 pageComponentTimeShouldBeEqual: false,
               })
             })
+
+            test.skipIf(!nextVersionSatisfies('>=16.0.0-alpha.0'))<FixtureTestContext>(
+              'invalidating tag with SWR on one lambda result in invalidating them on all lambdas',
+              async () => {
+                const url = `${routeRoot}/different-lambdas-tag-invalidation`
+
+                const { invokeFunction: invokeFunctionLambda1 } = await loadSandboxedFunction(ctx)
+                const { invokeFunction: invokeFunctionLambda2 } = await loadSandboxedFunction(ctx)
+
+                const call1 = await invokeFunctionLambda1({ url })
+                expect(call1).not.toBeCacheableResponse()
+
+                await invokeFunctionLambda2({
+                  url: `/api/revalidate/${useCacheTagPrefix}/${url}?expire=5`,
+                })
+
+                const call2 = await invokeFunctionLambda1({ url })
+                expect(call2).toHaveExpectedCachingBehavior(
+                  call1,
+                  // if we hit before 5 second expire timeframe passes, we expect to get stale response
+                  expectedCachingBehaviorWhenUseCacheRegenerates,
+                )
+
+                const call3 = await invokeFunctionLambda1({ url })
+                expect(call3).toHaveExpectedCachingBehavior(call2, {
+                  // previous request should trigger revalidation in background and cause everything to be fresh on this request
+                  getDataTimeShouldBeEqual: false,
+                  resultWrapperComponentTimeShouldBeEqual: false,
+                  pageComponentTimeShouldBeEqual: false,
+                })
+
+                await invokeFunctionLambda2({
+                  url: `/api/revalidate/${useCacheTagPrefix}/${url}?expire=5`,
+                })
+
+                // let's sleep for expire period to test that expire period is honored
+                await new Promise((resolve) => setTimeout(resolve, 6000))
+
+                const call4 = await invokeFunctionLambda1({ url })
+                expect(call4).toHaveExpectedCachingBehavior(call3, {
+                  // we are not getting stale response here because we issued request after expire period
+                  // so everything should be fresh
+                  getDataTimeShouldBeEqual: false,
+                  resultWrapperComponentTimeShouldBeEqual: false,
+                  pageComponentTimeShouldBeEqual: false,
+                })
+              },
+            )
           })
 
           describe('TTL=5 seconds', () => {
