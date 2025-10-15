@@ -214,10 +214,30 @@ export function markTagsAsStaleAndPurgeEdgeCache(
 ) {
   const tags = getCacheTagsFromTagOrTags(tagOrTags)
 
+  // Next.js is calling classic CacheHandler.revalidateTag and 'use cache' CacheHandler expireTags/updateTags separately
+  // this results in duplicate work being done (it doesn't cause problems, but it is inefficient)
+  // See https://github.com/vercel/next.js/blob/8cab15c0c947a71eb8606ba29da719a2e121fc88/packages/next/src/server/revalidation-utils.ts#L170-L180
+  // Deduping those within context of a single request might catch unrelated invalidations, so instead of using just request context
+  // we will check if they happened in same event loop tick as well.
+  const revalidationKey = JSON.stringify({ tags, durations })
+  const requestContext = getRequestContext()
+
+  if (requestContext) {
+    const ongoingRevalidation = requestContext.ongoingRevalidations?.get(revalidationKey)
+    if (ongoingRevalidation) {
+      // If we already have an ongoing revalidation for this key, we can use it
+      return ongoingRevalidation
+    }
+  }
+
   const revalidateTagPromise = doRevalidateTagAndPurgeEdgeCache(tags, durations)
 
-  const requestContext = getRequestContext()
   if (requestContext) {
+    requestContext.ongoingRevalidations ??= new Map()
+    requestContext.ongoingRevalidations.set(revalidationKey, revalidateTagPromise)
+    process.nextTick(() => {
+      requestContext.ongoingRevalidations?.delete(revalidationKey)
+    })
     requestContext.trackBackgroundWork(revalidateTagPromise)
   }
 
