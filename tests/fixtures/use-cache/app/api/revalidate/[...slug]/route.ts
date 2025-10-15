@@ -9,8 +9,12 @@ export async function GET(request: NextRequest, { params }) {
   const { slug } = await params
 
   const tagToInvalidate = slug.join('/')
+  let profile = undefined
+  if (request.nextUrl.searchParams.has('expire')) {
+    profile = { expire: parseInt(request.nextUrl.searchParams.get('expire')) }
+  }
 
-  revalidateTag(tagToInvalidate)
+  revalidateTag(tagToInvalidate, profile)
 
   return Response.json({ tagToInvalidate })
 }
