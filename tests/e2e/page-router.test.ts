@@ -425,7 +425,7 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const response2 = await page.goto(new URL(pathname, pageRouter.url).href)
     expect(response2?.status()).toBe(200)
     expect(response2?.headers()['cache-status']).toMatch(
-      /("Netlify Edge"; hit; fwd=stale|"Netlify Durable"; hit; ttl=-[0-9]+)/m,
+      /("Netlify Edge"; fwd=stale|"Netlify Durable"; hit; ttl=-[0-9]+)/m,
     )
     expect(response2?.headers()['debug-netlify-cdn-cache-control']).toMatch(
       /s-maxage=60, stale-while-revalidate=[0-9]+, durable/,
