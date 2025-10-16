@@ -542,12 +542,18 @@ export const fixtureFactories = {
       packagePath: 'apps/next-app',
       buildCommand: 'nx run next-app:build',
       publishDirectory: 'dist/apps/next-app/.next',
+      env: {
+        NX_ISOLATE_PLUGINS: 'false',
+      },
     }),
   nxIntegratedDistDir: () =>
     createE2EFixture('nx-integrated', {
       packagePath: 'apps/custom-dist-dir',
       buildCommand: 'nx run custom-dist-dir:build',
       publishDirectory: 'dist/apps/custom-dist-dir/dist',
+      env: {
+        NX_ISOLATE_PLUGINS: 'false',
+      },
     }),
   cliBeforeRegionalBlobsSupport: () =>
     createE2EFixture('cli-before-regional-blobs-support', {
