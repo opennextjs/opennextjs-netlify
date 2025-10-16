@@ -2,7 +2,7 @@ import {
   createRequestContext,
   runWithRequestContext,
 } from '{{cwd}}/.netlify/dist/run/handlers/request-context.cjs'
-import { getTracer } from '{{cwd}}/.netlify/dist/run/handlers/tracer.cjs'
+import { getTracer, withActiveSpan } from '{{cwd}}/.netlify/dist/run/handlers/tracer.cjs'
 
 process.chdir('{{cwd}}')
 
@@ -15,8 +15,8 @@ export default async function (req, context) {
   const tracer = getTracer()
 
   const handlerResponse = await runWithRequestContext(requestContext, () => {
-    return tracer.withActiveSpan('Next.js Server Handler', async (span) => {
-      span.setAttributes({
+    return withActiveSpan(tracer, 'Next.js Server Handler', async (span) => {
+      span?.setAttributes({
         'account.id': context.account.id,
         'deploy.id': context.deploy.id,
         'request.id': context.requestId,
@@ -32,7 +32,7 @@ export default async function (req, context) {
         cachedHandler = handler
       }
       const response = await cachedHandler(req, context, span, requestContext)
-      span.setAttributes({
+      span?.setAttributes({
         'http.status_code': response.status,
       })
       return response

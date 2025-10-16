@@ -14,7 +14,7 @@ import {
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
 } from './tags-handler.cjs'
-import { getTracer } from './tracer.cjs'
+import { getTracer, withActiveSpan } from './tracer.cjs'
 
 // Most of this code is copied and adapted from Next.js default 'use cache' handler implementation
 // https://github.com/vercel/next.js/blob/84fde91e03918344c5d356986914ab68a5083462/packages/next/src/server/lib/cache-handlers/default.ts
@@ -87,11 +87,12 @@ const tmpResolvePendingBeforeCreatingAPromise = () => {}
 
 export const NetlifyDefaultUseCacheHandler = {
   get(cacheKey: string): ReturnType<CacheHandler['get']> {
-    return getTracer().withActiveSpan(
+    return withActiveSpan(
+      getTracer(),
       'DefaultUseCacheHandler.get',
       async (span): ReturnType<CacheHandler['get']> => {
         getLogger().withFields({ cacheKey }).debug(`[NetlifyDefaultUseCacheHandler] get`)
-        span.setAttributes({
+        span?.setAttributes({
           cacheKey,
         })
 
@@ -105,7 +106,7 @@ export const NetlifyDefaultUseCacheHandler = {
           getLogger()
             .withFields({ cacheKey, status: 'MISS' })
             .debug(`[NetlifyDefaultUseCacheHandler] get result`)
-          span.setAttributes({
+          span?.setAttributes({
             cacheStatus: 'miss',
           })
           return undefined
@@ -120,7 +121,7 @@ export const NetlifyDefaultUseCacheHandler = {
           getLogger()
             .withFields({ cacheKey, ttl, status: 'STALE' })
             .debug(`[NetlifyDefaultUseCacheHandler] get result`)
-          span.setAttributes({
+          span?.setAttributes({
             cacheStatus: 'expired, discarded',
             ttl,
           })
@@ -134,7 +135,7 @@ export const NetlifyDefaultUseCacheHandler = {
             .withFields({ cacheKey, ttl, status: 'STALE BY TAG' })
             .debug(`[NetlifyDefaultUseCacheHandler] get result`)
 
-          span.setAttributes({
+          span?.setAttributes({
             cacheStatus: 'stale tag, discarded',
             ttl,
           })
@@ -150,7 +151,7 @@ export const NetlifyDefaultUseCacheHandler = {
         getLogger()
           .withFields({ cacheKey, ttl, status: 'HIT' })
           .debug(`[NetlifyDefaultUseCacheHandler] get result`)
-        span.setAttributes({
+        span?.setAttributes({
           cacheStatus: 'hit',
           ttl,
         })
@@ -163,11 +164,12 @@ export const NetlifyDefaultUseCacheHandler = {
     )
   },
   set(cacheKey: string, pendingEntry: Promise<CacheEntry>): ReturnType<CacheHandler['set']> {
-    return getTracer().withActiveSpan(
+    return withActiveSpan(
+      getTracer(),
       'DefaultUseCacheHandler.set',
       async (span): ReturnType<CacheHandler['set']> => {
         getLogger().withFields({ cacheKey }).debug(`[NetlifyDefaultUseCacheHandler]: set`)
-        span.setAttributes({
+        span?.setAttributes({
           cacheKey,
         })
 
@@ -182,7 +184,7 @@ export const NetlifyDefaultUseCacheHandler = {
 
         const entry = await pendingEntry
 
-        span.setAttributes({
+        span?.setAttributes({
           cacheKey,
         })
 
@@ -196,7 +198,7 @@ export const NetlifyDefaultUseCacheHandler = {
             size += Buffer.from(chunk.value).byteLength
           }
 
-          span.setAttributes({
+          span?.setAttributes({
             tags: entry.tags,
             timestamp: entry.timestamp,
             revalidate: entry.revalidate,
@@ -224,10 +226,11 @@ export const NetlifyDefaultUseCacheHandler = {
     // while blocking pipeline
   },
   getExpiration: function (...tags: string[]): ReturnType<CacheHandler['getExpiration']> {
-    return getTracer().withActiveSpan(
+    return withActiveSpan(
+      getTracer(),
       'DefaultUseCacheHandler.getExpiration',
       async (span): ReturnType<CacheHandler['getExpiration']> => {
-        span.setAttributes({
+        span?.setAttributes({
           tags,
         })
 
@@ -236,7 +239,7 @@ export const NetlifyDefaultUseCacheHandler = {
         getLogger()
           .withFields({ tags, expiration })
           .debug(`[NetlifyDefaultUseCacheHandler] getExpiration`)
-        span.setAttributes({
+        span?.setAttributes({
           expiration,
         })
 
@@ -245,11 +248,12 @@ export const NetlifyDefaultUseCacheHandler = {
     )
   },
   expireTags(...tags: string[]): ReturnType<CacheHandler['expireTags']> {
-    return getTracer().withActiveSpan(
+    return withActiveSpan(
+      getTracer(),
       'DefaultUseCacheHandler.expireTags',
       async (span): ReturnType<CacheHandler['expireTags']> => {
         getLogger().withFields({ tags }).debug(`[NetlifyDefaultUseCacheHandler] expireTags`)
-        span.setAttributes({
+        span?.setAttributes({
           tags,
         })
 

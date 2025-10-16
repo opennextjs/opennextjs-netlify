@@ -4,7 +4,7 @@
 // There is eslint `no-restricted-imports` rule to enforce this.
 
 import { type BlobType } from '../../shared/blob-types.cjs'
-import { getTracer } from '../handlers/tracer.cjs'
+import { getTracer, withActiveSpan } from '../handlers/tracer.cjs'
 
 import { getRegionalBlobStore } from './regional-blob-store.cjs'
 import { getRequestScopedInMemoryCache } from './request-scoped-in-memory-cache.cjs'
@@ -30,11 +30,11 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
       }
 
       const blobKey = await encodeBlobKey(key)
-      const getPromise = tracer.withActiveSpan(otelSpanTitle, async (span) => {
-        span.setAttributes({ key, blobKey })
+      const getPromise = withActiveSpan(tracer, otelSpanTitle, async (span) => {
+        span?.setAttributes({ key, blobKey })
         const blob = (await store.get(blobKey, { type: 'json' })) as T | null
         inMemoryCache.set(key, blob)
-        span.addEvent(blob ? 'Hit' : 'Miss')
+        span?.addEvent(blob ? 'Hit' : 'Miss')
         return blob
       })
       inMemoryCache.set(key, getPromise)
@@ -46,8 +46,8 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
       inMemoryCache.set(key, value)
 
       const blobKey = await encodeBlobKey(key)
-      return tracer.withActiveSpan(otelSpanTitle, async (span) => {
-        span.setAttributes({ key, blobKey })
+      return withActiveSpan(tracer, otelSpanTitle, async (span) => {
+        span?.setAttributes({ key, blobKey })
         return await store.setJSON(blobKey, value)
       })
     },
