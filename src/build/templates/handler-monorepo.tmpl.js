@@ -12,10 +12,9 @@ process.env.USE_REGIONAL_BLOBS = '{{useRegionalBlobs}}'
 let cachedHandler
 export default async function (req, context) {
   const requestContext = createRequestContext(req, context)
-  const tracer = getTracer()
 
   const handlerResponse = await runWithRequestContext(requestContext, () => {
-    return withActiveSpan(tracer, 'Next.js Server Handler', async (span) => {
+    return withActiveSpan(getTracer(), 'Next.js Server Handler', async (span) => {
       span?.setAttributes({
         'account.id': context.account.id,
         'deploy.id': context.deploy.id,
