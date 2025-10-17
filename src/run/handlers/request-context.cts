@@ -67,18 +67,28 @@ export function createRequestContext(request?: Request, context?: Context): Requ
     logger.debug('[NetlifyNextRuntime] Background revalidation request')
   }
 
+  async function recursivelyWaitForBackgroundWork() {
+    let settledPromisesCount = 0
+    while (settledPromisesCount < backgroundWorkPromises.length) {
+      const currentPromiseCount = backgroundWorkPromises.length
+      await Promise.allSettled(backgroundWorkPromises)
+      settledPromisesCount = currentPromiseCount
+    }
+  }
+
   return {
     isBackgroundRevalidation,
     captureServerTiming: request?.headers.has('x-next-debug-logging') ?? false,
     trackBackgroundWork: (promise) => {
-      if (context?.waitUntil) {
-        context.waitUntil(promise)
-      } else {
-        backgroundWorkPromises.push(promise)
-      }
+      backgroundWorkPromises.push(promise)
     },
     get backgroundWorkPromise() {
-      return Promise.allSettled(backgroundWorkPromises)
+      if (context?.waitUntil) {
+        // when context.waitUntil is available, we offload background work awaiting to it
+        context.waitUntil(recursivelyWaitForBackgroundWork())
+        return Promise.resolve()
+      }
+      return recursivelyWaitForBackgroundWork()
     },
     logger,
     requestID: request?.headers.get('x-nf-request-id') ?? getFallbackRequestID(),
