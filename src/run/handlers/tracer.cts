@@ -38,19 +38,30 @@ function spanHook(span: Span): Span {
 
 type NetlifyOtelTracer = NonNullable<ReturnType<typeof otelGetTracer>>
 
-let tracer: NetlifyOtelTracer | undefined
+const memoizedTracersForRequests = new WeakMap<RequestContext, NetlifyOtelTracer | undefined>()
 
 export function getTracer(): NetlifyOtelTracer | undefined {
-  if (tracer) return tracer
+  const requestContext = getRequestContext()
+  if (!requestContext) {
+    return undefined
+  }
 
-  const baseTracer = otelGetTracer('Next.js Runtime')
+  if (memoizedTracersForRequests.has(requestContext)) {
+    return memoizedTracersForRequests.get(requestContext)
+  }
 
-  if (!baseTracer) return undefined
+  const tracer = otelGetTracer('Next.js Runtime')
+
+  if (!tracer) {
+    // don't attempt to call `otelGetTracer` again for this request context
+    memoizedTracersForRequests.set(requestContext, undefined)
+    return undefined
+  }
 
   // we add hooks to capture span start and end events to be able to add server-timings
   // while preserving OTEL api
-  const startSpan = baseTracer.startSpan.bind(baseTracer)
-  baseTracer.startSpan = (
+  const startSpan = tracer.startSpan.bind(tracer)
+  tracer.startSpan = (
     ...args: Parameters<NetlifyOtelTracer['startSpan']>
   ): ReturnType<NetlifyOtelTracer['startSpan']> => {
     const span = startSpan(...args)
@@ -58,10 +69,10 @@ export function getTracer(): NetlifyOtelTracer | undefined {
     return spanHook(span)
   }
 
-  const startActiveSpan = baseTracer.startActiveSpan.bind(baseTracer)
+  const startActiveSpan = tracer.startActiveSpan.bind(tracer)
 
   // @ts-expect-error Target signature provides too few arguments. Expected 4 or more, but got 2.
-  baseTracer.startActiveSpan = (
+  tracer.startActiveSpan = (
     ...args: Parameters<NetlifyOtelTracer['startActiveSpan']>
   ): ReturnType<NetlifyOtelTracer['startActiveSpan']> => {
     const [name, ...restOfArgs] = args
@@ -83,7 +94,7 @@ export function getTracer(): NetlifyOtelTracer | undefined {
     return startActiveSpan(name, ...augmentedArgs)
   }
 
-  tracer = baseTracer
+  memoizedTracersForRequests.set(requestContext, tracer)
 
   return tracer
 }
