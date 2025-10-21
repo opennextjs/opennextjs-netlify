@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.14.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.0...v5.14.1) (2025-10-21)
+
+
+### Bug Fixes
+
+* support revalidateTag SWR in 'use cache' handler ([#3180](https://github.com/opennextjs/opennextjs-netlify/issues/3180)) ([a90d2e5](https://github.com/opennextjs/opennextjs-netlify/commit/a90d2e5228bbb77bf657929f83729945480d83e5))
+
 ## [5.14.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.5...v5.14.0) (2025-10-14)
 
 
