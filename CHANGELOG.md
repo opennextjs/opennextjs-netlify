@@ -5,7 +5,7 @@
 
 ### Bug Fixes
 
-* swap `[@opentelemetry](https://github.com/opentelemetry)` packages for `@netlify/otel` ([#3170](https://github.com/opennextjs/opennextjs-netlify/issues/3170)) ([0acd8a6](https://github.com/opennextjs/opennextjs-netlify/commit/0acd8a6d66964772c6912acfe21f30f3ce96a3a2))
+* swap `@opentelemetry` packages for `@netlify/otel` ([#3170](https://github.com/opennextjs/opennextjs-netlify/issues/3170)) ([0acd8a6](https://github.com/opennextjs/opennextjs-netlify/commit/0acd8a6d66964772c6912acfe21f30f3ce96a3a2))
 
 ## [5.14.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.0...v5.14.1) (2025-10-21)
 
