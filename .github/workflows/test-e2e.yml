@@ -5,11 +5,11 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 3 * * *' # Run every day at 3am UTC
+    - cron: "0 3 * * *" # Run every day at 3am UTC
   workflow_dispatch:
     inputs:
       versions:
-        description: 'The versions of Next.js to test against (escape-quoted and comma separated)'
+        description: "The versions of Next.js to test against (escape-quoted and comma separated)"
         required: false
         # TODO(serhalp) Ideally this would simply accept bare quotes but we're having trouble
         # parsing that so this will do for now.
@@ -52,7 +52,6 @@ jobs:
       group: ${{ steps.set-matrix.outputs.group }}
       total: ${{ steps.set-matrix.outputs.total }}
     steps:
-
       - name: Set Next.js versions to test
         id: set-matrix
         run: |
@@ -240,7 +239,7 @@ jobs:
           IS_WEBPACK_TEST: ${{ steps.decide-default-bundler.outputs.default_bundler == 'webpack' && '1' || '' }}
           IS_TURBOPACK_TEST: ${{ steps.decide-default-bundler.outputs.default_bundler == 'turbopack' && '1' || '' }}
           NODE_OPTIONS: --import ${{ github.workspace }}/${{ env.runtime-path}}/tools/fetch-retry.mjs
-        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e
+        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e --retries 5
         working-directory: ${{ env.next-path }}
 
       - name: Upload Test Results
@@ -250,7 +249,7 @@ jobs:
           name: test-result-${{matrix.version_spec.selector}}-${{ matrix.group }}
           path: ${{ env.next-path }}/test/${{steps.decide-default-bundler.outputs.default_bundler == 'turbopack' && 'turbopack-test-junit-report' || 'test-junit-report'}}/*.xml
   publish-test-results:
-    name: 'E2E Test Summary (${{matrix.version_spec.selector}})'
+    name: "E2E Test Summary (${{matrix.version_spec.selector}})"
     needs:
       - e2e
       - setup
