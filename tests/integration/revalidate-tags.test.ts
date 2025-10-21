@@ -57,7 +57,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
 
   expect(await ctx.blobStore.get(encodeBlobKey('/static-fetch-1'))).not.toBeNull()
 
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   // test the function call
   const post1 = await invokeFunction(ctx, { url: '/static-fetch-1' })
@@ -78,7 +78,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   const revalidate = await invokeFunction(ctx, { url: '/api/on-demand-revalidate/tag' })
   expect(revalidate.statusCode).toBe(200)
@@ -87,7 +87,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
   // it does not wait for the revalidation
   await new Promise<void>((resolve) => setTimeout(resolve, 100))
 
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   const post2 = await invokeFunction(ctx, { url: '/static-fetch-1' })
   const post2Date = load(post2.body)('[data-testid="date-now"]').text()
@@ -109,7 +109,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   // it does not wait for the cache.set so we have to manually wait here until the blob storage got populated
   await new Promise<void>((resolve) => setTimeout(resolve, 100))
@@ -134,7 +134,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   const revalidate2 = await invokeFunction(ctx, { url: '/api/on-demand-revalidate/tag' })
   expect(revalidate2.statusCode).toBe(200)
@@ -143,7 +143,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
   // it does not wait for the revalidation
   await new Promise<void>((resolve) => setTimeout(resolve, 100))
 
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   const post4 = await invokeFunction(ctx, { url: '/static-fetch-1' })
   const post4Date = load(post4.body)('[data-testid="date-now"]').text()
@@ -165,5 +165,5 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 })

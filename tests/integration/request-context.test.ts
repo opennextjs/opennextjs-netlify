@@ -106,7 +106,7 @@ describe('request-context does NOT leak between concurrent requests', () => {
       lastModified: new Date(mockedDateForRevalidateSlow).getTime(),
     })
 
-    ctx.blobServerGetSpy.mockClear()
+    ctx.blobServerOnRequestSpy.mockClear()
 
     const waitForCacheHandlerGetAndPausePromise =
       waitForCacheHandlerGetAndPause('/static/revalidate-slow')
@@ -182,7 +182,7 @@ describe('request-context does NOT leak between concurrent requests', () => {
       lastModified: new Date(mockedDateForStaticFetch2).getTime(),
     })
 
-    ctx.blobServerGetSpy.mockClear()
+    ctx.blobServerOnRequestSpy.mockClear()
 
     const waitForCacheHandlerGetAndPausePromise = waitForCacheHandlerGetAndPause('/static-fetch/2')
     const slowCallPromise = invokeFunction(ctx, {
