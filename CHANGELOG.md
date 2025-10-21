@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.14.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.2...v5.14.3) (2025-10-21)
+
+
+### Bug Fixes
+
+* support skipProxyUrlNormalize ([#3190](https://github.com/opennextjs/opennextjs-netlify/issues/3190)) ([5181234](https://github.com/opennextjs/opennextjs-netlify/commit/5181234f4a20a6b677a8a196f8c7a66769a234fa))
+
 ## [5.14.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.1...v5.14.2) (2025-10-21)
 
 
