@@ -1,7 +1,7 @@
-import { type getStore } from '@netlify/blobs'
+import type { getStore } from '@netlify/blobs'
 import { BlobsServer } from '@netlify/blobs/server'
 import { type WriteStream } from 'node:fs'
-import { MockInstance, TestContext } from 'vitest'
+import { TestContext } from 'vitest'
 
 export interface FixtureTestContext extends TestContext {
   cwd: string
@@ -10,7 +10,7 @@ export interface FixtureTestContext extends TestContext {
   blobStoreHost: string
   blobStorePort: number
   blobServer: BlobsServer
-  blobServerGetSpy: MockInstance<Parameters<BlobsServer['get']>, ReturnType<BlobsServer['get']>>
+  blobServerOnRequestSpy: BlobsServer['onRequest']
   blobStore: ReturnType<typeof getStore>
   functionDist: string
   edgeFunctionPort: number

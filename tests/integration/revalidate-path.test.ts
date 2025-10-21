@@ -58,7 +58,7 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
   expect(await ctx.blobStore.get(encodeBlobKey('/static-fetch/1'))).not.toBeNull()
   expect(await ctx.blobStore.get(encodeBlobKey('_N_T_/static-fetch/[id]/page'))).toBeNull()
 
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   // test the function call
   const post1 = await invokeFunction(ctx, { url: '/static-fetch/1' })
@@ -78,7 +78,7 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   const post1Route2 = await invokeFunction(ctx, { url: '/static-fetch/2' })
   expect(post1Route2.statusCode).toBe(200)
@@ -95,7 +95,7 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   const revalidate = await invokeFunction(ctx, { url: '/api/on-demand-revalidate/path' })
   expect(revalidate.statusCode).toBe(200)
@@ -106,7 +106,7 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
 
   expect(await ctx.blobStore.get(encodeBlobKey('_N_T_/static-fetch/[id]/page'))).not.toBeNull()
 
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   const post2 = await invokeFunction(ctx, { url: '/static-fetch/1' })
   const post2Date = load(post2.body)('[data-testid="date-now"]').text()
@@ -126,7 +126,7 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 
   const post2Route2 = await invokeFunction(ctx, { url: '/static-fetch/2' })
 
@@ -144,5 +144,5 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
 })

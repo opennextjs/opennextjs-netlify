@@ -1,7 +1,7 @@
 import getPort from 'get-port'
 
 import { getDeployStore } from '@netlify/blobs'
-import { BlobsServer } from '@netlify/blobs/server'
+import { BlobsServer, Operation } from '@netlify/blobs/server'
 import type { NetlifyPluginUtils } from '@netlify/build'
 import { Buffer } from 'node:buffer'
 import { mkdtemp } from 'node:fs/promises'
@@ -34,13 +34,14 @@ export const generateRandomObjectID = () => {
 export const startMockBlobStore = async (ctx: FixtureTestContext) => {
   const port = await getPort()
   // create new blob store server
+  ctx.blobServerOnRequestSpy = vi.fn()
   ctx.blobServer = new BlobsServer({
     port,
     token: BLOB_TOKEN,
+    onRequest: ctx.blobServerOnRequestSpy,
     directory: await mkdtemp(join(tmpdir(), 'opennextjs-netlify-blob-')),
   })
   await ctx.blobServer.start()
-  ctx.blobServerGetSpy = vi.spyOn(ctx.blobServer, 'get')
   ctx.blobStoreHost = `localhost:${port}`
   ctx.blobStorePort = port
   vi.stubEnv('NETLIFY_BLOBS_CONTEXT', createBlobContext(ctx))
@@ -72,11 +73,10 @@ export const getBlobEntries = async (ctx: FixtureTestContext) => {
 
 export function getBlobServerGets(ctx: FixtureTestContext, predicate?: (key: string) => boolean) {
   const isString = (arg: unknown): arg is string => typeof arg === 'string'
-  return ctx.blobServerGetSpy.mock.calls
+  return ctx.blobServerOnRequestSpy.mock.calls
     .map(([request]) => {
-      if (typeof request.url !== 'string') {
-        return undefined
-      }
+      if (request.type !== Operation.GET) return undefined
+      if (!isString(request.url)) return undefined
 
       let urlSegments = request.url.split('/').slice(1)
 
