@@ -1,0 +1,23 @@
+{
+  "name": "proxy-i18n-skip-normalize",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "npm run build",
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "18.2.47"
+  },
+  "test": {
+    "dependencies": {
+      "next": ">=16.0.0-alpha.0"
+    }
+  }
+}

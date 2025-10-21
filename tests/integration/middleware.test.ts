@@ -11,7 +11,7 @@ import {
 } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
 import { LocalServer } from '../utils/local-server.js'
-import { hasNodeMiddlewareSupport } from '../utils/next-version-helpers.mjs'
+import { hasNodeMiddlewareSupport, nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
@@ -693,6 +693,17 @@ for (const {
         expect(bodyFr.requestUrlPathname).toBe('/fr/json')
         expect(bodyFr.nextUrlPathname).toBe('/json')
         expect(bodyFr.nextUrlLocale).toBe('fr')
+
+        const responseData = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/_next/data/build_id/en/dynamic/test.json?slug=test`,
+        })
+
+        expect(
+          responseData.headers.get('x-next-url-pathname'),
+          'nextUrl.pathname should not be normalized due to skipMiddlewareUrlNormalize',
+        ).toEqual('/_next/data/build_id/en/dynamic/test.json')
       })
     })
 
@@ -718,6 +729,37 @@ for (const {
             'https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/#limitations',
           )
         })
+      })
+
+      describe('Proxy specific', () => {
+        test.skipIf(!nextVersionSatisfies('>=16.0.0-alpha.0'))<FixtureTestContext>(
+          'skipProxyUrlNormalize in proxy.ts is supported',
+          async (ctx) => {
+            await createFixture('proxy-i18n-skip-normalize', ctx)
+            await runPlugin(ctx)
+            const origin = await LocalServer.run(async (req, res) => {
+              res.write(
+                JSON.stringify({
+                  url: req.url,
+                  headers: req.headers,
+                }),
+              )
+              res.end()
+            })
+            ctx.cleanup?.push(() => origin.stop())
+
+            const responseData = await invokeEdgeFunction(ctx, {
+              functions: [edgeFunctionNameRoot],
+              origin,
+              url: `/_next/data/build_id/en/dynamic/test.json`,
+            })
+
+            expect(
+              responseData.headers.get('x-next-url-pathname'),
+              'nextUrl.pathname should not be normalized due to skipProxyUrlNormalize',
+            ).toEqual('/_next/data/build_id/en/dynamic/test.json')
+          },
+        )
       })
     }
   })

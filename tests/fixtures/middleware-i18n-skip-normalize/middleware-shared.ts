@@ -23,6 +23,13 @@ const getResponse = (request: NextRequest) => {
     return NextResponse.next()
   }
 
+  // this is needed for tests to assert next
+  if (url.pathname.includes('dynamic/test')) {
+    const response = NextResponse.next()
+    response.headers.set('x-next-url-pathname', request.nextUrl.pathname)
+    return response
+  }
+
   if (url.pathname === '/old-home') {
     if (url.searchParams.get('override') === 'external') {
       return NextResponse.redirect('https://example.vercel.sh')
