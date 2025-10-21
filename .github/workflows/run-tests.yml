@@ -124,6 +124,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NEXT_VERSION: ${{ matrix.version }}
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/tools/fetch-retry.mjs
       - name: Upload blob report to GitHub Actions Artifacts
         uses: actions/upload-artifact@v4
         if: always()
@@ -220,6 +221,7 @@ jobs:
         env:
           NEXT_VERSION: ${{ matrix.version }}
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/tools/fetch-retry.mjs
       - name: 'Unit and integration tests'
         run: npm run test:ci:unit-and-integration -- --shard=${{ matrix.shard }}/8
         env:
@@ -227,6 +229,7 @@ jobs:
           NEXT_VERSION: ${{ matrix.version }}
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           TEMP: ${{ github.workspace }}/..
+          NODE_OPTIONS: --import ${{ github.workspace }}/tools/fetch-retry.mjs
 
   smoke:
     if: always()
@@ -289,6 +292,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NEXT_VERSION: ${{ matrix.version }}
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/tools/fetch-retry.mjs
 
   merge-reports:
     if: always()
