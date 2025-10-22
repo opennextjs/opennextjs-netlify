@@ -235,7 +235,7 @@ jobs:
           IS_WEBPACK_TEST: ${{ steps.decide-default-bundler.outputs.default_bundler == 'webpack' && '1' || '' }}
           IS_TURBOPACK_TEST: ${{ steps.decide-default-bundler.outputs.default_bundler == 'turbopack' && '1' || '' }}
           NODE_OPTIONS: --import ${{ github.workspace }}/${{ env.runtime-path}}/tools/fetch-retry.mjs
-        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e --retries 5
+        run: node run-tests.js -g ${{ matrix.group }}/${{ needs.setup.outputs.total }} -c ${TEST_CONCURRENCY} --type e2e --retries 4
         working-directory: ${{ env.next-path }}
 
       - name: Upload Test Results
