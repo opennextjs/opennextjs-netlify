@@ -41,8 +41,10 @@ export function shouldHaveAppRouterNotFoundInPrerenderManifest() {
 export function shouldHaveAppRouterGlobalErrorInPrerenderManifest() {
   // https://github.com/vercel/next.js/pull/82444
 
-  // this is not used in any stable version yet
-  return isNextCanary() && nextVersionSatisfies('>=15.5.1-canary.4')
+  return (
+    (isNextCanary() && nextVersionSatisfies('>=15.5.1-canary.4')) ||
+    nextVersionSatisfies('>=16.0.0')
+  )
 }
 
 export function hasNodeMiddlewareSupport() {
