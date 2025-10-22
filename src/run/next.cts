@@ -21,6 +21,9 @@ import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/sto
 // @ts-ignore ignoring readonly NODE_ENV
 process.env.NODE_ENV = 'production'
 
+// Prevent duplicate fetch spans by silencing fetch spans produced by Next.js
+process.env.NEXT_OTEL_FETCH_DISABLED = '1'
+
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { getRequestHandlers } = require('next/dist/server/lib/start-server.js')
 // eslint-disable-next-line @typescript-eslint/no-var-requires
