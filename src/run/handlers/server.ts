@@ -66,6 +66,10 @@ export default async (
 ) => {
   const tracer = getTracer()
 
+  if (request.headers.get('x-next-otel-verbose')) {
+    process.env.NEXT_OTEL_VERBOSE = '1'
+  }
+
   if (!nextHandler) {
     await withActiveSpan(tracer, 'initialize next server', async () => {
       const { getMockedRequestHandler } = await nextImportPromise
