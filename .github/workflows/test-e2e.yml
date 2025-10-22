@@ -114,14 +114,12 @@ jobs:
         shell: bash
         run: |
           NODE_VERSION=18.x
-          if [ "${{ matrix.version_spec.selector }}" = "canary" ]; then
-            # this is not ideal, because we set node@20 just when explicitly using canary tag as target
-            # but next@canary are still on 15 major, so we can't yet use major version of resolved next version
-            # as condition
+          if [[ "${{ matrix.version_spec.version }}" == "16."* ]]; then
+            # Next@16 requires Node.js 20+
             NODE_VERSION=20.x
           fi
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
-          echo "Node version for 'next@${{ matrix.version_spec.selector }}' is '$NODE_VERSION'"
+          echo "Node version for 'next@${{ matrix.version_spec.version }}' is '$NODE_VERSION'"
 
       - name: Decide default bundler
         id: decide-default-bundler
@@ -132,14 +130,12 @@ jobs:
           # so we need to set IS_WEBPACK_TEST, IS_TURBOPACK_TEST env vars accordingly
           # to ensure tests assert behavior of the default bundler
           DEFAULT_BUNDLER="webpack"
-          if [ "${{ matrix.version_spec.selector }}" = "canary" ]; then
-            # this is not ideal, because we set turbopack default just when explicitly using canary tag as target
-            # but next@canary are still on 15 major, so we can't yet use major version of resolved next version
-            # as condition
+          if [[ "${{ matrix.version_spec.version }}" == "16."* ]]; then
+            # Next@16 defaults to Turbopack
             DEFAULT_BUNDLER="turbopack"
           fi
           echo "default_bundler=$DEFAULT_BUNDLER" >> $GITHUB_OUTPUT
-          echo "Default bundler for 'next@${{ matrix.version_spec.selector }}' is '$DEFAULT_BUNDLER'"
+          echo "Default bundler for 'next@${{ matrix.version_spec.version }}' is '$DEFAULT_BUNDLER'"
 
       - name: setup node
         uses: actions/setup-node@v5

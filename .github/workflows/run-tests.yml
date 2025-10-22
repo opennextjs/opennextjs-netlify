@@ -1,15 +1,15 @@
-name: 'Run tests'
+name: "Run tests"
 on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '0 6 * * *' # Run every day at 6am UTC
+    - cron: "0 6 * * *" # Run every day at 6am UTC
   workflow_dispatch:
     inputs:
       versions:
-        description: 'The versions of Next.js to test against (quoted and comma separated)'
+        description: "The versions of Next.js to test against (quoted and comma separated)"
         required: false
-        default: 'latest'
+        default: "latest"
 
 jobs:
   setup:
@@ -59,25 +59,30 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - name: Resolve Next.js version
+        id: resolve-next-version
+        shell: bash
+        run: |
+          RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
+          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
       - name: Decide Node Version
         id: decide-node-version
         shell: bash
         run: |
           NODE_VERSION=18.x
-          if [ "${{ matrix.version}}" = "canary" ]; then
-            # this is not ideal, because we set node@20 just when explicitly using canary tag as target
-            # but next@canary are still on 15 major, so we can't yet use major version of resolved next version
-            # as condition
+          if [[ "${{ steps.resolve-next-version.outputs.version }}" == "16."* ]]; then
+            # Next@16 requires Node.js 20+
             NODE_VERSION=20.x
           fi
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
-          echo "Node version for 'next@${{ matrix.version }}' is '$NODE_VERSION'"
-      - name: 'Install Node'
+          echo "Node version for 'next@${{ steps.resolve-next-version.outputs.version }}' is '$NODE_VERSION'"
+      - name: "Install Node"
         uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
       - uses: oven-sh/setup-bun@v2
       - name: setup pnpm/yarn
         run: |
@@ -89,9 +94,9 @@ jobs:
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
           deno-version: v2.2.4
-      - name: 'Install dependencies'
+      - name: "Install dependencies"
         run: npm ci
-      - name: 'Prepare Netlify CLI'
+      - name: "Prepare Netlify CLI"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
@@ -104,20 +109,13 @@ jobs:
       - uses: actions/cache@v4
         id: playwright-cache
         with:
-          path: '~/.cache/ms-playwright'
-          key: '${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}'
+          path: "~/.cache/ms-playwright"
+          key: "${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}"
           restore-keys: |
             ${{ runner.os }}-playwright-
       - name: Install Playwright Browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
-      - name: Resolve Next.js version
-        id: resolve-next-version
-        shell: bash
-        run: |
-          RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
-          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
-          echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
       - name: Run Playwright tests
         run: npm run test:ci:e2e -- --shard=${{ matrix.shard }}/5
         env:
@@ -143,31 +141,36 @@ jobs:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         exclude:
           - os: windows-2025
-            version: '13.5.1'
+            version: "13.5.1"
           - os: windows-2025
-            version: '14.2.15'
+            version: "14.2.15"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+      - name: Resolve Next.js version
+        id: resolve-next-version
+        shell: bash
+        run: |
+          RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
+          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
       - name: Decide Node Version
         id: decide-node-version
         shell: bash
         run: |
           NODE_VERSION=18.x
-          if [ "${{ matrix.version}}" = "canary" ]; then
-            # this is not ideal, because we set node@20 just when explicitly using canary tag as target
-            # but next@canary are still on 15 major, so we can't yet use major version of resolved next version
-            # as condition
+          if [[ "${{ steps.resolve-next-version.outputs.version }}" == "16."* ]]; then
+            # Next@16 requires Node.js 20+
             NODE_VERSION=20.x
           fi
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ matrix.version }}' is '$NODE_VERSION'"
-      - name: 'Install Node'
+      - name: "Install Node"
         uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
       - name: Prefer npm global on windows
         if: runner.os == 'Windows'
         # On Windows by default PATH prefers corepack bundled with Node.js
@@ -186,19 +189,12 @@ jobs:
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/edge-bundler/blob/e55f825bd985d3c92e21d1b765d71e70d5628fba/node/bridge.ts#L17
           deno-version: v2.2.4
-      - name: 'Install dependencies'
+      - name: "Install dependencies"
         run: npm ci
-      - name: 'Build'
+      - name: "Build"
         run: npm run build
-      - name: 'Vendor deno helpers for integration tests'
+      - name: "Vendor deno helpers for integration tests"
         run: node tools/vendor-deno-tools.js
-      - name: Resolve Next.js version
-        id: resolve-next-version
-        shell: bash
-        run: |
-          RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
-          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
-          echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
       - name: Compute Fixtures Cache Key
         id: fixture-cache-key
         # Fixtures only need to be rebuilt if either fixture or support files change,
@@ -215,14 +211,14 @@ jobs:
           key:
             integration-fixtures-${{ runner.os }}-${{steps.resolve-next-version.outputs.version}}-${{
             steps.fixture-cache-key.outputs.key }}
-      - name: 'Prepare Fixtures'
+      - name: "Prepare Fixtures"
         if: steps.cache-fixtures.outputs.cache-hit != 'true'
         run: npm run pretest
         env:
           NEXT_VERSION: ${{ matrix.version }}
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           NODE_OPTIONS: --import ${{ github.workspace }}/tools/fetch-retry.mjs
-      - name: 'Unit and integration tests'
+      - name: "Unit and integration tests"
         run: npm run test:ci:unit-and-integration -- --shard=${{ matrix.shard }}/8
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -241,25 +237,30 @@ jobs:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v5
+      - name: Resolve Next.js version
+        id: resolve-next-version
+        shell: bash
+        run: |
+          RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
+          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
       - name: Decide Node Version
         id: decide-node-version
         shell: bash
         run: |
           NODE_VERSION=18.x
-          if [ "${{ matrix.version}}" = "canary" ]; then
-            # this is not ideal, because we set node@20 just when explicitly using canary tag as target
-            # but next@canary are still on 15 major, so we can't yet use major version of resolved next version
-            # as condition
+          if [[ "${{ steps.resolve-next-version.outputs.version }}" == "16."* ]]; then
+            # Next@16 requires Node.js 20+
             NODE_VERSION=20.x
           fi
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ matrix.version }}' is '$NODE_VERSION'"
-      - name: 'Install Node'
+      - name: "Install Node"
         uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
       - name: setup pnpm/yarn
         run: corepack enable
         shell: bash
@@ -268,25 +269,18 @@ jobs:
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
           deno-version: v2.2.4
-      - name: 'Install dependencies'
+      - name: "Install dependencies"
         run: npm ci
-      - name: 'Build'
+      - name: "Build"
         run: npm run build
-      - name: 'Prepare Netlify CLI'
+      - name: "Prepare Netlify CLI"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
           npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
           npx netlify login
-      - name: Resolve Next.js version
-        id: resolve-next-version
-        shell: bash
-        run: |
-          RESOLVED_VERSION=$(npm view next@${{ matrix.version }} version)
-          echo "version=$RESOLVED_VERSION" >> $GITHUB_OUTPUT
-          echo "Resolved Next.js version for 'next@${{ matrix.version }}' is '$RESOLVED_VERSION'"
-      - name: 'Smoke tests'
+      - name: "Smoke tests"
         run: npm run test:ci:smoke
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -296,7 +290,7 @@ jobs:
 
   merge-reports:
     if: always()
-    needs: [setup,e2e]
+    needs: [setup, e2e]
     strategy:
       fail-fast: false
       matrix:
@@ -304,28 +298,28 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
-    - uses: actions/setup-node@v5
-      with:
-        node-version: 18
-    - name: Install dependencies
-      run: npm ci
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Download blob reports from GitHub Actions Artifacts
-      uses: actions/download-artifact@v5
-      with:
-        path: all-blob-reports
-        pattern: blob-report-${{ matrix.version }}-*
-        merge-multiple: true
+      - name: Download blob reports from GitHub Actions Artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: all-blob-reports
+          pattern: blob-report-${{ matrix.version }}-*
+          merge-multiple: true
 
-    - name: Merge reports
-      run: |
-        npx playwright merge-reports --reporter html ./all-blob-reports
-        npx playwright merge-reports --reporter json ./all-blob-reports > merged_reports.json
+      - name: Merge reports
+        run: |
+          npx playwright merge-reports --reporter html ./all-blob-reports
+          npx playwright merge-reports --reporter json ./all-blob-reports > merged_reports.json
 
-    - name: Upload HTML report
-      uses: actions/upload-artifact@v4
-      with:
-        name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
-        path: playwright-report
-        retention-days: 14
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
+          path: playwright-report
+          retention-days: 14
