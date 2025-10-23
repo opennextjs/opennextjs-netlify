@@ -61,7 +61,7 @@
     "@netlify/edge-functions-bootstrap": "^2.17.1",
     "@netlify/eslint-config-node": "^7.0.1",
     "@netlify/functions": "^5.0.1",
-    "@netlify/otel": "^4.3.0",
+    "@netlify/otel": "^4.3.1",
     "@netlify/serverless-functions-api": "^2.7.1",
     "@netlify/zip-it-and-ship-it": "^14.1.11",
     "@opentelemetry/api": "^1.8.0",
