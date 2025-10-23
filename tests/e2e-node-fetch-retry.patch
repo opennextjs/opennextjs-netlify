@@ -1,0 +1,64 @@
+diff --git a/test/lib/next-test-utils.ts b/test/lib/next-test-utils.ts
+index 0e8b3cc526..6ba394c509 100644
+--- a/test/lib/next-test-utils.ts
++++ b/test/lib/next-test-utils.ts
+@@ -187,6 +187,50 @@ export function getFetchUrl(
+   return getFullUrl(appPort, url)
+ }
+ 
++const NUM_RETRIES = 5
++async function fetchWithRetry(
++  ...args: Parameters<typeof fetch>
++): ReturnType<typeof fetch> {
++  let backoff = 100
++  let lastError
++  for (let attempt = 1; attempt <= NUM_RETRIES; attempt++) {
++    try {
++      return await fetch(...args)
++    } catch (error) {
++      lastError = error
++      let shouldRetry = false
++
++      try {
++        // node-fetch specific error handling
++        if (
++          (error.type === 'request-timeout' || error.type === 'system') &&
++          attempt < NUM_RETRIES
++        ) {
++          shouldRetry = true
++        }
++      } catch {}
++
++      if (shouldRetry) {
++        console.error('[node-fetch-retry] fetch thrown, retrying...', {
++          args,
++          attempt,
++          errorMsg: error.message,
++        })
++        const currentBackoff = backoff
++        await new Promise((resolve) => {
++          setTimeout(resolve, currentBackoff)
++        })
++        backoff *= 2
++        continue
++      }
++
++      throw error
++    }
++  }
++  // should not reach here, but here just to appease TS
++  throw lastError
++}
++
+ export function fetchViaHTTP(
+   appPort: string | number,
+   pathname: string,
+@@ -194,7 +238,7 @@ export function fetchViaHTTP(
+   opts?: RequestInit
+ ): Promise<Response> {
+   const url = query ? withQuery(pathname, query) : pathname
+-  return fetch(getFullUrl(appPort, url), opts)
++  return fetchWithRetry(getFullUrl(appPort, url), opts)
+ }
+ 
+ export function renderViaHTTP(
