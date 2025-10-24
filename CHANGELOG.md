@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.14.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.3...v5.14.4) (2025-10-24)
+
+
+### Bug Fixes
+
+* remove duplicate fetch span ([#3202](https://github.com/opennextjs/opennextjs-netlify/issues/3202)) ([ed475ee](https://github.com/opennextjs/opennextjs-netlify/commit/ed475ee63040b7f478b4a3b58800beaa12cce472))
+
 ## [5.14.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.2...v5.14.3) (2025-10-21)
 
 
