@@ -110,7 +110,7 @@ export async function setNextVersionInFixture(
 
   const isSemverVersion = valid(resolvedVersion)
 
-  const areNextVersionConstraintsSatisfied = await Promise.all(
+  const packageJsonsNeedUpdates = await Promise.all(
     packageJsons.map(async (packageJsonPath) => {
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
       if (packageJson.dependencies?.next) {
@@ -130,15 +130,19 @@ export async function setNextVersionInFixture(
               `${logPrefix}⏩ Skipping '${packageJson.name}' because it requires next@${versionConstraint}`,
             )
           }
-          return false
+          return { packageJsonPath, needUpdate: false }
         }
       }
-      return true
+      return { packageJsonPath, needUpdate: true }
     }),
   )
 
-  if (areNextVersionConstraintsSatisfied.some((isSatisfied) => !isSatisfied)) {
-    // at least one next version constraint is not satisfied so we skip this fixture
+  const packageJsonsToUpdate = packageJsonsNeedUpdates
+    .filter(({ needUpdate }) => needUpdate)
+    .map(({ packageJsonPath }) => packageJsonPath)
+
+  if (packageJsonsToUpdate.length === 0) {
+    // all next version constraints are not satisfied so we skip this fixture
     return false
   }
 
@@ -154,7 +158,7 @@ export async function setNextVersionInFixture(
   }
 
   await Promise.all(
-    packageJsons.map(async (packageJsonPath) => {
+    packageJsonsToUpdate.map(async (packageJsonPath) => {
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
       if (packageJson.dependencies?.next) {
         packageJson.dependencies.next = version

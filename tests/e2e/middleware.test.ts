@@ -165,13 +165,12 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
       expect(await res?.headerValue('x-runtime')).toEqual(expectedRuntime)
     })
 
-    if (expectedRuntime !== 'node') {
+    if (expectedRuntime !== 'node' && nextVersionSatisfies('>=14.0.0')) {
       // adaptation of https://github.com/vercel/next.js/blob/8aa9a52c36f338320d55bd2ec292ffb0b8c7cb35/test/e2e/app-dir/metadata-edge/index.test.ts#L24C5-L31C7
       test('it should render OpenGraph image meta tag correctly', async ({
         page,
         middlewareOg,
       }) => {
-        test.skip(!nextVersionSatisfies('>=14.0.0'), 'This test is only for Next.js 14+')
         await page.goto(`${middlewareOg.url}/`)
         const ogURL = await page.locator('meta[property="og:image"]').getAttribute('content')
         expect(ogURL).toBeTruthy()
