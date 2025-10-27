@@ -124,7 +124,9 @@
     {
       "file": "test/e2e/app-dir/app-static/app-static.test.ts",
       "reason": "Uses CLI output",
-      "tests": ["app-dir static/dynamic handling should warn for too many cache tags"]
+      "tests": [
+        "app-dir static/dynamic handling should warn for too many cache tags"
+      ]
     },
     {
       "file": "test/e2e/app-dir/parallel-routes-and-interception/parallel-routes-and-interception.test.ts",
@@ -442,7 +444,9 @@
     {
       "file": "test/e2e/app-dir/app-root-params-getters/generate-static-params.test.ts",
       "reason": "Test relies on x-vercel-cache response header that is Vercel specific",
-      "tests": ["app-root-param-getters - generateStaticParams should be statically prerenderable"]
+      "tests": [
+        "app-root-param-getters - generateStaticParams should be statically prerenderable"
+      ]
     },
     {
       "file": "test/e2e/app-dir/fallback-shells/fallback-shells.test.ts",
@@ -450,16 +454,55 @@
     },
     {
       "file": "test/e2e/app-dir/rsc-redirect/rsc-redirect.test.ts",
-      "reason": "page.waitForLoadState('networkidle') not resolving",
+      "reason": "page.waitForLoadState('networkidle') not resolving OR deploy fails for cacheComponents: true case due to incompatible fixture that contains 'export dynamic' not allowed in cacheComponents",
       "tests": [
         "rsc-redirect /old-about -> /about (ppr: false, segmentCache: true) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
-        "rsc-redirect /old-about -> /about (ppr: false, segmentCache: false) uses prefetched, redirected URL in the navigation, as opposed to the href in the link"
+        "rsc-redirect /old-about -> /about (ppr: false, segmentCache: false) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
+        "rsc-redirect /old-about -> /about (cacheComponents: false, segmentCache: true) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
+        "rsc-redirect /old-about -> /about (cacheComponents: false, segmentCache: false) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
+        "rsc-redirect /old-about -> /about (cacheComponents: true, segmentCache: true) uses prefetched, redirected URL in the navigation, as opposed to the href in the link",
+        "rsc-redirect /old-about -> /about (cacheComponents: true, segmentCache: false) uses prefetched, redirected URL in the navigation, as opposed to the href in the link"
       ]
     },
     {
       "file": "test/e2e/app-dir/sub-shell-generation-middleware/sub-shell-generation-middleware.test.ts",
       "reason": "Checking Vercel specific x-vercel-cache header",
-      "tests": ["middleware-static-rewrite should eventually result in a cache hit"]
+      "tests": [
+        "middleware-static-rewrite should eventually result in a cache hit"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/app-client-cache/client-cache.parallel-routes.test.ts",
+      "reason": "This test seems to start interacting with the page before everything fully loaded and hydrated. Adding few second sleep before starting interactions seems to unflake it.",
+      "test": [
+        "app dir client cache with parallel routes prefetch={true} should re-use the cache for the full page, only for 5 mins"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/app-client-cache/client-cache.defaults.test.ts",
+      "reason": "This test seems to start interacting with the page before everything fully loaded and hydrated. Adding few second sleep before starting interactions seems to unflake it.",
+      "test": [
+        "app dir client cache semantics (default semantics) prefetch={true} should re-use the cache for the full page, only for 5 mins"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/disable-logging-route/disable-logging-route.test.ts",
+      "reason": "This test just check CLI logs which are not compatible, with verbose debug logging we use."
+    },
+    {
+      "file": "test/e2e/app-dir/cache-components-allow-otel-spans/cache-components-allow-otel-spans.test.ts",
+      "reason": "Setup not working the same due to initial page serving stale and regenerating in background, causing second request to not match",
+      "tests": [
+        "hello-world should allow creating Spans during prerendering during the build - inside a Cache Components"
+      ]
+    },
+    {
+      "file": "test/e2e/app-dir/searchparams-reuse-loading/searchparams-reuse-loading.test.ts",
+      "reason": "This test seems to start interacting with the page before everything fully loaded and hydrated. Adding few second sleep before starting interactions seems to unflake it.",
+      "tests": [
+        "searchparams-reuse-loading With Middleware should correctly return different RSC data for full prefetches with different searchParam values",
+        "searchparams-reuse-loading Without Middleware should correctly return different RSC data for full prefetches with different searchParam values"
+      ]
     }
   ],
   "failures": [
