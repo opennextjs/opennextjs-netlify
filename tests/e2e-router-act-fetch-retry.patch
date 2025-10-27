@@ -1,0 +1,12 @@
+diff --git a/test/lib/router-act.ts b/test/lib/router-act.ts
+index cefe17bad3..1e217420c5 100644
+--- a/test/lib/router-act.ts
++++ b/test/lib/router-act.ts
+@@ -205,6 +205,7 @@ export function createRouterAct(
+             result: (async () => {
+               const originalResponse = await page.request.fetch(request, {
+                 maxRedirects: 0,
++                maxRetries: 5,
+               })
+ 
+               // WORKAROUND:
