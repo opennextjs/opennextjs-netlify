@@ -1,0 +1,14 @@
+{
+  "name": "npm-monorepo-proxy",
+  "private": true,
+  "scripts": {
+    "build": "npm run build --workspace @apps/site"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "npm@10.2.3",
+  "workspaces": [
+    "apps/*"
+  ]
+}
