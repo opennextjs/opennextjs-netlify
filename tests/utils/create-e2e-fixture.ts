@@ -629,6 +629,13 @@ export const fixtureFactories = {
       publishDirectory: 'apps/site/.next',
       smoke: true,
     }),
+  npmMonorepoProxy: () =>
+    createE2EFixture('npm-monorepo-proxy', {
+      buildCommand: 'npm run build --workspace @apps/site',
+      packagePath: 'apps/site',
+      publishDirectory: 'apps/site/.next',
+      smoke: true,
+    }),
   dynamicCms: () => createE2EFixture('dynamic-cms'),
   after: () => createE2EFixture('after'),
 }
