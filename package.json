@@ -88,7 +88,7 @@
     "next": "^15.0.0-canary.28",
     "next-with-cache-handler-v2": "npm:next@15.3.0-canary.13",
     "next-with-cache-handler-v3": "npm:next@16.0.0-beta.0",
-    "next-with-adapters": "npm:next@15.6.0-canary.20",
+    "next-with-adapters": "npm:16.0.2-canary.0",
     "os": "^0.1.2",
     "outdent": "^0.8.0",
     "p-limit": "^6.0.0",
