@@ -21,8 +21,7 @@ const MIDDLEWARE_FUNCTION_DIR = join(
 
 export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _netlifyAdapterContext: NetlifyAdapterContext,
+  netlifyAdapterContext: NetlifyAdapterContext,
 ) {
   const { middleware } = nextAdapterContext.outputs
   if (!middleware) {
@@ -36,6 +35,8 @@ export async function onBuildComplete(
   }
 
   await writeHandlerFile(middleware, nextAdapterContext.config)
+
+  netlifyAdapterContext.preparedOutputs.middleware = true
 }
 
 const copyHandlerDependenciesForEdgeMiddleware = async (
@@ -186,7 +187,7 @@ const writeHandlerFile = async (
   // compatibility layer mentioned above.
   await writeFile(
     join(MIDDLEWARE_FUNCTION_DIR, `middleware.js`),
-    `
+    /* javascript */ `
     import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
     import { handleMiddleware } from './edge-runtime/middleware.ts';
     import handler from './concatenated-file.js';

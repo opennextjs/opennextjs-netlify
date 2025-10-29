@@ -5,7 +5,6 @@ import type { FrameworksAPIConfig, OnBuildCompleteContext } from './types.js'
 
 export function createNetlifyAdapterContext(nextAdapterContext: OnBuildCompleteContext) {
   let buildId: string | undefined
-  let frameworksAPIConfig: FrameworksAPIConfig | undefined
 
   return {
     async getBuildId() {
@@ -14,6 +13,11 @@ export function createNetlifyAdapterContext(nextAdapterContext: OnBuildCompleteC
       }
       return buildId
     },
-    frameworksAPIConfig,
+    frameworksAPIConfig: undefined as FrameworksAPIConfig | undefined,
+    preparedOutputs: {
+      staticAssets: [] as string[],
+      endpoints: [] as string[],
+      middleware: false,
+    },
   }
 }

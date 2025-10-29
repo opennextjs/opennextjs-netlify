@@ -70,7 +70,7 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
   await tracer.withActiveSpan('onBuild', async (span) => {
     const ctx = new PluginContext(options)
 
-    verifyPublishDir(ctx)
+    // verifyPublishDir(ctx)
 
     span.setAttribute('next.buildConfig', JSON.stringify(ctx.buildConfig))
 
@@ -84,8 +84,8 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
       return Promise.all([copyStaticExport(ctx)])
     }
 
-    await verifyAdvancedAPIRoutes(ctx)
-    await verifyNetlifyFormsWorkaround(ctx)
+    // await verifyAdvancedAPIRoutes(ctx)
+    // await verifyNetlifyFormsWorkaround(ctx)
 
     await Promise.all([
       copyPrerenderedContent(ctx), // maybe this

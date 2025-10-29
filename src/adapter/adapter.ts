@@ -12,14 +12,16 @@ import {
 import { onBuildComplete as onBuildCompleteForMiddleware } from './build/middleware.js'
 import { createNetlifyAdapterContext } from './build/netlify-adapter-context.js'
 import { onBuildComplete as onBuildCompleteForPagesAndAppHandlers } from './build/pages-and-app-handlers.js'
+import { onBuildComplete as onBuildCompleteForRouting } from './build/routing.js'
 import { onBuildComplete as onBuildCompleteForStaticAssets } from './build/static-assets.js'
 
 const adapter: NextAdapter = {
   name: 'Netlify',
   modifyConfig(config) {
     if (config.output !== 'export') {
-      // Enable Next.js standalone mode at build time
-      config.output = 'standalone'
+      // If not export, make sure to not build standalone output as it will become useless
+      // @ts-expect-error types don't unsetting output to not use 'standalone'
+      config.output = undefined
     }
 
     modifyConfigForImageCDN(config)
@@ -31,8 +33,6 @@ const adapter: NextAdapter = {
     await writeFile('./onBuildComplete.json', JSON.stringify(nextAdapterContext, null, 2))
     // debugger
 
-    console.log('onBuildComplete hook called')
-
     const netlifyAdapterContext = createNetlifyAdapterContext(nextAdapterContext)
 
     await onBuildCompleteForImageCDN(nextAdapterContext, netlifyAdapterContext)
@@ -41,6 +41,7 @@ const adapter: NextAdapter = {
     // TODO: verifyNetlifyForms
     await onBuildCompleteForHeaders(nextAdapterContext, netlifyAdapterContext)
     await onBuildCompleteForPagesAndAppHandlers(nextAdapterContext, netlifyAdapterContext)
+    await onBuildCompleteForRouting(nextAdapterContext, netlifyAdapterContext)
 
     if (netlifyAdapterContext.frameworksAPIConfig) {
       // write out config if there is any

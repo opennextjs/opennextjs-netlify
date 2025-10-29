@@ -35,8 +35,14 @@ export async function onBuildComplete(
           }
         }
 
+        // register static asset for routing before applying .html extension for pretty urls
+        netlifyAdapterContext.preparedOutputs.staticAssets.push(distPathname)
+
         // if pathname is extension-less, but source file has an .html extension, preserve it
         distPathname += distPathname.endsWith('/') ? 'index.html' : '.html'
+      } else {
+        // register static asset for routing
+        netlifyAdapterContext.preparedOutputs.staticAssets.push(distPathname)
       }
 
       await cp(staticFile.filePath, join(NEXT_RUNTIME_STATIC_ASSETS, distPathname), {
