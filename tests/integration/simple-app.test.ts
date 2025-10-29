@@ -34,9 +34,12 @@ import {
   startMockBlobStore,
 } from '../utils/helpers.js'
 import {
+  hasDefaultTurbopackBuilds,
+  isExperimentalPPRHardDeprecated,
   nextVersionSatisfies,
   shouldHaveAppRouterGlobalErrorInPrerenderManifest,
   shouldHaveAppRouterNotFoundInPrerenderManifest,
+  shouldHaveSlashIndexTagForIndexPage,
 } from '../utils/next-version-helpers.mjs'
 
 const mockedCp = cp as Mock<(typeof import('node:fs/promises'))['cp']>
@@ -203,7 +206,11 @@ test<FixtureTestContext>('index should be normalized within the cacheHandler and
   await runPlugin(ctx)
   const index = await invokeFunction(ctx, { url: '/' })
   expect(index.statusCode).toBe(200)
-  expect(index.headers?.['netlify-cache-tag']).toBe('_N_T_/layout,_N_T_/page,_N_T_/')
+  expect(index.headers?.['netlify-cache-tag']).toBe(
+    shouldHaveSlashIndexTagForIndexPage()
+      ? '_N_T_/layout,_N_T_/page,_N_T_/,_N_T_/index'
+      : '_N_T_/layout,_N_T_/page,_N_T_/',
+  )
 })
 
 // with 15.0.0-canary.187 and later Next.js no longer produce `stale-while-revalidate` directive
@@ -396,7 +403,7 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
         '/1',
         '/2',
         '/404',
-        '/[dynamic]',
+        isExperimentalPPRHardDeprecated() ? undefined : '/[dynamic]',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/index',
@@ -420,16 +427,95 @@ test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
   },
 )
 
-test<FixtureTestContext>('can require CJS module that is not bundled', async (ctx) => {
-  await createFixture('simple', ctx)
-  await runPlugin(ctx)
+// setup for this test only works with webpack builds due to usage of ` __non_webpack_require__` to avoid bundling a file
+test.skipIf(hasDefaultTurbopackBuilds())<FixtureTestContext>(
+  'can require CJS module that is not bundled',
+  async (ctx) => {
+    await createFixture('simple', ctx)
+    await runPlugin(ctx)
 
-  const response = await invokeFunction(ctx, { url: '/api/cjs-file-with-js-extension' })
+    const response = await invokeFunction(ctx, { url: '/api/cjs-file-with-js-extension' })
 
-  expect(response.statusCode).toBe(200)
+    expect(response.statusCode).toBe(200)
 
-  const parsedBody = JSON.parse(response.body)
+    const parsedBody = JSON.parse(response.body)
 
-  expect(parsedBody.notBundledCJSModule.isBundled).toEqual(false)
-  expect(parsedBody.bundledCJSModule.isBundled).toEqual(true)
+    expect(parsedBody.notBundledCJSModule.isBundled).toEqual(false)
+    expect(parsedBody.bundledCJSModule.isBundled).toEqual(true)
+  },
+)
+
+describe('next patching', async () => {
+  const { cp: originalCp, appendFile } = (await vi.importActual(
+    'node:fs/promises',
+  )) as typeof import('node:fs/promises')
+
+  const { version: nextVersion } = createRequire(
+    `${getFixtureSourceDirectory('simple')}/:internal:`,
+  )('next/package.json')
+
+  beforeAll(() => {
+    process.env.NETLIFY_NEXT_FORCE_APPLY_ONGOING_PATCHES = 'true'
+  })
+
+  afterAll(() => {
+    delete process.env.NETLIFY_NEXT_FORCE_APPLY_ONGOING_PATCHES
+  })
+
+  beforeEach(() => {
+    mockedCp.mockClear()
+    mockedCp.mockRestore()
+  })
+
+  test<FixtureTestContext>(`expected patches are applied and used (next version: "${nextVersion}")`, async (ctx) => {
+    const patches = getPatchesToApply(nextVersion)
+
+    await createFixture('simple', ctx)
+
+    const fieldNamePrefix = `TEST_${Date.now()}`
+
+    mockedCp.mockImplementation(async (...args) => {
+      const returnValue = await originalCp(...args)
+      if (typeof args[1] === 'string') {
+        for (const patch of patches) {
+          if (args[1].includes(join(patch.nextModule))) {
+            // we append something to assert that patch file was actually used
+            await appendFile(
+              args[1],
+              `;globalThis['${fieldNamePrefix}_${patch.nextModule}'] = 'patched'`,
+            )
+          }
+        }
+      }
+
+      return returnValue
+    })
+
+    await runPlugin(ctx)
+
+    // patched files was not used before function invocation
+    for (const patch of patches) {
+      expect(globalThis[`${fieldNamePrefix}_${patch.nextModule}`]).not.toBeDefined()
+    }
+
+    const home = await invokeFunction(ctx)
+    // make sure the function does work
+    expect(home.statusCode).toBe(200)
+    expect(load(home.body)('h1').text()).toBe('Home')
+
+    let shouldUpdateUpperBoundMessage = ''
+
+    // file was used during function invocation
+    for (const patch of patches) {
+      expect(globalThis[`${fieldNamePrefix}_${patch.nextModule}`]).toBe('patched')
+
+      if (patch.ongoing && !prerelease(nextVersion) && gt(nextVersion, patch.maxStableVersion)) {
+        shouldUpdateUpperBoundMessage += `Ongoing ${shouldUpdateUpperBoundMessage ? '\n' : ''}"${patch.nextModule}" patch still works on "${nextVersion}" which is higher than currently set maxStableVersion ("${patch.maxStableVersion}"). Update maxStableVersion in "src/build/content/server.ts" for this patch to at least "${nextVersion}".`
+      }
+    }
+
+    if (shouldUpdateUpperBoundMessage) {
+      expect.fail(shouldUpdateUpperBoundMessage)
+    }
+  })
 })

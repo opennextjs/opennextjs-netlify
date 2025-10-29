@@ -44,13 +44,13 @@ export interface ExportDetail {
 }
 
 export class PluginContext {
+  constants: NetlifyPluginConstants
   featureFlags: NetlifyPluginOptions['featureFlags']
   netlifyConfig: NetlifyPluginOptions['netlifyConfig']
   pluginName: string
   pluginVersion: string
   utils: NetlifyPluginUtils
 
-  private constants: NetlifyPluginConstants
   private packageJSON: { name: string; version: string } & Record<string, unknown>
 
   /** Absolute path of the next runtime plugin directory */
@@ -205,6 +205,11 @@ export class PluginContext {
   /** Absolute path of the edge handler */
   get edgeHandlerDir(): string {
     return join(this.edgeFunctionsDir, EDGE_HANDLER_NAME)
+  }
+
+  /** Absolute path to the skew protection config */
+  get skewProtectionConfigPath(): string {
+    return this.resolveFromPackagePath('.netlify/v1/skew-protection.json')
   }
 
   constructor(options: NetlifyPluginOptions) {

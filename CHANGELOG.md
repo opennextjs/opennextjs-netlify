@@ -1,5 +1,57 @@
 # Changelog
 
+## [5.14.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.3...v5.14.4) (2025-10-27)
+
+
+### Bug Fixes
+
+* incorrect output path of middleware nft for Next.js 16 ([#3211](https://github.com/opennextjs/opennextjs-netlify/issues/3211)) ([ff5479e](https://github.com/opennextjs/opennextjs-netlify/commit/ff5479e5feabac8aa1c9719440b8e6a7ded3993e))
+* remove duplicate fetch span ([#3202](https://github.com/opennextjs/opennextjs-netlify/issues/3202)) ([ed475ee](https://github.com/opennextjs/opennextjs-netlify/commit/ed475ee63040b7f478b4a3b58800beaa12cce472))
+
+## [5.14.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.2...v5.14.3) (2025-10-21)
+
+
+### Bug Fixes
+
+* support skipProxyUrlNormalize ([#3190](https://github.com/opennextjs/opennextjs-netlify/issues/3190)) ([5181234](https://github.com/opennextjs/opennextjs-netlify/commit/5181234f4a20a6b677a8a196f8c7a66769a234fa))
+
+## [5.14.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.1...v5.14.2) (2025-10-21)
+
+
+### Bug Fixes
+
+* swap `@opentelemetry` packages for `@netlify/otel` ([#3170](https://github.com/opennextjs/opennextjs-netlify/issues/3170)) ([0acd8a6](https://github.com/opennextjs/opennextjs-netlify/commit/0acd8a6d66964772c6912acfe21f30f3ce96a3a2))
+
+## [5.14.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.0...v5.14.1) (2025-10-21)
+
+
+### Bug Fixes
+
+* support revalidateTag SWR in 'use cache' handler ([#3180](https://github.com/opennextjs/opennextjs-netlify/issues/3180)) ([a90d2e5](https://github.com/opennextjs/opennextjs-netlify/commit/a90d2e5228bbb77bf657929f83729945480d83e5))
+
+## [5.14.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.5...v5.14.0) (2025-10-14)
+
+
+### Features
+
+* skew protection ([#3147](https://github.com/opennextjs/opennextjs-netlify/issues/3147)) ([95be9b9](https://github.com/opennextjs/opennextjs-netlify/commit/95be9b99f7b889e39195c074b39a726981506ed0))
+* support revalidateTag with SWR behavior ([#3173](https://github.com/opennextjs/opennextjs-netlify/issues/3173)) ([d24f15e](https://github.com/opennextjs/opennextjs-netlify/commit/d24f15ee595be1d01f44504983b70b01f96bb1b1))
+
+## [5.13.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.4...v5.13.5) (2025-10-06)
+
+
+### Bug Fixes
+
+* bundle edge-runtime assets for turbopack builds ([a6063c9](https://github.com/opennextjs/opennextjs-netlify/commit/a6063c921de95ab6e48c7ea6cb3e513d2cb63577))
+* exclude `musl` binaries from function bundle when building on Netlify with `pnpm` monorepos ([a6063c9](https://github.com/opennextjs/opennextjs-netlify/commit/a6063c921de95ab6e48c7ea6cb3e513d2cb63577))
+
+## [5.13.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.3...v5.13.4) (2025-10-01)
+
+
+### Bug Fixes
+
+* exclude `musl` binaries from function bundle when building on Netlify with `pnpm` ([#3145](https://github.com/opennextjs/opennextjs-netlify/issues/3145)) ([d11382c](https://github.com/opennextjs/opennextjs-netlify/commit/d11382c06c6c2e6d3e8c40fe4cfd47dc9df00384))
+
 ## [5.13.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.13.2...v5.13.3) (2025-09-16)
 
 

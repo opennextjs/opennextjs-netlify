@@ -12,7 +12,8 @@ async function getData(params) {
 }
 
 export default async function Page({ params }) {
-  const data = await getData(params)
+  const { id } = await params
+  const data = await getData({ id })
 
   return (
     <>
@@ -22,7 +23,7 @@ export default async function Page({ params }) {
         <dt>Show</dt>
         <dd>{data.name}</dd>
         <dt>Param</dt>
-        <dd>{params.id}</dd>
+        <dd>{id}</dd>
         <dt>Time</dt>
         <dd data-testid="date-now">{new Date().toISOString()}</dd>
       </dl>

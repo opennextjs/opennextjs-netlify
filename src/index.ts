@@ -11,6 +11,7 @@ import { copyStaticExport, publishStaticDir, unpublishStaticDir } from './build/
 import { clearStaleEdgeHandlers } from './build/functions/edge.js'
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
 import { PluginContext } from './build/plugin-context.js'
+import { setSkewProtection } from './build/skew-protection.js'
 import {
   verifyAdvancedAPIRoutes,
   verifyNetlifyFormsWorkaround,
@@ -42,7 +43,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     return
   }
 
-  await tracer.withActiveSpan('onPreBuild', async () => {
+  await tracer.withActiveSpan('onPreBuild', async (span) => {
     const ctx = new PluginContext(options)
     if (options.constants.IS_LOCAL) {
       // Only clear directory if we are running locally as then we might have stale functions from previous
@@ -53,6 +54,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     } else {
       await restoreBuildCache(ctx)
     }
+    await setSkewProtection(ctx, span)
   })
 
   // We will have a build plugin that will contain the adapter, we will still use some build plugin features

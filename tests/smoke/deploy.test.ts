@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest'
 import { Fixture, fixtureFactories } from '../utils/create-e2e-fixture'
+import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 const usedFixtures = new Set<Fixture>()
 /**
@@ -35,6 +36,19 @@ async function smokeTest(createFixture: () => Promise<Fixture>) {
   // remove comments that React injects into produced html
   const body = (await response.text()).replace(/<!--.+-->/g, '')
   await expect(body).toContain('SSR: yes')
+}
+
+if (nextVersionSatisfies('>=16.0.0')) {
+  test('npm monorepo with proxy / node middleware', async () => {
+    // proxy ~= node middleware
+    const fixture = await selfCleaningFixtureFactories.npmMonorepoProxy()
+
+    const response = await fetch(fixture.url)
+    expect(response.status).toBe(200)
+
+    const body = await response.json()
+    expect(body).toEqual({ proxy: true })
+  })
 }
 
 test('yarn@3 monorepo with pnpm linker', async () => {

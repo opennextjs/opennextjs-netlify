@@ -9,7 +9,7 @@ import { HtmlBlob } from '../shared/blob-types.cjs'
 
 import type { NextConfigForMultipleVersions } from './config.js'
 import { getRequestContext } from './handlers/request-context.cjs'
-import { getTracer } from './handlers/tracer.cjs'
+import { getTracer, withActiveSpan } from './handlers/tracer.cjs'
 import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
 // https://github.com/vercel/next.js/pull/68193/files#diff-37243d614f1f5d3f7ea50bbf2af263f6b1a9a4f70e84427977781e07b02f57f1R49
@@ -20,6 +20,9 @@ import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/sto
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore ignoring readonly NODE_ENV
 process.env.NODE_ENV = 'production'
+
+// Prevent duplicate fetch spans by silencing fetch spans produced by Next.js
+process.env.NEXT_OTEL_FETCH_DISABLED = '1'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { getRequestHandlers } = require('next/dist/server/lib/start-server.js')
@@ -91,8 +94,7 @@ export async function getMockedRequestHandler(
    */
   const initAsyncLocalStorage = new AsyncLocalStorage<typeof initContext>()
 
-  const tracer = getTracer()
-  return tracer.withActiveSpan('mocked request handler', async () => {
+  return withActiveSpan(getTracer(), 'mocked request handler', async () => {
     const ofs = { ...fs }
 
     async function readFileFallbackBlobStore(...fsargs: Parameters<FS['promises']['readFile']>) {

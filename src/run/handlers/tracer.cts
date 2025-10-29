@@ -1,8 +1,8 @@
+import { getTracer as otelGetTracer } from '@netlify/otel'
 // Here we need to actually import `trace` from @opentelemetry/api to add extra wrappers
 // other places should import `getTracer` from this module
-// eslint-disable-next-line no-restricted-imports
-import { type Span, trace, type Tracer } from '@opentelemetry/api'
-import { type SugaredTracer, wrapTracer } from '@opentelemetry/api/experimental'
+import { trace } from '@netlify/otel/opentelemetry'
+import type { Span } from '@netlify/otel/opentelemetry'
 
 import { getRequestContext, type RequestContext } from './request-context.cjs'
 
@@ -36,56 +36,54 @@ function spanHook(span: Span): Span {
   return span
 }
 
-// startSpan and startActiveSpan don't automatically handle span ending and error handling
-// so this typing just tries to enforce not using those methods in our code
-// we should be using withActiveSpan (and optionally withSpan) instead
-export type RuntimeTracer = Omit<SugaredTracer, 'startSpan' | 'startActiveSpan'>
+type NetlifyOtelTracer = NonNullable<ReturnType<typeof otelGetTracer>>
 
-let tracer: RuntimeTracer | undefined
+let tracer: NetlifyOtelTracer | undefined
 
-export function getTracer(): RuntimeTracer {
-  if (!tracer) {
-    const baseTracer = trace.getTracer('Next.js Runtime')
+export function getTracer(): NetlifyOtelTracer | undefined {
+  if (tracer) return tracer
 
-    // we add hooks to capture span start and end events to be able to add server-timings
-    // while preserving OTEL api
-    const startSpan = baseTracer.startSpan.bind(baseTracer)
-    baseTracer.startSpan = (
-      ...args: Parameters<Tracer['startSpan']>
-    ): ReturnType<Tracer['startSpan']> => {
-      const span = startSpan(...args)
-      spanMeta.set(span, { start: performance.now(), name: args[0] })
-      return spanHook(span)
-    }
+  const baseTracer = otelGetTracer('Next.js Runtime')
 
-    const startActiveSpan = baseTracer.startActiveSpan.bind(baseTracer)
+  if (!baseTracer) return undefined
 
-    // @ts-expect-error Target signature provides too few arguments. Expected 4 or more, but got 2.
-    baseTracer.startActiveSpan = (
-      ...args: Parameters<Tracer['startActiveSpan']>
-    ): ReturnType<Tracer['startActiveSpan']> => {
-      const [name, ...restOfArgs] = args
-
-      const augmentedArgs = restOfArgs.map((arg) => {
-        // callback might be 2nd, 3rd or 4th argument depending on used signature
-        // only callback can be a function so target that and keep rest arguments as-is
-        if (typeof arg === 'function') {
-          return (span: Span) => {
-            spanMeta.set(span, { start: performance.now(), name: args[0] })
-            spanHook(span)
-            return arg(span)
-          }
-        }
-
-        return arg
-      }) as typeof restOfArgs
-
-      return startActiveSpan(name, ...augmentedArgs)
-    }
-
-    // finally use SugaredTracer
-    tracer = wrapTracer(baseTracer)
+  // we add hooks to capture span start and end events to be able to add server-timings
+  // while preserving OTEL api
+  const startSpan = baseTracer.startSpan.bind(baseTracer)
+  baseTracer.startSpan = (
+    ...args: Parameters<NetlifyOtelTracer['startSpan']>
+  ): ReturnType<NetlifyOtelTracer['startSpan']> => {
+    const span = startSpan(...args)
+    spanMeta.set(span, { start: performance.now(), name: args[0] })
+    return spanHook(span)
   }
+
+  const startActiveSpan = baseTracer.startActiveSpan.bind(baseTracer)
+
+  // @ts-expect-error Target signature provides too few arguments. Expected 4 or more, but got 2.
+  baseTracer.startActiveSpan = (
+    ...args: Parameters<NetlifyOtelTracer['startActiveSpan']>
+  ): ReturnType<NetlifyOtelTracer['startActiveSpan']> => {
+    const [name, ...restOfArgs] = args
+
+    const augmentedArgs = restOfArgs.map((arg) => {
+      // callback might be 2nd, 3rd or 4th argument depending on used signature
+      // only callback can be a function so target that and keep rest arguments as-is
+      if (typeof arg === 'function') {
+        return (span: Span) => {
+          spanMeta.set(span, { start: performance.now(), name: args[0] })
+          spanHook(span)
+          return arg(span)
+        }
+      }
+
+      return arg
+    }) as typeof restOfArgs
+
+    return startActiveSpan(name, ...augmentedArgs)
+  }
+
+  tracer = baseTracer
 
   return tracer
 }
@@ -102,3 +100,5 @@ export function recordWarning(warning: Error, span?: Span) {
     warning: true,
   })
 }
+
+export { withActiveSpan } from '@netlify/otel'

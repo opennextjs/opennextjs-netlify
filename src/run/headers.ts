@@ -1,4 +1,4 @@
-import type { Span } from '@opentelemetry/api'
+import type { Span } from '@netlify/otel/opentelemetry'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
 import type { NetlifyCachedRouteValue, NetlifyCacheHandlerValue } from '../shared/cache-types.cjs'
@@ -152,7 +152,7 @@ export const adjustDateHeader = async ({
 }: {
   headers: Headers
   request: Request
-  span: Span
+  span?: Span
   requestContext: RequestContext
 }) => {
   const key = new URL(request.url).pathname

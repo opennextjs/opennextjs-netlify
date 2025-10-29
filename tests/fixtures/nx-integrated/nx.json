@@ -31,5 +31,6 @@
         "linter": "eslint"
       }
     }
-  }
+  },
+  "useInferencePlugins": false
 }

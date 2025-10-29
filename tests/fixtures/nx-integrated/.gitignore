@@ -39,9 +39,12 @@ testem.log
 Thumbs.db
 
 .nx/cache
+.nx/workspace-data
 
 # Next.js
 .next
 
 # Local Netlify folder
 .netlify
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md

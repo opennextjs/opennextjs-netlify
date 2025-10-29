@@ -19,6 +19,11 @@ const nextConfig = {
 
     return config
   },
+  // turbopack becomes default for builds in Next 16. There is failure when webpack configuration is present
+  // without turbopack configuration, so we add a turbopack configuration here to ensure this fixture
+  // works with default build bundler for all tested versions
+  // see https://github.com/vercel/next.js/blob/ba5a0ca79944b4c8a59d80d677bfedaf0fef33d6/packages/next/src/lib/turbopack-warning.ts#L159-L177
+  turbopack: {},
   outputFileTracingRoot: __dirname,
 }
 

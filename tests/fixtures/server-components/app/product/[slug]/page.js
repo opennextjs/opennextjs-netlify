@@ -1,12 +1,15 @@
-const Product = ({ params }) => (
-  <div>
-    <h1>Product {decodeURIComponent(params.slug)}</h1>
-    <p>
-      This page uses generateStaticParams() to prerender a Product
-      <span data-testid="date-now">{new Date().toISOString()}</span>
-    </p>
-  </div>
-)
+const Product = async ({ params }) => {
+  const { slug } = await params
+  return (
+    <div>
+      <h1>Product {decodeURIComponent(slug)}</h1>
+      <p>
+        This page uses generateStaticParams() to prerender a Product
+        <span data-testid="date-now">{new Date().toISOString()}</span>
+      </p>
+    </div>
+  )
+}
 
 export async function generateStaticParams() {
   return [
@@ -16,5 +19,7 @@ export async function generateStaticParams() {
     },
   ]
 }
+
+export const dynamic = 'force-static'
 
 export default Product

@@ -179,12 +179,12 @@ test.describe(
           )
 
           if (fallbackWasServed) {
-            const loading = await page.textContent('[data-testid="loading"]')
+            const loading = await page.getByTestId('loading').textContent()
             expect(loading, 'Fallback should be shown').toBe('Loading...')
           }
 
-          const date1 = await page.textContent('[data-testid="date-now"]')
-          const h1 = await page.textContent('h1')
+          const date1 = await page.getByTestId('date-now').textContent()
+          const h1 = await page.locator('h1').textContent()
           expect(h1).toBe(expectedH1Content)
 
           // check json route

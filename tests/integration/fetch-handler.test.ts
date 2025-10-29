@@ -363,7 +363,7 @@ test<FixtureTestContext>('does not fetch same cached fetch data from blobs twice
     'expected blobs for all types of values to be retrieved at most once per key (including fetch data, tag manifests, static files)',
   ).toBeDistinct()
 
-  ctx.blobServerGetSpy.mockClear()
+  ctx.blobServerOnRequestSpy.mockClear()
   handlerCalled = 0
   const request2 = await invokeFunction(ctx, {
     url: 'same-fetch-multiple-times/99',

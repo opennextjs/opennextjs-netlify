@@ -5,7 +5,7 @@ import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
-import { type Span } from '@opentelemetry/api'
+import type { Span } from '@netlify/otel/opentelemetry'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
 import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 
@@ -25,8 +25,14 @@ import {
 } from '../storage/storage.cjs'
 
 import { getLogger, getRequestContext } from './request-context.cjs'
-import { isAnyTagStale, markTagsAsStaleAndPurgeEdgeCache, purgeEdgeCache } from './tags-handler.cjs'
-import { getTracer, recordWarning } from './tracer.cjs'
+import {
+  isAnyTagStaleOrExpired,
+  markTagsAsStaleAndPurgeEdgeCache,
+  purgeEdgeCache,
+  type RevalidateTagDurations,
+  type TagStaleOrExpiredStatus,
+} from './tags-handler.cjs'
+import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
 
 let memoizedPrerenderManifest: PrerenderManifest
 
@@ -68,7 +74,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   private captureResponseCacheLastModified(
     cacheValue: NetlifyCacheHandlerValue,
     key: string,
-    getCacheKeySpan: Span,
+    getCacheKeySpan?: Span,
   ) {
     if (cacheValue.value?.kind === 'FETCH') {
       return
@@ -256,17 +262,17 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   async get(
     ...args: Parameters<CacheHandlerForMultipleVersions['get']>
   ): ReturnType<CacheHandlerForMultipleVersions['get']> {
-    return this.tracer.withActiveSpan('get cache key', async (span) => {
+    return withActiveSpan(this.tracer, 'get cache key', async (span) => {
       const [key, context = {}] = args
       getLogger().debug(`[NetlifyCacheHandler.get]: ${key}`)
 
-      span.setAttributes({ key })
+      span?.setAttributes({ key })
 
       const blob = await this.cacheStore.get<NetlifyCacheHandlerValue>(key, 'blobStore.get')
 
       // if blob is null then we don't have a cache entry
       if (!blob) {
-        span.addEvent('Cache miss', { key })
+        span?.addEvent('Cache miss', { key })
         return null
       }
 
@@ -275,7 +281,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       if (getRequestContext()?.isBackgroundRevalidation && typeof ttl === 'number' && ttl < 0) {
         // background revalidation request should allow data that is not yet stale,
         // but opt to discard STALE data, so that Next.js generate fresh response
-        span.addEvent('Discarding stale entry due to SWR background revalidation request', {
+        span?.addEvent('Discarding stale entry due to SWR background revalidation request', {
           key,
           ttl,
         })
@@ -290,18 +296,25 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         return null
       }
 
-      const staleByTags = await this.checkCacheEntryStaleByTags(
+      const { stale: staleByTags, expired: expiredByTags } = await this.checkCacheEntryStaleByTags(
         blob,
         context.tags,
         context.softTags,
       )
 
-      if (staleByTags) {
-        span.addEvent('Stale', { staleByTags, key, ttl })
+      if (expiredByTags) {
+        span?.addEvent('Expired', { expiredByTags, key, ttl })
         return null
       }
 
       this.captureResponseCacheLastModified(blob, key, span)
+
+      if (staleByTags) {
+        span?.addEvent('Stale', { staleByTags, key, ttl })
+        // note that we modify this after we capture last modified to ensure that Age is correct
+        // but we still let Next.js know that entry is stale
+        blob.lastModified = -1 // indicate that the entry is stale
+      }
 
       // Next sets a kind/kindHint and fetchUrl for data requests, however fetchUrl was found to be most reliable across versions
       const isDataRequest = Boolean(context.fetchUrl)
@@ -311,7 +324,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       switch (blob.value?.kind) {
         case 'FETCH':
-          span.addEvent('FETCH', {
+          span?.addEvent('FETCH', {
             lastModified: blob.lastModified,
             revalidate: context.revalidate,
             ttl,
@@ -323,7 +336,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
         case 'ROUTE':
         case 'APP_ROUTE': {
-          span.addEvent(blob.value?.kind, {
+          span?.addEvent(blob.value?.kind, {
             lastModified: blob.lastModified,
             status: blob.value.status,
             revalidate: blob.value.revalidate,
@@ -349,7 +362,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
             requestContext.pageHandlerRevalidate = revalidate
           }
 
-          span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
+          span?.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
           await this.injectEntryToPrerenderManifest(key, blob.value)
 
@@ -366,7 +379,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
           const { revalidate, rscData, segmentData, ...restOfPageValue } = blob.value
 
-          span.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
+          span?.addEvent(blob.value?.kind, { lastModified: blob.lastModified, revalidate, ttl })
 
           await this.injectEntryToPrerenderManifest(key, blob.value)
 
@@ -387,7 +400,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           }
         }
         default:
-          span.recordException(new Error(`Unknown cache entry kind: ${blob.value?.kind}`))
+          span?.recordException(new Error(`Unknown cache entry kind: ${blob.value?.kind}`))
       }
       return null
     })
@@ -439,10 +452,10 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   }
 
   async set(...args: Parameters<CacheHandlerForMultipleVersions['set']>) {
-    return this.tracer.withActiveSpan('set cache key', async (span) => {
+    return withActiveSpan(this.tracer, 'set cache key', async (span?: Span) => {
       const [key, data, context] = args
       const lastModified = Date.now()
-      span.setAttributes({ key, lastModified })
+      span?.setAttributes({ key, lastModified })
 
       getLogger().debug(`[NetlifyCacheHandler.set]: ${key}`)
 
@@ -477,8 +490,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     })
   }
 
-  async revalidateTag(tagOrTags: string | string[]) {
-    return markTagsAsStaleAndPurgeEdgeCache(tagOrTags)
+  async revalidateTag(tagOrTags: string | string[], durations?: RevalidateTagDurations) {
+    return markTagsAsStaleAndPurgeEdgeCache(tagOrTags, durations)
   }
 
   resetRequestCache() {
@@ -493,7 +506,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     cacheEntry: NetlifyCacheHandlerValue,
     tags: string[] = [],
     softTags: string[] = [],
-  ) {
+  ): TagStaleOrExpiredStatus | Promise<TagStaleOrExpiredStatus> {
     let cacheTags: string[] = []
 
     if (cacheEntry.value?.kind === 'FETCH') {
@@ -508,7 +521,10 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       cacheTags =
         (cacheEntry.value.headers?.[NEXT_CACHE_TAGS_HEADER] as string)?.split(/,|%2c/gi) || []
     } else {
-      return false
+      return {
+        stale: false,
+        expired: false,
+      }
     }
 
     // 1. Check if revalidateTags array passed from Next.js contains any of cacheEntry tags
@@ -516,14 +532,17 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       // TODO: test for this case
       for (const tag of this.revalidatedTags) {
         if (cacheTags.includes(tag)) {
-          return true
+          return {
+            stale: true,
+            expired: true,
+          }
         }
       }
     }
 
     // 2. If any in-memory tags don't indicate that any of tags was invalidated
     //    we will check blob store.
-    return isAnyTagStale(cacheTags, cacheEntry.lastModified)
+    return isAnyTagStaleOrExpired(cacheTags, cacheEntry.lastModified)
   }
 }
 

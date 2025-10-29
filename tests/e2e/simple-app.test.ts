@@ -1,5 +1,5 @@
 import { expect, type Locator, type Response } from '@playwright/test'
-import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
+import { hasDefaultTurbopackBuilds, nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { generateTestTags, test } from '../utils/playwright-helpers.js'
 
 const expectImageWasLoaded = async (locator: Locator) => {
@@ -239,14 +239,14 @@ test.describe(
       const headers = response?.headers() || {}
       expect(response?.status()).toBe(404)
 
-      expect(await page.textContent('h1')).toBe('404 Not Found')
+      await expect(page.locator('h1')).toHaveText('404 Not Found')
 
       // https://github.com/vercel/next.js/pull/66674 made changes to returned cache-control header,
       // before that 404 page would have `private` directive, after that (14.2.4 and canary.24) it
       // would not ... and then https://github.com/vercel/next.js/pull/69802 changed it back again
       // (14.2.10 and canary.147)
       const shouldHavePrivateDirective = nextVersionSatisfies(
-        '<14.2.4 || >=14.2.10 <15.0.0-canary.24 || ^15.0.0-canary.147',
+        '<14.2.4 || >=14.2.10 <15.0.0-canary.24 || >=15.0.0-canary.147',
       )
 
       expect(headers['debug-netlify-cdn-cache-control']).toBe(
@@ -267,7 +267,7 @@ test.describe(
       const headers = response?.headers() || {}
       expect(response?.status()).toBe(404)
 
-      expect(await page.textContent('h1')).toBe('404 Not Found')
+      await expect(page.locator('h1')).toHaveText('404 Not Found')
 
       expect(headers['debug-netlify-cdn-cache-control']).toBe(
         nextVersionSatisfies('>=15.0.0-canary.187')
@@ -286,6 +286,8 @@ test.describe(
     })
 
     test('can require CJS module that is not bundled', async ({ simple }) => {
+      // setup for this test only works with webpack builds due to usage of ` __non_webpack_require__` to avoid bundling a file
+      test.skip(hasDefaultTurbopackBuilds(), 'Setup for this test only works with webpack builds')
       const resp = await fetch(`${simple.url}/api/cjs-file-with-js-extension`)
 
       expect(resp.status).toBe(200)
