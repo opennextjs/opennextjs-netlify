@@ -25,16 +25,48 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
       const inMemoryCache = getRequestScopedInMemoryCache()
 
       const memoizedValue = inMemoryCache.get(key)
-      if (typeof memoizedValue !== 'undefined') {
-        return memoizedValue as T | null | Promise<T | null>
+      if (
+        memoizedValue?.conditional === false &&
+        typeof memoizedValue?.currentRequestValue !== 'undefined'
+      ) {
+        return memoizedValue.currentRequestValue as T | null | Promise<T | null>
       }
 
       const blobKey = await encodeBlobKey(key)
       const getPromise = withActiveSpan(tracer, otelSpanTitle, async (span) => {
-        span?.setAttributes({ key, blobKey })
-        const blob = (await store.get(blobKey, { type: 'json' })) as T | null
-        inMemoryCache.set(key, blob)
-        span?.addEvent(blob ? 'Hit' : 'Miss')
+        const { etag: previousEtag, globalValue: previousBlob } = memoizedValue?.conditional
+          ? memoizedValue
+          : {}
+
+        span?.setAttributes({ key, blobKey, previousEtag })
+
+        const result = await store.getWithMetadata(blobKey, {
+          type: 'json',
+          etag: previousEtag,
+        })
+
+        const shouldReuseMemoizedBlob = result?.etag && previousEtag === result?.etag
+
+        const blob = (shouldReuseMemoizedBlob ? previousBlob : result?.data) as T | null
+
+        if (result?.etag && blob) {
+          inMemoryCache.set(key, {
+            data: blob,
+            etag: result?.etag,
+          })
+        } else {
+          // if we don't get blob (null) or etag for some reason is missing,
+          // we still want to store resolved blob value so that it could be reused
+          // within the same request
+          inMemoryCache.set(key, blob)
+        }
+
+        span?.setAttributes({
+          etag: result?.etag,
+          reusingPreviouslyFetchedBlob: shouldReuseMemoizedBlob,
+          status: blob ? (shouldReuseMemoizedBlob ? 'Hit, no change' : 'Hit') : 'Miss',
+        })
+
         return blob
       })
       inMemoryCache.set(key, getPromise)
@@ -48,7 +80,14 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
       const blobKey = await encodeBlobKey(key)
       return withActiveSpan(tracer, otelSpanTitle, async (span) => {
         span?.setAttributes({ key, blobKey })
-        return await store.setJSON(blobKey, value)
+        const writeResult = await store.setJSON(blobKey, value)
+        if (writeResult?.etag) {
+          inMemoryCache.set(key, {
+            data: value,
+            etag: writeResult.etag,
+          })
+        }
+        return writeResult
       })
     },
   }
