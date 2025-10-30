@@ -93,7 +93,7 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
-          deno-version: v2.2.4
+          deno-version: v2.4.2
       - name: "Install dependencies"
         run: npm ci
       - name: "Prepare Netlify CLI"
@@ -101,7 +101,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
-          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
+          npm install -g ${{ github.workspace }}/netlify-cli-23.10.0.tgz
           npx netlify login
       - name: Get installed Playwright version
         id: playwright-version
@@ -188,7 +188,7 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/edge-bundler/blob/e55f825bd985d3c92e21d1b765d71e70d5628fba/node/bridge.ts#L17
-          deno-version: v2.2.4
+          deno-version: v2.4.2
       - name: "Install dependencies"
         run: npm ci
       - name: "Build"
@@ -268,7 +268,7 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
-          deno-version: v2.2.4
+          deno-version: v2.4.2
       - name: "Install dependencies"
         run: npm ci
       - name: "Build"
@@ -278,7 +278,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
-          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
+          npm install -g ${{ github.workspace }}/netlify-cli-23.10.0.tgz
           npx netlify login
       - name: "Smoke tests"
         run: npm run test:ci:smoke
