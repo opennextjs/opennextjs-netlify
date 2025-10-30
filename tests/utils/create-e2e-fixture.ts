@@ -67,6 +67,10 @@ interface E2EConfig {
   env?: Record<string, string>
 }
 
+function getNetlifyCLIExecutable() {
+  return `node ${fileURLToPath(new URL(`../../node_modules/.bin/netlify`, import.meta.url))}`
+}
+
 /**
  * Copies a fixture to a temp folder on the system and runs the tests inside.
  * @param fixture name of the folder inside the fixtures folder
@@ -271,7 +275,9 @@ async function installRuntime(
 
 async function verifyFixture(isolatedFixtureRoot: string, { expectedCliVersion }: E2EConfig) {
   if (expectedCliVersion) {
-    const { stdout } = await execaCommand('npx netlify --version', { cwd: isolatedFixtureRoot })
+    const { stdout } = await execaCommand(`${getNetlifyCLIExecutable()} --version`, {
+      cwd: isolatedFixtureRoot,
+    })
 
     const match = stdout.match(/netlify-cli\/(?<version>\S+)/)
 
@@ -300,7 +306,7 @@ export async function deploySiteWithCLI(
   console.log(`🚀 Building and deploying site...`)
 
   const outputFile = 'deploy-output.txt'
-  let cmd = `npx netlify deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
+  let cmd = `${getNetlifyCLIExecutable()} deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
 
   if (packagePath) {
     cmd += ` --filter ${packagePath}`
@@ -382,7 +388,7 @@ export async function deploySiteWithBuildbot(
   // poll for status
   while (true) {
     const { stdout } = await execaCommand(
-      `npx netlify api getDeploy --data=${JSON.stringify({ deploy_id })}`,
+      `${getNetlifyCLIExecutable()} api getDeploy --data=${JSON.stringify({ deploy_id })}`,
     )
     const { state } = JSON.parse(stdout)
 
@@ -416,7 +422,7 @@ export async function deleteDeploy(deployID?: string): Promise<void> {
     return
   }
 
-  const cmd = `npx netlify api deleteDeploy --data='{"deploy_id":"${deployID}"}'`
+  const cmd = `${getNetlifyCLIExecutable()} api deleteDeploy --data='{"deploy_id":"${deployID}"}'`
   // execa mangles around with the json so let's use exec here
   return new Promise<void>((resolve, reject) => exec(cmd, (err) => (err ? reject(err) : resolve())))
 }
@@ -435,7 +441,7 @@ export function getBuildFixtureVariantCommand(variantName: string) {
 }
 
 export async function createSite(siteConfig?: { name: string }) {
-  const cmd = `npx netlify api createSiteInTeam --data=${JSON.stringify({
+  const cmd = `${getNetlifyCLIExecutable()} api createSiteInTeam --data=${JSON.stringify({
     account_slug: 'netlify-integration-testing',
     body: siteConfig ?? {},
   })}`
@@ -453,12 +459,12 @@ export async function createSite(siteConfig?: { name: string }) {
 }
 
 export async function deleteSite(siteId: string) {
-  const cmd = `npx netlify api deleteSite --data=${JSON.stringify({ site_id: siteId })}`
+  const cmd = `${getNetlifyCLIExecutable()} api deleteSite --data=${JSON.stringify({ site_id: siteId })}`
   await execaCommand(cmd)
 }
 
 export async function publishDeploy(siteId: string, deployID: string) {
-  const cmd = `npx netlify api restoreSiteDeploy --data=${JSON.stringify({ site_id: siteId, deploy_id: deployID })}`
+  const cmd = `${getNetlifyCLIExecutable()} api restoreSiteDeploy --data=${JSON.stringify({ site_id: siteId, deploy_id: deployID })}`
   await execaCommand(cmd)
 }
 
