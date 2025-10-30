@@ -26,6 +26,33 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
   }
 }
 
+const getHeaderValueArray = (header: string): string[] => {
+  return header
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+const omitHeaderValues = (header: string, values: string[]): string => {
+  const headerValues = getHeaderValueArray(header)
+  const filteredValues = headerValues.filter(
+    (value) => !values.some((val) => value.startsWith(val)),
+  )
+  return filteredValues.join(', ')
+}
+
+/**
+ * https://httpwg.org/specs/rfc9211.html
+ *
+ * We get HIT, MISS, STALE statuses from Next cache.
+ * We will ignore other statuses and will not set Cache-Status header in those cases.
+ */
+const NEXT_CACHE_TO_CACHE_STATUS: Record<string, string> = {
+  HIT: `hit`,
+  MISS: `fwd=miss`,
+  STALE: `hit; fwd=stale`,
+}
+
 type NextHandler = (
   req: IncomingMessage,
   res: ServerResponse,
@@ -39,6 +66,11 @@ export async function runNextHandler(
   context: Context,
   nextHandler: NextHandler,
 ): Promise<Response> {
+  console.log('Handling request', {
+    url: request.url,
+    isDataRequest: request.headers.get('x-nextjs-data'),
+  })
+
   const { req, res } = toReqRes(request)
   // Work around a bug in http-proxy in next@<14.0.2
   Object.defineProperty(req, 'connection', {
@@ -71,5 +103,50 @@ export async function runNextHandler(
     })
 
   const response = await toComputeResponse(res)
+
+  {
+    // move cache-control to cdn-cache-control
+    const cacheControl = response.headers.get('cache-control')
+    if (
+      cacheControl &&
+      ['GET', 'HEAD'].includes(request.method) &&
+      !response.headers.has('cdn-cache-control') &&
+      !response.headers.has('netlify-cdn-cache-control')
+    ) {
+      // handle CDN Cache Control on ISR and App Router page responses
+      const browserCacheControl = omitHeaderValues(cacheControl, [
+        's-maxage',
+        'stale-while-revalidate',
+      ])
+      const cdnCacheControl =
+        // if we are serving already stale response, instruct edge to not attempt to cache that response
+        response.headers.get('x-nextjs-cache') === 'STALE'
+          ? 'public, max-age=0, must-revalidate, durable'
+          : [
+              ...getHeaderValueArray(cacheControl).map((value) =>
+                value === 'stale-while-revalidate' ? 'stale-while-revalidate=31536000' : value,
+              ),
+              'durable',
+            ].join(', ')
+
+      response.headers.set(
+        'cache-control',
+        browserCacheControl || 'public, max-age=0, must-revalidate',
+      )
+      response.headers.set('netlify-cdn-cache-control', cdnCacheControl)
+    }
+  }
+
+  {
+    // set Cache-Status header based on Next.js cache status
+    const nextCache = response.headers.get('x-nextjs-cache')
+    if (nextCache) {
+      if (nextCache in NEXT_CACHE_TO_CACHE_STATUS) {
+        response.headers.set('cache-status', NEXT_CACHE_TO_CACHE_STATUS[nextCache])
+      }
+      response.headers.delete('x-nextjs-cache')
+    }
+  }
+
   return response
 }
