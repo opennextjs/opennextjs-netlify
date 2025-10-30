@@ -1,13 +1,23 @@
 import { test as base, PlaywrightWorkerArgs, WorkerFixture, Page, expect } from '@playwright/test'
 import { Fixture, fixtureFactories } from './create-e2e-fixture'
 
+const alreadyDeployed = new WeakMap<() => Promise<Fixture>, Promise<Fixture>>()
+
 const makeE2EFixture = (
   createFixture: () => Promise<Fixture>,
 ): [WorkerFixture<Fixture, PlaywrightWorkerArgs>, { scope: 'worker' }] => [
   async ({}, use) => {
-    const fixture = await createFixture()
+    const previousFixture = alreadyDeployed.get(createFixture)
+    if (previousFixture) {
+      await use(await previousFixture)
+      return
+    }
+
+    const fixturePromise = createFixture()
+    alreadyDeployed.set(createFixture, fixturePromise)
+    const fixture = await fixturePromise
     await use(fixture)
-    await fixture.cleanup() // TODO: replace false with info about test results
+    // await fixture.cleanup() // TODO: replace false with info about test results
   },
   { scope: 'worker' },
 ]
@@ -108,3 +118,48 @@ export const test = base.extend<
     { auto: true },
   ],
 })
+
+/**
+ * Generate tags based on the provided options. This is useful to notice patterns when group of tests fail
+ * @param options The options to generate tags from.
+ * @returns An array of generated tags.
+ */
+export const generateTestTags = (options: {
+  pagesRouter?: boolean
+  appRouter?: boolean
+  i18n?: boolean
+  basePath?: boolean
+  middleware?: false | 'edge' | 'node'
+  customDistDir?: boolean
+  export?: boolean
+  monorepo?: boolean
+}) => {
+  const tags: string[] = []
+
+  if (options.pagesRouter) {
+    tags.push('@pages-router')
+  }
+  if (options.appRouter) {
+    tags.push('@app-router')
+  }
+  if (options.i18n) {
+    tags.push('@i18n')
+  }
+  if (options.basePath) {
+    tags.push('@base-path')
+  }
+  if (options.middleware) {
+    tags.push(`@middleware-${options.middleware}`)
+  }
+  if (options.customDistDir) {
+    tags.push('@custom-dist-dir')
+  }
+  if (options.export) {
+    tags.push('@export')
+  }
+  if (options.monorepo) {
+    tags.push('@monorepo')
+  }
+
+  return tags
+}
