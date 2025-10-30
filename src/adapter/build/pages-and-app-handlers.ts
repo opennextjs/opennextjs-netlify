@@ -108,8 +108,7 @@ export async function onBuildComplete(
   netlifyAdapterContext.frameworksAPIConfig.functions[PAGES_AND_APP_FUNCTION_INTERNAL_NAME] = {
     node_bundler: 'none',
     included_files: ['**'],
-    // TODO(pieh): allow to set `includedFilesBasePath` via frameworks api config
-    // @ts-expect-error  we can't define includedFilesBasePath via Frameworks API, this only works because of local monkey patching of CLI
+    // TODO(pieh): below only works due to local patches, need to ship proper support
     included_files_base_path: PAGES_AND_APP_FUNCTION_DIR,
   }
 

@@ -1,0 +1,13 @@
+diff --git a/node_modules/netlify-cli/node_modules/@netlify/build/lib/plugins_core/functions/zisi.js b/node_modules/netlify-cli/node_modules/@netlify/build/lib/plugins_core/functions/zisi.js
+index 96cfa0b..8c9e154 100644
+--- a/node_modules/netlify-cli/node_modules/@netlify/build/lib/plugins_core/functions/zisi.js
++++ b/node_modules/netlify-cli/node_modules/@netlify/build/lib/plugins_core/functions/zisi.js
+@@ -45,7 +45,7 @@ export const normalizeFunctionConfig = ({ buildDir, functionConfig = {}, isRunni
+     externalNodeModules: functionConfig.external_node_modules,
+     includedFiles: functionConfig.included_files,
+     name: functionConfig.name,
+-    includedFilesBasePath: buildDir,
++    includedFilesBasePath: functionConfig.included_files_base_path ?? buildDir,
+     ignoredNodeModules: functionConfig.ignored_node_modules,
+     nodeVersion,
+     schedule: functionConfig.schedule,
