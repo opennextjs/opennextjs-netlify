@@ -1,13 +1,23 @@
 import { test as base, PlaywrightWorkerArgs, WorkerFixture, Page, expect } from '@playwright/test'
 import { Fixture, fixtureFactories } from './create-e2e-fixture'
 
+const alreadyDeployed = new WeakMap<() => Promise<Fixture>, Promise<Fixture>>()
+
 const makeE2EFixture = (
   createFixture: () => Promise<Fixture>,
 ): [WorkerFixture<Fixture, PlaywrightWorkerArgs>, { scope: 'worker' }] => [
   async ({}, use) => {
-    const fixture = await createFixture()
+    const previousFixture = alreadyDeployed.get(createFixture)
+    if (previousFixture) {
+      await use(await previousFixture)
+      return
+    }
+
+    const fixturePromise = createFixture()
+    alreadyDeployed.set(createFixture, fixturePromise)
+    const fixture = await fixturePromise
     await use(fixture)
-    await fixture.cleanup() // TODO: replace false with info about test results
+    // await fixture.cleanup() // TODO: replace false with info about test results
   },
   { scope: 'worker' },
 ]
