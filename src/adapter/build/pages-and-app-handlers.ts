@@ -33,19 +33,35 @@ export async function onBuildComplete(
     nextAdapterContext.outputs.appPages,
     nextAdapterContext.outputs.appRoutes,
   ]) {
-    if (outputs) {
-      for (const output of outputs) {
-        if (output.runtime === 'edge') {
-          // TODO: figure something out here
-          continue
-        }
-        for (const asset of Object.values(output.assets)) {
-          requiredFiles.add(asset)
-        }
-
-        requiredFiles.add(output.filePath)
-        pathnameToEntry[output.pathname] = relative(nextAdapterContext.repoRoot, output.filePath)
+    for (const output of outputs) {
+      if (output.runtime === 'edge') {
+        // TODO: figure something out here
+        continue
       }
+      for (const asset of Object.values(output.assets)) {
+        requiredFiles.add(asset)
+      }
+
+      requiredFiles.add(output.filePath)
+      pathnameToEntry[output.pathname] = relative(nextAdapterContext.repoRoot, output.filePath)
+    }
+  }
+
+  for (const prerender of nextAdapterContext.outputs.prerenders) {
+    if (prerender.pathname in pathnameToEntry) {
+      console.log('Skipping prerender, already have route:', prerender.pathname)
+    } else if (prerender.parentOutputId in pathnameToEntry) {
+      // if we don't have routing for this route yet, add it
+      console.log('prerender mapping', {
+        from: prerender.pathname,
+        to: prerender.parentOutputId,
+      })
+      pathnameToEntry[prerender.pathname] = pathnameToEntry[prerender.parentOutputId]
+    } else {
+      console.warn('Could not find parent output for prerender:', {
+        pathname: prerender,
+        parentOutputId: prerender.parentOutputId,
+      })
     }
   }
 
