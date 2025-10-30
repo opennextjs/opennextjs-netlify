@@ -54,16 +54,16 @@
   "devDependencies": {
     "@fastly/http-compute-js": "1.1.5",
     "@netlify/blobs": "^10.3.0",
-    "@netlify/build": "file:netlify-build-35.2.11.tgz",
+    "@netlify/build": "file:/home/runner/work/opennextjs-netlify/opennextjs-netlify/netlify-build-35.2.11.tgz",
     "@netlify/config": "^24.0.6",
-    "@netlify/edge-bundler": "file:netlify-edge-bundler-14.8.4.tgz",
+    "@netlify/edge-bundler": "file:/home/runner/work/opennextjs-netlify/opennextjs-netlify/netlify-edge-bundler-14.8.4.tgz",
     "@netlify/edge-functions": "^3.0.1",
     "@netlify/edge-functions-bootstrap": "^2.17.1",
     "@netlify/eslint-config-node": "^7.0.1",
     "@netlify/functions": "^5.0.1",
     "@netlify/otel": "^4.3.2",
     "@netlify/serverless-functions-api": "^2.7.1",
-    "@netlify/zip-it-and-ship-it": "file:netlify-zip-it-and-ship-it-14.1.12.tgz",
+    "@netlify/zip-it-and-ship-it": "file:/home/runner/work/opennextjs-netlify/opennextjs-netlify/netlify-zip-it-and-ship-it-14.1.12.tgz",
     "@opentelemetry/api": "^1.8.0",
     "@playwright/test": "^1.43.1",
     "@types/adm-zip": "^0.5.7",
@@ -103,10 +103,10 @@
   "overrides": {
     "react": "19.0.0-rc.0",
     "react-dom": "19.0.0-rc.0",
-    "@netlify/build": "file:netlify-build-35.2.11.tgz",
-    "@netlify/edge-bundler": "file:netlify-edge-bundler-14.8.4.tgz",
-    "@netlify/functions-utils": "file:netlify-functions-utils-6.2.12.tgz",
-    "@netlify/zip-it-and-ship-it": "file:netlify-zip-it-and-ship-it-14.1.12.tgz"
+    "@netlify/build": "file:/home/runner/work/opennextjs-netlify/opennextjs-netlify/netlify-build-35.2.11.tgz",
+    "@netlify/edge-bundler": "file:/home/runner/work/opennextjs-netlify/opennextjs-netlify/netlify-edge-bundler-14.8.4.tgz",
+    "@netlify/functions-utils": "file:/home/runner/work/opennextjs-netlify/opennextjs-netlify/netlify-functions-utils-6.2.12.tgz",
+    "@netlify/zip-it-and-ship-it": "file:/home/runner/work/opennextjs-netlify/opennextjs-netlify/netlify-zip-it-and-ship-it-14.1.12.tgz"
   },
   "clean-package": {
     "indent": 2,
