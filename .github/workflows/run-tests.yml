@@ -78,7 +78,7 @@ jobs:
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ steps.resolve-next-version.outputs.version }}' is '$NODE_VERSION'"
       - name: "Install Node"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
           cache: "npm"
@@ -166,7 +166,7 @@ jobs:
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ matrix.version }}' is '$NODE_VERSION'"
       - name: "Install Node"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
           cache: "npm"
@@ -256,7 +256,7 @@ jobs:
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ matrix.version }}' is '$NODE_VERSION'"
       - name: "Install Node"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
           cache: "npm"
@@ -299,7 +299,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 18
       - name: Install dependencies

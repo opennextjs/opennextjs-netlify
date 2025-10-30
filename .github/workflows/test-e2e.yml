@@ -138,7 +138,7 @@ jobs:
           echo "Default bundler for 'next@${{ matrix.version_spec.version }}' is '$DEFAULT_BUNDLER'"
 
       - name: setup node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
 
