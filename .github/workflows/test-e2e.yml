@@ -240,7 +240,7 @@ jobs:
 
       - name: Upload Test Results
         if: success() || failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-result-${{matrix.version_spec.selector}}-${{ matrix.group }}
           path: ${{ env.next-path }}/test/${{steps.decide-default-bundler.outputs.default_bundler == 'turbopack' && 'turbopack-test-junit-report' || 'test-junit-report'}}/*.xml
@@ -267,7 +267,7 @@ jobs:
         uses: denoland/setup-deno@v1
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           pattern: test-result-${{matrix.version_spec.selector}}-*
           path: artifacts
@@ -286,7 +286,7 @@ jobs:
           deno run -A tools/deno/generate-md.ts >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Test JSON
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           # TODO(serhalp) Consider renaming this. It's misleading, since it's just an identifier,
           # but it's formatted like a filename, and happens to be almost - but not quite - the
