@@ -2,15 +2,31 @@
 // a Webpack bundle. You should not import this file from anywhere in the
 // application.
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { Buffer } from 'node:buffer'
 
 import { createRequire } from 'node:module' // used in dynamically generated part
 import process from 'node:process'
 
 import { registerCJSModules } from '../edge-runtime/lib/cjs.ts' // used in dynamically generated part
 
-globalThis.process = process
+console.log('deno version', process.versions.deno)
 
-globalThis.AsyncLocalStorage = AsyncLocalStorage
+if (typeof globalThis.process === 'undefined') {
+  console.log('shimming node process')
+  globalThis.process = process
+}
+
+if (typeof globalThis.AsyncLocalStorage === 'undefined') {
+  console.log('shimming node AsyncLocalStorage')
+  globalThis.AsyncLocalStorage = AsyncLocalStorage
+}
+
+if (typeof globalThis.Buffer === 'undefined') {
+  console.log('shimming node Buffer')
+  globalThis.Buffer = Buffer
+}
+
+console.log('snapshot', typeof AsyncLocalStorage.snapshot)
 
 // needed for path.relative and path.resolve to work
 Deno.cwd = () => ''
