@@ -1,6 +1,7 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path/posix'
 
+import type { InSourceConfig } from '@netlify/zip-it-and-ship-it/dist/runtimes/node/in_source_config/index.js'
 import { glob } from 'fast-glob'
 
 import {
@@ -81,7 +82,13 @@ export async function onBuildComplete(
 
   await copyRuntime(join(PAGES_AND_APP_FUNCTION_DIR, RUNTIME_DIR))
 
-  const functionsPaths = Object.keys(pathnameToEntry)
+  const functionConfig = {
+    path: Object.keys(pathnameToEntry),
+    nodeBundler: 'none',
+    includedFiles: ['**'],
+    generator: GENERATOR,
+    name: DISPLAY_NAME_PAGES_AND_APP,
+  } as const satisfies InSourceConfig
 
   // generate needed runtime files
   const entrypoint = /* javascript */ `
@@ -108,27 +115,14 @@ export async function onBuildComplete(
       return runNextHandler(request, context, nextHandler)
     }
 
-    export const config = {
-      
-      path: ${JSON.stringify(functionsPaths, null, 2)},
-    }
+    export const config = ${JSON.stringify(functionConfig, null, 2)}
   `
   await writeFile(
     join(PAGES_AND_APP_FUNCTION_DIR, `${PAGES_AND_APP_FUNCTION_INTERNAL_NAME}.mjs`),
     entrypoint,
   )
 
-  // configuration
-  netlifyAdapterContext.frameworksAPIConfig ??= {}
-  netlifyAdapterContext.frameworksAPIConfig.functions ??= { '*': {} }
-  netlifyAdapterContext.frameworksAPIConfig.functions[PAGES_AND_APP_FUNCTION_INTERNAL_NAME] = {
-    node_bundler: 'none',
-    included_files: ['**'],
-    // TODO(pieh): below only works due to local patches, need to ship proper support
-    included_files_base_path: PAGES_AND_APP_FUNCTION_DIR,
-  }
-
-  netlifyAdapterContext.preparedOutputs.endpoints.push(...functionsPaths)
+  netlifyAdapterContext.preparedOutputs.endpoints.push(...functionConfig.path)
 }
 
 const copyRuntime = async (handlerDirectory: string): Promise<void> => {

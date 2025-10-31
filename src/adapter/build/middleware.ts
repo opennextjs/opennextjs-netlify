@@ -1,6 +1,7 @@
 import { cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, parse, relative } from 'node:path/posix'
 
+import type { IntegrationsConfig } from '@netlify/edge-functions'
 import { glob } from 'fast-glob'
 import { pathToRegexp } from 'path-to-regexp'
 
@@ -183,6 +184,13 @@ const writeHandlerFile = async (
     ),
   )
 
+  const functionConfig = {
+    cache: undefined,
+    generator: GENERATOR,
+    name: DISPLAY_NAME_MIDDLEWARE,
+    pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.regexp),
+  } satisfies IntegrationsConfig
+
   // Writing the function entry file. It wraps the middleware code with the
   // compatibility layer mentioned above.
   await writeFile(
@@ -198,12 +206,7 @@ const writeHandlerFile = async (
 
     export default (req, context) => handleMiddleware(req, context, handler);
 
-    export const config = ${JSON.stringify({
-      cache: undefined,
-      generator: GENERATOR,
-      name: DISPLAY_NAME_MIDDLEWARE,
-      pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.regexp),
-    })}
+    export const config = ${JSON.stringify(functionConfig, null, 2)}
     `,
   )
 }
