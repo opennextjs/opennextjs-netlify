@@ -37,6 +37,7 @@ module.exports = {
       },
     ],
     'unicorn/filename-case': ['error', { case: 'kebabCase' }],
+    'unicorn/no-nested-ternary': 'off',
     'unicorn/numeric-separators-style': 'off',
   },
   overrides: [
