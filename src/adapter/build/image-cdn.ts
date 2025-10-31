@@ -6,7 +6,7 @@ import { makeRe } from 'picomatch'
 import type { NetlifyAdapterContext, NextConfigComplete, OnBuildCompleteContext } from './types.js'
 
 const NETLIFY_IMAGE_LOADER_FILE = fileURLToPath(
-  import.meta.resolve(`./image-cdn-next-image-loader.cjs`),
+  import.meta.resolve(`../shared/image-cdn-next-image-loader.cjs`),
 )
 
 export function modifyConfig(config: NextConfigComplete) {
