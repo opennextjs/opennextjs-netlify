@@ -129,6 +129,6 @@ export const onEnd = async (options: NetlifyPluginOptions) => {
   }
 
   await tracer.withActiveSpan('onEnd', async () => {
-    await unpublishStaticDir(new PluginContext(options))
+    // await unpublishStaticDir(new PluginContext(options))
   })
 }

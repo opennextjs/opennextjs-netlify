@@ -143,7 +143,7 @@ export function convertRedirectToRoutingRule(
     OnBuildCompleteContext['routes']['redirects'][number],
     'source' | 'destination' | 'priority'
   >,
-  description?: string,
+  description: string,
 ): RoutingRuleRedirect {
   const { sourceRegexString, segments } = sourceToRegex(redirect.source)
 
@@ -191,75 +191,79 @@ export async function generateRoutingRules(
     }
   }
 
-  const normalizeNextData: RoutingRuleRewrite[] = [
-    {
-      description: 'Normalize _next/data',
-      match: {
-        path: `^${nextAdapterContext.config.basePath}/_next/data/${await netlifyAdapterContext.getBuildId()}/(.*)\\.json`,
-        has: [
-          {
-            type: 'header',
-            key: 'x-nextjs-data',
+  const normalizeNextData: RoutingRuleRewrite[] = shouldDenormalizeJsonDataForMiddleware
+    ? [
+        {
+          description: 'Normalize _next/data',
+          match: {
+            path: `^${nextAdapterContext.config.basePath}/_next/data/${await netlifyAdapterContext.getBuildId()}/(.*)\\.json`,
+            has: [
+              {
+                type: 'header',
+                key: 'x-nextjs-data',
+              },
+            ],
           },
-        ],
-      },
-      apply: {
-        type: 'rewrite',
-        destination: `${nextAdapterContext.config.basePath}/$1${nextAdapterContext.config.trailingSlash ? '/' : ''}`,
-      },
-    },
-    {
-      description: 'Fix _next/data index normalization',
-      match: {
-        path: `^${nextAdapterContext.config.basePath}/index(?:/)?`,
-        has: [
-          {
-            type: 'header',
-            key: 'x-nextjs-data',
+          apply: {
+            type: 'rewrite',
+            destination: `${nextAdapterContext.config.basePath}/$1${nextAdapterContext.config.trailingSlash ? '/' : ''}`,
           },
-        ],
-      },
-      apply: {
-        type: 'rewrite',
-        destination: `${nextAdapterContext.config.basePath}/`,
-      },
-    },
-  ]
+        },
+        {
+          description: 'Fix _next/data index normalization',
+          match: {
+            path: `^${nextAdapterContext.config.basePath}/index(?:/)?`,
+            has: [
+              {
+                type: 'header',
+                key: 'x-nextjs-data',
+              },
+            ],
+          },
+          apply: {
+            type: 'rewrite',
+            destination: `${nextAdapterContext.config.basePath}/`,
+          },
+        },
+      ]
+    : []
 
-  const denormalizeNextData: RoutingRuleRewrite[] = [
-    {
-      description: 'Fix _next/data index denormalization',
-      match: {
-        path: `^${nextAdapterContext.config.basePath}/$`,
-        has: [
-          {
-            type: 'header',
-            key: 'x-nextjs-data',
+  const denormalizeNextData: RoutingRuleRewrite[] = shouldDenormalizeJsonDataForMiddleware
+    ? [
+        {
+          description: 'Fix _next/data index denormalization',
+          match: {
+            path: `^${nextAdapterContext.config.basePath}/$`,
+            has: [
+              {
+                type: 'header',
+                key: 'x-nextjs-data',
+              },
+            ],
           },
-        ],
-      },
-      apply: {
-        type: 'rewrite',
-        destination: `${nextAdapterContext.config.basePath}/index`,
-      },
-    },
-    {
-      description: 'Denormalize _next/data',
-      match: {
-        path: `^${nextAdapterContext.config.basePath}/((?!_next/)(?:.*[^/]|.*))/?$`,
-        has: [
-          {
-            type: 'header',
-            key: 'x-nextjs-data',
+          apply: {
+            type: 'rewrite',
+            destination: `${nextAdapterContext.config.basePath}/index`,
           },
-        ],
-      },
-      apply: {
-        type: 'rewrite',
-        destination: `${nextAdapterContext.config.basePath}/_next/data/${await netlifyAdapterContext.getBuildId()}/$1.json`,
-      },
-    },
-  ]
+        },
+        {
+          description: 'Denormalize _next/data',
+          match: {
+            path: `^${nextAdapterContext.config.basePath}/((?!_next/)(?:.*[^/]|.*))/?$`,
+            has: [
+              {
+                type: 'header',
+                key: 'x-nextjs-data',
+              },
+            ],
+          },
+          apply: {
+            type: 'rewrite',
+            destination: `${nextAdapterContext.config.basePath}/_next/data/${await netlifyAdapterContext.getBuildId()}/$1.json`,
+          },
+        },
+      ]
+    : []
 
   const routing: RoutingRule[] = [
     // order inherited from
@@ -278,7 +282,7 @@ export async function generateRoutingRules(
     // priority redirects includes trailing slash redirect
     ...priorityRedirects, // originally: ...convertedPriorityRedirects,
 
-    ...(hasPages ? normalizeNextData : []), // originally: // normalize _next/data if middleware + pages
+    ...normalizeNextData, // originally: // normalize _next/data if middleware + pages
 
     // i18n prefixing routes
 
@@ -288,7 +292,7 @@ export async function generateRoutingRules(
 
     // server actions name meta routes
 
-    ...(shouldDenormalizeJsonDataForMiddleware ? denormalizeNextData : []), // originally: // if skip middleware url normalize we denormalize _next/data if middleware + pages
+    ...denormalizeNextData, // originally: // if skip middleware url normalize we denormalize _next/data if middleware + pages
 
     ...(hasMiddleware
       ? [
@@ -300,7 +304,7 @@ export async function generateRoutingRules(
         ]
       : []),
 
-    ...(shouldDenormalizeJsonDataForMiddleware ? normalizeNextData : []), // originally: // if skip middleware url normalize we normalize _next/data if middleware + pages
+    ...normalizeNextData, // originally: // if skip middleware url normalize we normalize _next/data if middleware + pages
 
     // ...convertedRewrites.beforeFiles,
 
@@ -308,17 +312,24 @@ export async function generateRoutingRules(
 
     // add 500 handling if /500 or locale variants are requested literally
 
-    ...(hasPages ? denormalizeNextData : []), // originally: // denormalize _next/data if middleware + pages
+    ...denormalizeNextData, // originally: // denormalize _next/data if middleware + pages
 
     // segment prefetch request rewriting
 
     // non-segment prefetch rsc request rewriting
 
     // full rsc request rewriting
+    {
+      // originally: { handle: 'filesystem' },
+      // this is no-op on its own, it's just marker to be able to run subset of routing rules
+      description: "'filesystem' routing phase marker",
+      routingPhase: 'filesystem',
+    },
 
     {
       // originally: { handle: 'filesystem' },
-      description: 'Static assets or Functions',
+      // this is to actual match on things 'filesystem' should match on
+      description: 'Static assets or Functions (no dynamic paths for functions)',
       match: { type: 'static-asset-or-function' },
     },
 
@@ -335,7 +346,7 @@ export async function generateRoutingRules(
     //     ]
     //   : []),
 
-    ...(hasPages ? normalizeNextData : []), // originally: // normalize _next/data if middleware + pages
+    ...normalizeNextData, // originally: // normalize _next/data if middleware + pages
 
     // normalize /index.rsc to just /
 
@@ -363,7 +374,12 @@ export async function generateRoutingRules(
 
     // rewrite segment prefetch to prefetch/rsc
 
-    // { handle: 'rewrite' },
+    {
+      // originally: { handle: 'rewrite' },
+      // this is no-op on its own, it's just marker to be able to run subset of routing rules
+      description: "'rewrite' routing phase marker",
+      routingPhase: 'rewrite',
+    },
 
     // denormalize _next/data if middleware + pages
 

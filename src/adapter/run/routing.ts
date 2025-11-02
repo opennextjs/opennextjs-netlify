@@ -1,3 +1,5 @@
+import process from 'node:process'
+
 import type { Context } from '@netlify/edge-functions'
 
 import type { NetlifyAdapterContext } from '../build/types.js'
@@ -6,7 +8,7 @@ type RoutingRuleBase = {
   /**
    * Human readable description of the rule (for debugging purposes only)
    */
-  description?: string
+  description: string
 }
 
 type Match = {
@@ -48,7 +50,17 @@ export type RoutingRuleMatchPrimitive = RoutingRuleBase & {
   }
 }
 
-export type RoutingRule = RoutingRuleRedirect | RoutingRuleRewrite | RoutingRuleMatchPrimitive
+export type RoutingPhase = 'filesystem' | 'rewrite'
+
+export type RoutingPhaseRule = RoutingRuleBase & {
+  routingPhase: RoutingPhase
+}
+
+export type RoutingRule =
+  | RoutingRuleRedirect
+  | RoutingRuleRewrite
+  | RoutingPhaseRule
+  | RoutingRuleMatchPrimitive
 
 export function testRedirectRewriteRule(rule: RoutingRuleRedirect, request: Request) {
   const sourceRegexp = new RegExp(rule.match.path)
@@ -59,6 +71,8 @@ export function testRedirectRewriteRule(rule: RoutingRuleRedirect, request: Requ
   }
   return { matched: false }
 }
+
+let requestCounter = 0
 
 export async function runNextRouting(
   request: Request,
@@ -71,7 +85,12 @@ export async function runNextRouting(
     return
   }
 
-  const prefix = `[${Date.now()}]`
+  const prefix = `[${
+    request.headers.get('x-nf-request-id') ??
+    // for ntl serve, we use a combination of timestamp and pid to have a unique id per request as we don't have x-nf-request-id header then
+    // eslint-disable-next-line no-plusplus
+    `${Date.now()} - #${process.pid}:${++requestCounter}`
+  }]`
 
   console.log(prefix, 'Incoming request for routing:', request.url)
 
@@ -86,16 +105,19 @@ export async function runNextRouting(
       const { pathname } = currentURL
 
       if ('type' in rule.match) {
+        const pathnameToMatch = pathname === '/' ? '/index' : pathname
+
         if (rule.match.type === 'static-asset-or-function') {
           let matchedType: 'static-asset' | 'function' | null = null
-          if (outputs.staticAssets.includes(pathname)) {
+
+          if (outputs.staticAssets.includes(pathnameToMatch)) {
             matchedType = 'static-asset'
-          } else if (outputs.endpoints.includes(pathname)) {
+          } else if (outputs.endpoints.includes(pathnameToMatch)) {
             matchedType = 'function'
           }
 
           if (matchedType) {
-            console.log(prefix, 'Matched static asset:', pathname)
+            console.log(prefix, `Matched static asset or function (${matchedType}):`)
             maybeResponse = await context.next(currentRequest)
           }
         } else if (rule.match.type === 'image-cdn' && pathname.startsWith('/.netlify/image/')) {
@@ -141,6 +163,8 @@ export async function runNextRouting(
     }
 
     if (maybeResponse) {
+      // for debugging add log prefixes to response headers to make it easy to find logs for a given request
+      maybeResponse.headers.set('x-ntl-log-prefix', prefix)
       console.log(prefix, 'Serving response', maybeResponse.status)
       return maybeResponse
     }
