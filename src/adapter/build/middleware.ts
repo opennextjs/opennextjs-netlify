@@ -188,13 +188,13 @@ const writeHandlerFile = async (
     cache: undefined,
     generator: GENERATOR,
     name: DISPLAY_NAME_MIDDLEWARE,
-    pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.regexp),
+    pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.sourceRegex),
   } satisfies IntegrationsConfig
 
   // Writing the function entry file. It wraps the middleware code with the
   // compatibility layer mentioned above.
   await writeFile(
-    join(MIDDLEWARE_FUNCTION_DIR, `middleware.js`),
+    join(MIDDLEWARE_FUNCTION_DIR, `${MIDDLEWARE_FUNCTION_INTERNAL_NAME}.js`),
     /* javascript */ `
     import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
     import { handleMiddleware } from './edge-runtime/middleware.ts';
