@@ -88,7 +88,12 @@ export async function generateRoutingRules(
   netlifyAdapterContext: NetlifyAdapterContext,
 ) {
   const hasMiddleware = Boolean(nextAdapterContext.outputs.middleware)
-  const hasPages = nextAdapterContext.outputs.pages.length !== 0
+  const hasPages =
+    nextAdapterContext.outputs.pages.length !== 0 ||
+    nextAdapterContext.outputs.pagesApi.length !== 0
+  const hasApp =
+    nextAdapterContext.outputs.appPages.length !== 0 ||
+    nextAdapterContext.outputs.appRoutes.length !== 0
   const shouldDenormalizeJsonDataForMiddleware =
     hasMiddleware && hasPages && nextAdapterContext.config.skipMiddlewareUrlNormalize
 
@@ -275,6 +280,51 @@ export async function generateRoutingRules(
     // non-segment prefetch rsc request rewriting
 
     // full rsc request rewriting
+    ...(hasApp
+      ? [
+          {
+            description: 'Normalize RSC requests (index)',
+            match: {
+              path: `^${join('/', nextAdapterContext.config.basePath, '/?$')}`,
+              has: [
+                {
+                  type: 'header',
+                  key: 'rsc',
+                  value: '1',
+                },
+              ],
+            },
+            apply: {
+              type: 'rewrite',
+              destination: `${join('/', nextAdapterContext.config.basePath, '/index.rsc')}`,
+              headers: {
+                vary: 'RSC, Next-Router-State-Tree, Next-Router-Prefetch',
+              },
+            },
+          } satisfies RoutingRuleRewrite,
+          {
+            description: 'Normalize RSC requests',
+            match: {
+              path: `^${join('/', nextAdapterContext.config.basePath, '/((?!.+\\.rsc).+?)(?:/)?$')}`,
+              has: [
+                {
+                  type: 'header',
+                  key: 'rsc',
+                  value: '1',
+                },
+              ],
+            },
+            apply: {
+              type: 'rewrite',
+              destination: `${join('/', nextAdapterContext.config.basePath, '/$1.rsc')}`,
+              headers: {
+                vary: 'RSC, Next-Router-State-Tree, Next-Router-Prefetch',
+              },
+            },
+          } satisfies RoutingRuleRewrite,
+        ]
+      : []),
+
     {
       // originally: { handle: 'filesystem' },
       // this is no-op on its own, it's just marker to be able to run subset of routing rules
@@ -304,11 +354,49 @@ export async function generateRoutingRules(
 
     ...normalizeNextData, // originally: // normalize _next/data if middleware + pages
 
-    // normalize /index.rsc to just /
+    ...(hasApp
+      ? [
+          {
+            // originally: normalize /index.rsc to just /
+            description: 'Normalize index.rsc to just /',
+            match: {
+              path: join('/', nextAdapterContext.config.basePath, '/index(\\.action|\\.rsc)'),
+            },
+            apply: {
+              type: 'rewrite',
+              destination: join('/', nextAdapterContext.config.basePath),
+            },
+          } satisfies RoutingRuleRewrite,
+        ]
+      : []),
 
     // ...convertedRewrites.afterFiles,
 
-    // ensure bad rewrites with /.rsc are fixed
+    ...(hasApp
+      ? [
+          // originally: // ensure bad rewrites with /.rsc are fixed
+          {
+            description: 'Ensure index /.rsc is mapped to /index.rsc',
+            match: {
+              path: join('/', nextAdapterContext.config.basePath, '/\\.rsc$'),
+            },
+            apply: {
+              type: 'rewrite',
+              destination: join('/', nextAdapterContext.config.basePath, `/index.rsc`),
+            },
+          } satisfies RoutingRuleRewrite,
+          {
+            description: 'Ensure index <anything>/.rsc is mapped to <anything>.rsc',
+            match: {
+              path: join('/', nextAdapterContext.config.basePath, '(.+)/\\.rsc$'),
+            },
+            apply: {
+              type: 'rewrite',
+              destination: join('/', nextAdapterContext.config.basePath, `$1.rsc`),
+            },
+          } satisfies RoutingRuleRewrite,
+        ]
+      : []),
 
     {
       // originally: { handle: 'resource' },

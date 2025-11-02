@@ -21,6 +21,7 @@ type Match = {
   has?: {
     type: 'header'
     key: string
+    value?: string
   }[]
 }
 
@@ -45,6 +46,8 @@ export type RoutingRuleRewrite = RoutingRuleBase & {
     statusCode?: 200 | 404 | 500
     /** Phases to re-run after matching this rewrite */
     rerunRoutingPhases?: RoutingPhase[]
+    /** Headers to include in the response */
+    headers?: Record<string, string>
   }
 }
 
@@ -80,22 +83,33 @@ function selectRoutingPhasesRules(routingRules: RoutingRule[], phases: RoutingPh
 
 let requestCounter = 0
 
+const NOT_A_FETCH_RESPONSE = Symbol('Not a Fetch Response')
+type MaybeResponse = {
+  response?: Response | undefined
+  status?: number | undefined
+  headers?: HeadersInit | undefined
+  [NOT_A_FETCH_RESPONSE]: true
+}
+
 // eslint-disable-next-line max-params
 async function match(
   request: Request,
   context: Context,
   routingRules: RoutingRule[],
   outputs: NetlifyAdapterContext['preparedOutputs'],
-  prefix: string,
-) {
+  prefix: string | undefined,
+  initialResponse: MaybeResponse,
+): Promise<MaybeResponse> {
   let currentRequest = request
-  let maybeResponse: Response | undefined
+  let maybeResponse: MaybeResponse = initialResponse
 
   const currentURL = new URL(currentRequest.url)
   let { pathname } = currentURL
 
   for (const rule of routingRules) {
-    console.log(prefix, 'Evaluating rule:', rule.description ?? JSON.stringify(rule))
+    if (prefix) {
+      console.log(prefix, 'Evaluating rule:', rule.description ?? JSON.stringify(rule))
+    }
     if ('match' in rule) {
       if ('type' in rule.match) {
         if (rule.match.type === 'static-asset-or-function') {
@@ -117,16 +131,26 @@ async function match(
           }
 
           if (matchedType) {
-            console.log(
-              prefix,
-              `Matched static asset or function (${matchedType}): ${pathname} -> ${currentRequest.url}`,
-            )
-            maybeResponse = await context.next(currentRequest)
+            if (prefix) {
+              console.log(
+                prefix,
+                `Matched static asset or function (${matchedType}): ${pathname} -> ${currentRequest.url}`,
+              )
+            }
+            maybeResponse = {
+              ...maybeResponse,
+              response: await context.next(currentRequest),
+            }
           }
         } else if (rule.match.type === 'image-cdn' && pathname.startsWith('/.netlify/image/')) {
-          console.log(prefix, 'Matched image cdn:', pathname)
+          if (prefix) {
+            console.log(prefix, 'Matched image cdn:', pathname)
+          }
 
-          maybeResponse = await context.next(currentRequest)
+          maybeResponse = {
+            ...maybeResponse,
+            response: await context.next(currentRequest),
+          }
         }
       } else if ('apply' in rule) {
         const sourceRegexp = new RegExp(rule.match.path)
@@ -135,9 +159,16 @@ async function match(
           if (rule.match.has) {
             let hasAllMatch = true
             for (const condition of rule.match.has) {
-              if (condition.type === 'header' && !currentRequest.headers.has(condition.key)) {
-                hasAllMatch = false
-                break
+              if (condition.type === 'header') {
+                if (typeof condition.value === 'undefined') {
+                  if (!currentRequest.headers.has(condition.key)) {
+                    hasAllMatch = false
+                    break
+                  }
+                } else if (currentRequest.headers.get(condition.key) !== condition.value) {
+                  hasAllMatch = false
+                  break
+                }
               }
             }
 
@@ -146,11 +177,32 @@ async function match(
             }
           }
 
+          if (prefix) {
+            console.log(prefix, 'Matched rule', pathname, rule)
+          }
+
           const replaced = pathname.replace(sourceRegexp, rule.apply.destination)
 
           if (rule.apply.type === 'rewrite') {
             const destURL = new URL(replaced, currentURL)
             currentRequest = new Request(destURL, currentRequest)
+
+            if (rule.apply.headers) {
+              maybeResponse = {
+                ...maybeResponse,
+                headers: {
+                  ...maybeResponse.headers,
+                  ...rule.apply.headers,
+                },
+              }
+            }
+
+            if (rule.apply.statusCode) {
+              maybeResponse = {
+                ...maybeResponse,
+                status: rule.apply.statusCode,
+              }
+            }
 
             if (rule.apply.rerunRoutingPhases) {
               maybeResponse = await match(
@@ -159,25 +211,35 @@ async function match(
                 selectRoutingPhasesRules(routingRules, rule.apply.rerunRoutingPhases),
                 outputs,
                 prefix,
+                maybeResponse,
               )
             }
           } else {
-            console.log(prefix, `Redirecting ${pathname} to ${replaced}`)
-            maybeResponse = new Response(null, {
-              status: rule.apply.statusCode ?? 307,
-              headers: {
-                Location: replaced,
-              },
-            })
+            if (prefix) {
+              console.log(prefix, `Redirecting ${pathname} to ${replaced}`)
+            }
+            const status = rule.apply.statusCode ?? 307
+            maybeResponse = {
+              ...maybeResponse,
+              status,
+              response: new Response(null, {
+                status,
+                headers: {
+                  Location: replaced,
+                },
+              }),
+            }
           }
         }
       }
     }
 
-    if (maybeResponse) {
+    if (maybeResponse?.response) {
+      // once hit a response short circuit
       return maybeResponse
     }
   }
+  return maybeResponse
 }
 
 export async function runNextRouting(
@@ -191,28 +253,45 @@ export async function runNextRouting(
     return
   }
 
-  const prefix = `[${
-    request.headers.get('x-nf-request-id') ??
-    // for ntl serve, we use a combination of timestamp and pid to have a unique id per request as we don't have x-nf-request-id header then
-    // eslint-disable-next-line no-plusplus
-    `${Date.now()} - #${process.pid}:${++requestCounter}`
-  }]`
+  const prefix = request.url.includes('_next/static')
+    ? undefined
+    : `[${
+        request.headers.get('x-nf-request-id') ??
+        // for ntl serve, we use a combination of timestamp and pid to have a unique id per request as we don't have x-nf-request-id header then
+        // eslint-disable-next-line no-plusplus
+        `${Date.now()} - #${process.pid}:${++requestCounter}`
+      }]`
 
-  console.log(prefix, 'Incoming request for routing:', request.url)
+  if (prefix) {
+    console.log(prefix, 'Incoming request for routing:', request.url)
+  }
 
   const currentRequest = new Request(request)
   currentRequest.headers.set('x-ntl-routing', '1')
 
-  let maybeResponse = await match(currentRequest, context, routingRules, outputs, prefix)
+  const maybeResponse = await match(currentRequest, context, routingRules, outputs, prefix, {
+    [NOT_A_FETCH_RESPONSE]: true,
+  })
 
-  if (!maybeResponse) {
-    console.log(prefix, 'No route matched - 404ing')
-    maybeResponse = new Response('Not Found', { status: 404 })
-  }
+  const response = maybeResponse.response
+    ? new Response(maybeResponse.response.body, {
+        ...maybeResponse.response,
+        headers: {
+          ...maybeResponse.response.headers,
+          ...maybeResponse.headers,
+        },
+        status: maybeResponse.status ?? maybeResponse.response.status ?? 200,
+      })
+    : new Response('Not Found', {
+        status: maybeResponse?.status ?? 404,
+        headers: maybeResponse?.headers,
+      })
 
   // for debugging add log prefixes to response headers to make it easy to find logs for a given request
-  maybeResponse.headers.set('x-ntl-log-prefix', prefix)
-  console.log(prefix, 'Serving response', maybeResponse.status)
+  if (prefix) {
+    response.headers.set('x-ntl-log-prefix', prefix)
+    console.log(prefix, 'Serving response', response.status)
+  }
 
-  return maybeResponse
+  return response
 }
