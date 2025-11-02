@@ -1,4 +1,6 @@
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http'
+import { join } from 'node:path/posix'
+import { fileURLToPath } from 'node:url'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
 import type { Context } from '@netlify/functions'
@@ -51,6 +53,15 @@ const NEXT_CACHE_TO_CACHE_STATUS: Record<string, string> = {
   HIT: `hit`,
   MISS: `fwd=miss`,
   STALE: `hit; fwd=stale`,
+}
+
+const FUNCTION_ROOT = fileURLToPath(new URL('.', import.meta.url))
+export const FUNCTION_ROOT_DIR = join(FUNCTION_ROOT, '..', '..', '..', '..')
+if (process.cwd() !== FUNCTION_ROOT_DIR) {
+  // setting CWD only needed for `ntl serve` as otherwise CWD is set to root of the project
+  // when deployed CWD is correct
+  // TODO(pieh): test with monorepo if this will work there as well, or cwd will need to have packagePath appended
+  process.cwd = () => FUNCTION_ROOT_DIR
 }
 
 type NextHandler = (
@@ -133,7 +144,7 @@ export async function runNextHandler(
         'cache-control',
         browserCacheControl || 'public, max-age=0, must-revalidate',
       )
-      response.headers.set('netlify-cdn-cache-control', cdnCacheControl)
+      // response.headers.set('netlify-cdn-cache-control', cdnCacheControl)
     }
   }
 
@@ -141,10 +152,11 @@ export async function runNextHandler(
     // set Cache-Status header based on Next.js cache status
     const nextCache = response.headers.get('x-nextjs-cache')
     if (nextCache) {
+      // eslint-disable-next-line unicorn/no-lonely-if
       if (nextCache in NEXT_CACHE_TO_CACHE_STATUS) {
         response.headers.set('cache-status', NEXT_CACHE_TO_CACHE_STATUS[nextCache])
       }
-      response.headers.delete('x-nextjs-cache')
+      // response.headers.delete('x-nextjs-cache')
     }
   }
 
