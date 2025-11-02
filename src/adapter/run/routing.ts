@@ -80,17 +80,6 @@ function selectRoutingPhasesRules(routingRules: RoutingRule[], phases: RoutingPh
 
 let requestCounter = 0
 
-function normalizeIndex(request: Request, prefix: string) {
-  const currentURL = new URL(request.url)
-  const { pathname } = currentURL
-  if (pathname === '/') {
-    const destURL = new URL('/index', currentURL)
-    console.log(prefix, 'Normalizing "/" to "/index" for routing purposes')
-    return new Request(destURL, request)
-  }
-  return request
-}
-
 // eslint-disable-next-line max-params
 async function match(
   request: Request,
@@ -99,7 +88,7 @@ async function match(
   outputs: NetlifyAdapterContext['preparedOutputs'],
   prefix: string,
 ) {
-  let currentRequest = normalizeIndex(request, prefix)
+  let currentRequest = request
   let maybeResponse: Response | undefined
 
   const currentURL = new URL(currentRequest.url)
@@ -112,7 +101,8 @@ async function match(
         if (rule.match.type === 'static-asset-or-function') {
           let matchedType: 'static-asset' | 'function' | 'static-asset-alias' | null = null
 
-          // below assumes no overlap between static assets (files and aliases) and functions
+          // below assumes no overlap between static assets (files and aliases) and functions so order of checks "doesn't matter"
+          // unclear what should be precedence if there would ever be overlap
           if (outputs.staticAssets.includes(pathname)) {
             matchedType = 'static-asset'
           } else if (outputs.endpoints.includes(pathname)) {

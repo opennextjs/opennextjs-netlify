@@ -21,7 +21,20 @@ const PAGES_AND_APP_FUNCTION_DIR = join(
   PAGES_AND_APP_FUNCTION_INTERNAL_NAME,
 )
 
-// const abc: OneOfThePaths = 'asa(/abc/)dsa'
+// there is some inconsistency with pathnames sometimes being '/' and sometimes being '/index',
+// but handler seems to expect '/'
+function normalizeIndex(path: string): string {
+  if (path === '/index') {
+    return '/'
+  }
+
+  return path.replace(
+    // if Index is getServerSideProps weird things happen:
+    // /_next/data/<build-id>/.json is produced instead of /_next/data/<build-id>/index.json
+    /^\/_next\/data\/(?<buildId>[^/]+)\/\.json$/,
+    '/_next/data/$<buildId>/index.json',
+  )
+}
 
 export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
@@ -46,24 +59,30 @@ export async function onBuildComplete(
       }
 
       requiredFiles.add(output.filePath)
-      pathnameToEntry[output.pathname] = relative(nextAdapterContext.repoRoot, output.filePath)
+      pathnameToEntry[normalizeIndex(output.pathname)] = relative(
+        nextAdapterContext.repoRoot,
+        output.filePath,
+      )
     }
   }
 
   for (const prerender of nextAdapterContext.outputs.prerenders) {
-    if (prerender.pathname in pathnameToEntry) {
-      console.log('Skipping prerender, already have route:', prerender.pathname)
-    } else if (prerender.parentOutputId in pathnameToEntry) {
+    const normalizedPathname = normalizeIndex(prerender.pathname)
+    const normalizedParentOutputId = normalizeIndex(prerender.parentOutputId)
+
+    if (normalizedPathname in pathnameToEntry) {
+      console.log('Skipping prerender, already have route:', normalizedPathname)
+    } else if (normalizedParentOutputId in pathnameToEntry) {
       // if we don't have routing for this route yet, add it
       console.log('prerender mapping', {
-        from: prerender.pathname,
-        to: prerender.parentOutputId,
+        from: normalizedPathname,
+        to: normalizedParentOutputId,
       })
-      pathnameToEntry[prerender.pathname] = pathnameToEntry[prerender.parentOutputId]
+      pathnameToEntry[normalizedPathname] = pathnameToEntry[normalizedParentOutputId]
     } else {
       console.warn('Could not find parent output for prerender:', {
-        pathname: prerender,
-        parentOutputId: prerender.parentOutputId,
+        pathname: normalizedPathname,
+        parentOutputId: normalizedParentOutputId,
       })
     }
   }
