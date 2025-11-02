@@ -1,13 +1,7 @@
 import { cp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path/posix'
-import { format as formatUrl, parse as parseUrl } from 'node:url'
 
 import { glob } from 'fast-glob'
-import {
-  pathToRegexp,
-  compile as pathToRegexpCompile,
-  type Key as PathToRegexpKey,
-} from 'path-to-regexp'
 
 import type { RoutingRule, RoutingRuleRedirect, RoutingRuleRewrite } from '../run/routing.js'
 
@@ -19,144 +13,21 @@ import {
 } from './constants.js'
 import type { NetlifyAdapterContext, OnBuildCompleteContext } from './types.js'
 
-const UN_NAMED_SEGMENT = '__UN_NAMED_SEGMENT__'
-
-// https://github.com/vercel/vercel/blob/8beae7035bf0d3e5cfc1df337b83fbbe530c4d9b/packages/routing-utils/src/superstatic.ts#L273
-export function sourceToRegex(source: string) {
-  const keys: PathToRegexpKey[] = []
-  const regexp = pathToRegexp(source, keys, {
-    strict: true,
-    sensitive: true,
-    delimiter: '/',
-  })
-
-  return {
-    sourceRegexString: regexp.source,
-    segments: keys
-      .map((key) => key.name)
-      .map((keyName) => {
-        if (typeof keyName !== 'string') {
-          return UN_NAMED_SEGMENT
-        }
-        return keyName
-      }),
-  }
-}
-
-// https://github.com/vercel/vercel/blob/8beae7035bf0d3e5cfc1df337b83fbbe530c4d9b/packages/routing-utils/src/superstatic.ts#L345
-const escapeSegment = (str: string, segmentName: string) =>
-  str.replace(new RegExp(`:${segmentName}`, 'g'), `__esc_colon_${segmentName}`)
-
-// https://github.com/vercel/vercel/blob/8beae7035bf0d3e5cfc1df337b83fbbe530c4d9b/packages/routing-utils/src/superstatic.ts#L348
-const unescapeSegments = (str: string) => str.replace(/__esc_colon_/gi, ':')
-
-// https://github.com/vercel/vercel/blob/8beae7035bf0d3e5cfc1df337b83fbbe530c4d9b/packages/routing-utils/src/superstatic.ts#L464
-function safelyCompile(
-  val: string,
-  indexes: { [k: string]: string },
-  attemptDirectCompile?: boolean,
-): string {
-  let value = val
-  if (!value) {
-    return value
-  }
-
-  if (attemptDirectCompile) {
-    try {
-      // Attempt compiling normally with path-to-regexp first and fall back
-      // to safely compiling to handle edge cases if path-to-regexp compile
-      // fails
-      return pathToRegexpCompile(value, { validate: false })(indexes)
-    } catch {
-      // non-fatal, we continue to safely compile
-    }
-  }
-
-  for (const key of Object.keys(indexes)) {
-    if (value.includes(`:${key}`)) {
-      value = value
-        .replace(new RegExp(`:${key}\\*`, 'g'), `:${key}--ESCAPED_PARAM_ASTERISK`)
-        .replace(new RegExp(`:${key}\\?`, 'g'), `:${key}--ESCAPED_PARAM_QUESTION`)
-        .replace(new RegExp(`:${key}\\+`, 'g'), `:${key}--ESCAPED_PARAM_PLUS`)
-        .replace(new RegExp(`:${key}(?!\\w)`, 'g'), `--ESCAPED_PARAM_COLON${key}`)
-    }
-  }
-  value = value
-    // eslint-disable-next-line unicorn/better-regex
-    .replace(/(:|\*|\?|\+|\(|\)|\{|\})/g, '\\$1')
-    .replace(/--ESCAPED_PARAM_PLUS/g, '+')
-    .replace(/--ESCAPED_PARAM_COLON/g, ':')
-    .replace(/--ESCAPED_PARAM_QUESTION/g, '?')
-    .replace(/--ESCAPED_PARAM_ASTERISK/g, '*')
-
-  // the value needs to start with a forward-slash to be compiled
-  // correctly
-  return pathToRegexpCompile(`/${value}`, { validate: false })(indexes).slice(1)
-}
-
-// https://github.com/vercel/vercel/blob/8beae7035bf0d3e5cfc1df337b83fbbe530c4d9b/packages/routing-utils/src/superstatic.ts#L350
-export function destinationToReplacementString(destination: string, segments: string[]) {
-  // convert /path/:id/route to /path/$1/route
-  // convert /path/:id+ to /path/$1
-
-  let escapedDestination = destination
-
-  const indexes: { [k: string]: string } = {}
-
-  segments.forEach((name, index) => {
-    indexes[name] = `$${index + 1}`
-    escapedDestination = escapeSegment(escapedDestination, name)
-  })
-
-  const parsedDestination = parseUrl(escapedDestination, true)
-  delete (parsedDestination as any).href
-  delete (parsedDestination as any).path
-  delete (parsedDestination as any).search
-  delete (parsedDestination as any).host
-  let { pathname, ...rest } = parsedDestination
-  pathname = unescapeSegments(pathname || '')
-
-  const pathnameKeys: PathToRegexpKey[] = []
-
-  try {
-    pathToRegexp(pathname, pathnameKeys)
-  } catch {
-    // this is not fatal so don't error when failing to parse the
-    // params from the destination
-  }
-
-  pathname = safelyCompile(pathname, indexes, true)
-
-  const finalDestination = formatUrl({
-    ...rest,
-    // hostname,
-    pathname,
-    // query,
-    // hash,
-  })
-  // url.format() escapes the dollar sign but it must be preserved for now-proxy
-  return finalDestination.replace(/%24/g, '$')
-}
-
 export function convertRedirectToRoutingRule(
   redirect: Pick<
     OnBuildCompleteContext['routes']['redirects'][number],
-    'source' | 'destination' | 'priority'
+    'sourceRegex' | 'destination' | 'priority'
   >,
   description: string,
 ): RoutingRuleRedirect {
-  const { sourceRegexString, segments } = sourceToRegex(redirect.source)
-
-  const convertedDestination = destinationToReplacementString(redirect.destination, segments)
-
   return {
     description,
     match: {
-      path: sourceRegexString,
+      path: redirect.sourceRegex,
     },
     apply: {
       type: 'redirect',
-      destination: convertedDestination,
+      destination: redirect.destination,
     },
   } satisfies RoutingRuleRedirect
 }
