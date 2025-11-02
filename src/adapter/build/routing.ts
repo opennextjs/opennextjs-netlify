@@ -13,6 +13,34 @@ import {
 } from './constants.js'
 import type { NetlifyAdapterContext, OnBuildCompleteContext } from './types.js'
 
+function fixDestinationGroupReplacements(destination: string, sourceRegex: string): string {
+  // convert $nxtPslug to $<nxtPslug> etc
+
+  // find all capturing groups in sourceRegex
+  const segments = [...sourceRegex.matchAll(/\(\?<(?<segment_name>[^>]+)>/g)]
+
+  let adjustedDestination = destination
+  for (const segment of segments) {
+    if (segment.groups?.segment_name) {
+      adjustedDestination = adjustedDestination.replaceAll(
+        `$${segment.groups.segment_name}`,
+        `$<${segment.groups.segment_name}>`,
+      )
+    }
+  }
+
+  if (adjustedDestination !== destination) {
+    console.log('fixing named captured group replacement', {
+      sourceRegex,
+      segments,
+      destination,
+      adjustedDestination,
+    })
+  }
+
+  return adjustedDestination
+}
+
 export function convertRedirectToRoutingRule(
   redirect: Pick<
     OnBuildCompleteContext['routes']['redirects'][number],
@@ -27,9 +55,32 @@ export function convertRedirectToRoutingRule(
     },
     apply: {
       type: 'redirect',
-      destination: redirect.destination,
+      destination: fixDestinationGroupReplacements(redirect.destination, redirect.sourceRegex),
     },
   } satisfies RoutingRuleRedirect
+}
+
+export function convertDynamicRouteToRoutingRule(
+  dynamicRoute: Pick<
+    OnBuildCompleteContext['routes']['dynamicRoutes'][number],
+    'sourceRegex' | 'destination'
+  >,
+  description: string,
+): RoutingRuleRewrite {
+  return {
+    description,
+    match: {
+      path: dynamicRoute.sourceRegex,
+    },
+    apply: {
+      type: 'rewrite',
+      destination: fixDestinationGroupReplacements(
+        dynamicRoute.destination,
+        dynamicRoute.sourceRegex,
+      ),
+      rerunRoutingPhases: ['filesystem', 'rewrite'], // this is attempt to mimic Vercel's check: true
+    },
+  } satisfies RoutingRuleRewrite
 }
 
 export async function generateRoutingRules(
@@ -60,6 +111,34 @@ export async function generateRoutingRules(
         ),
       )
     }
+  }
+
+  const dynamicRoutes: RoutingRuleRewrite[] = []
+
+  for (const dynamicRoute of nextAdapterContext.routes.dynamicRoutes) {
+    const isNextData = dynamicRoute.sourceRegex.includes('_next/data')
+
+    if (hasPages && !hasMiddleware) {
+      // this was copied from Vercel adapter, not fully sure what it does - especially with the condition
+      // not applying equavalent right now, but leaving it commented out
+      // if (!route.sourceRegex.includes('_next/data') && !addedNextData404Route) {
+      //   addedNextData404Route = true
+      //   dynamicRoutes.push({
+      //     src: path.posix.join('/', config.basePath || '', '_next/data/(.*)'),
+      //     dest: path.posix.join('/', config.basePath || '', '404'),
+      //     status: 404,
+      //     check: true,
+      //   })
+      // }
+    }
+    dynamicRoutes.push(
+      convertDynamicRouteToRoutingRule(
+        dynamicRoute,
+        isNextData
+          ? `Mapping dynamic route _next/data to entrypoint: ${dynamicRoute.destination}`
+          : `Mapping dynamic route to entrypoint: ${dynamicRoute.destination}`,
+      ),
+    )
   }
 
   const normalizeNextData: RoutingRuleRewrite[] = shouldDenormalizeJsonDataForMiddleware
@@ -149,6 +228,12 @@ export async function generateRoutingRules(
     // - Check filesystem, if nothing found continue
     // - User rewrites
     // - Builder rewrites
+
+    {
+      // this is no-op on its own, it's just marker to be able to run subset of routing rules
+      description: "'entry' routing phase marker",
+      routingPhase: 'entry',
+    },
 
     // priority redirects includes trailing slash redirect
     ...priorityRedirects, // originally: ...convertedPriorityRedirects,
@@ -260,7 +345,7 @@ export async function generateRoutingRules(
     // and we don't want to match a catch-all dynamic route
 
     // apply normal dynamic routes
-    // ...convertedDynamicRoutes,
+    ...dynamicRoutes, // originally: ...convertedDynamicRoutes,
 
     // apply x-nextjs-matched-path header and __next_data_catchall rewrite
     // if middleware + pages

@@ -21,6 +21,8 @@ const PAGES_AND_APP_FUNCTION_DIR = join(
   PAGES_AND_APP_FUNCTION_INTERNAL_NAME,
 )
 
+// const abc: OneOfThePaths = 'asa(/abc/)dsa'
+
 export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
   netlifyAdapterContext: NetlifyAdapterContext,
@@ -110,9 +112,13 @@ export async function onBuildComplete(
         return new Response('Not Found', { status: 404 })
       }
 
-      const nextHandler = require('./' + entry).handler
+      const nextHandler = await require('./' + entry)
 
-      return runNextHandler(request, context, nextHandler)
+      if (typeof nextHandler.handler !== 'function') {
+        console.log('.handler is not a function', { nextHandler })
+      }
+
+      return runNextHandler(request, context, nextHandler.handler)
     }
 
     export const config = ${JSON.stringify(functionConfig, null, 2)}
