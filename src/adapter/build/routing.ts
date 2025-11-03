@@ -527,7 +527,13 @@ export async function generateRoutingRules(
             // if middleware + pages
             description: 'Apply __next_data_catchall rewrite if middleware + pages',
             match: {
-              path: ``,
+              path: `^${join(
+                '/',
+                nextAdapterContext.config.basePath,
+                '/_next/data/',
+                escapedBuildId,
+                '/(.*).json',
+              )}`,
             },
             apply: {
               type: 'rewrite',
