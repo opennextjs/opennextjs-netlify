@@ -149,7 +149,7 @@ async function match(
           // unclear what should be precedence if there would ever be overlap
           if (outputs.staticAssets.includes(pathname)) {
             matchedType = 'static-asset'
-          } else if (outputs.endpoints.includes(pathname)) {
+          } else if (outputs.endpoints.includes(pathname.toLowerCase())) {
             matchedType = 'function'
           } else {
             const staticAlias = outputs.staticAssetsAliases[pathname]

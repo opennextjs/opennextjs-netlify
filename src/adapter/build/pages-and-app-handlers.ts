@@ -104,7 +104,7 @@ export async function onBuildComplete(
   await copyRuntime(join(PAGES_AND_APP_FUNCTION_DIR, RUNTIME_DIR))
 
   const functionConfig = {
-    path: Object.keys(pathnameToEntry),
+    path: Object.keys(pathnameToEntry).map((pathname) => pathname.toLowerCase()),
     nodeBundler: 'none',
     includedFiles: ['**'],
     generator: GENERATOR,
