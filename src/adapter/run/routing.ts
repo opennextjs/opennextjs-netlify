@@ -359,7 +359,7 @@ export async function runNextRouting(
     response = new Response(finalResponse.body, {
       ...finalResponse,
       headers: {
-        ...finalResponse.headers,
+        ...Object.fromEntries(finalResponse.headers.entries()),
         ...maybeResponse.headers,
       },
       status: maybeResponse.status ?? finalResponse.status ?? 200,
@@ -381,7 +381,7 @@ export async function runNextRouting(
     response = new Response(finalResponse.body, {
       ...finalResponse,
       headers: {
-        ...finalResponse.headers,
+        ...Object.fromEntries(finalResponse.headers.entries()),
         ...maybeResponse.headers,
       },
       status: maybeResponse.status ?? finalResponse.status ?? 200,
