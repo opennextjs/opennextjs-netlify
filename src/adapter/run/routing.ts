@@ -4,13 +4,20 @@ import type { Context } from '@netlify/edge-functions'
 
 import type { NetlifyAdapterContext } from '../build/types.js'
 
-export type RoutingPhase = 'entry' | 'filesystem' | 'rewrite'
+const routingPhases = ['entry', 'filesystem', 'rewrite', 'hit', 'error'] as const
+const routingPhasesWithoutHitOrError = routingPhases.filter(
+  (phase) => phase !== 'hit' && phase !== 'error',
+)
+
+export type RoutingPhase = (typeof routingPhases)[number]
 
 type RoutingRuleBase = {
   /**
    * Human readable description of the rule (for debugging purposes only)
    */
   description: string
+  /** if we should keep going even if we already have potential response */
+  continue?: true
 }
 
 type Match = {
@@ -25,9 +32,21 @@ type Match = {
   }[]
 }
 
+type CommonApply = {
+  /** Headers to include in the response */
+  headers?: Record<string, string>
+}
+
+export type RoutingRuleApply = RoutingRuleBase & {
+  match: Match
+  apply: CommonApply & {
+    type: 'apply'
+  }
+}
+
 export type RoutingRuleRedirect = RoutingRuleBase & {
   match: Match
-  apply: {
+  apply: CommonApply & {
     type: 'redirect'
     /** Can use capture groups from match.path */
     destination: string
@@ -38,7 +57,7 @@ export type RoutingRuleRedirect = RoutingRuleBase & {
 
 export type RoutingRuleRewrite = RoutingRuleBase & {
   match: Match
-  apply: {
+  apply: CommonApply & {
     type: 'rewrite'
     /** Can use capture groups from match.path */
     destination: string
@@ -46,8 +65,6 @@ export type RoutingRuleRewrite = RoutingRuleBase & {
     statusCode?: 200 | 404 | 500
     /** Phases to re-run after matching this rewrite */
     rerunRoutingPhases?: RoutingPhase[]
-    /** Headers to include in the response */
-    headers?: Record<string, string>
   }
 }
 
@@ -62,6 +79,7 @@ export type RoutingPhaseRule = RoutingRuleBase & {
 }
 
 export type RoutingRule =
+  | RoutingRuleApply
   | RoutingRuleRedirect
   | RoutingRuleRewrite
   | RoutingPhaseRule
@@ -83,6 +101,7 @@ function selectRoutingPhasesRules(routingRules: RoutingRule[], phases: RoutingPh
 
 let requestCounter = 0
 
+// this is so typescript doesn't think this is fetch response object and rather a builder for a final response
 const NOT_A_FETCH_RESPONSE = Symbol('Not a Fetch Response')
 type MaybeResponse = {
   response?: Response | undefined
@@ -91,15 +110,26 @@ type MaybeResponse = {
   [NOT_A_FETCH_RESPONSE]: true
 }
 
+function replaceGroupReferences(input: string, replacements: Record<string, string>) {
+  let output = input
+  for (const [key, value] of Object.entries(replacements)) {
+    output = output.replaceAll(key, value)
+  }
+  return output
+}
+
 // eslint-disable-next-line max-params
 async function match(
   request: Request,
   context: Context,
+  /** Filtered rules to match in this call */
   routingRules: RoutingRule[],
+  /** All rules */
+  allRoutingRules: RoutingRule[],
   outputs: NetlifyAdapterContext['preparedOutputs'],
   prefix: string | undefined,
   initialResponse: MaybeResponse,
-): Promise<MaybeResponse> {
+): Promise<{ maybeResponse: MaybeResponse; currentRequest: Request }> {
   let currentRequest = request
   let maybeResponse: MaybeResponse = initialResponse
 
@@ -154,7 +184,8 @@ async function match(
         }
       } else if ('apply' in rule) {
         const sourceRegexp = new RegExp(rule.match.path)
-        if (sourceRegexp.test(pathname)) {
+        const sourceMatch = pathname.match(sourceRegexp)
+        if (sourceMatch) {
           // check additional conditions
           if (rule.match.has) {
             let hasAllMatch = true
@@ -177,25 +208,40 @@ async function match(
             }
           }
 
-          if (prefix) {
-            console.log(prefix, 'Matched rule', pathname, rule)
+          const replacements: Record<string, string> = {}
+          if (sourceMatch.groups) {
+            for (const [key, value] of Object.entries(sourceMatch.groups)) {
+              replacements[`$${key}`] = value
+            }
+          }
+          for (const [index, element] of sourceMatch.entries()) {
+            replacements[`$${index}`] = element ?? ''
           }
 
-          const replaced = pathname.replace(sourceRegexp, rule.apply.destination)
+          if (prefix) {
+            console.log(prefix, 'Matched rule', pathname, rule, sourceMatch, replacements)
+          }
+
+          if (rule.apply.headers) {
+            maybeResponse = {
+              ...maybeResponse,
+              headers: {
+                ...maybeResponse.headers,
+                ...Object.fromEntries(
+                  Object.entries(rule.apply.headers).map(([key, value]) => {
+                    return [key, replaceGroupReferences(value, replacements)]
+                  }),
+                ),
+              },
+            }
+          }
 
           if (rule.apply.type === 'rewrite') {
+            const replaced = replaceGroupReferences(rule.apply.destination, replacements)
+
+            // pathname.replace(sourceRegexp, rule.apply.destination)
             const destURL = new URL(replaced, currentURL)
             currentRequest = new Request(destURL, currentRequest)
-
-            if (rule.apply.headers) {
-              maybeResponse = {
-                ...maybeResponse,
-                headers: {
-                  ...maybeResponse.headers,
-                  ...rule.apply.headers,
-                },
-              }
-            }
 
             if (rule.apply.statusCode) {
               maybeResponse = {
@@ -205,16 +251,19 @@ async function match(
             }
 
             if (rule.apply.rerunRoutingPhases) {
-              maybeResponse = await match(
+              const { maybeResponse: updatedMaybeResponse } = await match(
                 currentRequest,
                 context,
                 selectRoutingPhasesRules(routingRules, rule.apply.rerunRoutingPhases),
+                allRoutingRules,
                 outputs,
                 prefix,
                 maybeResponse,
               )
+              maybeResponse = updatedMaybeResponse
             }
-          } else {
+          } else if (rule.apply.type === 'redirect') {
+            const replaced = pathname.replace(sourceRegexp, rule.apply.destination)
             if (prefix) {
               console.log(prefix, `Redirecting ${pathname} to ${replaced}`)
             }
@@ -234,12 +283,12 @@ async function match(
       }
     }
 
-    if (maybeResponse?.response) {
+    if (maybeResponse?.response && !rule.continue) {
       // once hit a response short circuit
-      return maybeResponse
+      return { maybeResponse, currentRequest }
     }
   }
-  return maybeResponse
+  return { maybeResponse, currentRequest }
 }
 
 export async function runNextRouting(
@@ -266,26 +315,70 @@ export async function runNextRouting(
     console.log(prefix, 'Incoming request for routing:', request.url)
   }
 
-  const currentRequest = new Request(request)
+  let currentRequest = new Request(request)
   currentRequest.headers.set('x-ntl-routing', '1')
 
-  const maybeResponse = await match(currentRequest, context, routingRules, outputs, prefix, {
-    [NOT_A_FETCH_RESPONSE]: true,
-  })
+  let { maybeResponse, currentRequest: updatedCurrentRequest } = await match(
+    currentRequest,
+    context,
+    selectRoutingPhasesRules(routingRules, routingPhasesWithoutHitOrError),
+    routingRules,
+    outputs,
+    prefix,
+    {
+      [NOT_A_FETCH_RESPONSE]: true,
+    },
+  )
+  currentRequest = updatedCurrentRequest
 
-  const response = maybeResponse.response
-    ? new Response(maybeResponse.response.body, {
-        ...maybeResponse.response,
-        headers: {
-          ...maybeResponse.response.headers,
-          ...maybeResponse.headers,
-        },
-        status: maybeResponse.status ?? maybeResponse.response.status ?? 200,
-      })
-    : new Response('Not Found', {
-        status: maybeResponse?.status ?? 404,
-        headers: maybeResponse?.headers,
-      })
+  let response: Response
+
+  if (maybeResponse.response) {
+    const initialResponse = maybeResponse.response
+    const { maybeResponse: updatedMaybeResponse } = await match(
+      currentRequest,
+      context,
+      selectRoutingPhasesRules(routingRules, ['hit']),
+      routingRules,
+      outputs,
+      prefix,
+      maybeResponse,
+    )
+    maybeResponse = updatedMaybeResponse
+
+    const finalResponse = maybeResponse.response ?? initialResponse
+
+    response = new Response(finalResponse.body, {
+      ...finalResponse,
+      headers: {
+        ...finalResponse.headers,
+        ...maybeResponse.headers,
+      },
+      status: maybeResponse.status ?? finalResponse.status ?? 200,
+    })
+  } else {
+    const { maybeResponse: updatedMaybeResponse } = await match(
+      currentRequest,
+      context,
+      selectRoutingPhasesRules(routingRules, ['error']),
+      routingRules,
+      outputs,
+      prefix,
+      { ...maybeResponse, status: 404 },
+    )
+    maybeResponse = updatedMaybeResponse
+
+    const finalResponse = maybeResponse.response ?? new Response('Not Found', { status: 404 })
+
+    response = new Response(finalResponse.body, {
+      ...finalResponse,
+      headers: {
+        ...finalResponse.headers,
+        ...maybeResponse.headers,
+      },
+      status: maybeResponse.status ?? finalResponse.status ?? 200,
+    })
+  }
 
   // for debugging add log prefixes to response headers to make it easy to find logs for a given request
   if (prefix) {

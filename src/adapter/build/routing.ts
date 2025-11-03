@@ -55,7 +55,7 @@ export function convertRedirectToRoutingRule(
     },
     apply: {
       type: 'redirect',
-      destination: fixDestinationGroupReplacements(redirect.destination, redirect.sourceRegex),
+      destination: redirect.destination,
     },
   } satisfies RoutingRuleRedirect
 }
@@ -74,10 +74,7 @@ export function convertDynamicRouteToRoutingRule(
     },
     apply: {
       type: 'rewrite',
-      destination: fixDestinationGroupReplacements(
-        dynamicRoute.destination,
-        dynamicRoute.sourceRegex,
-      ),
+      destination: dynamicRoute.destination,
       rerunRoutingPhases: ['filesystem', 'rewrite'], // this is attempt to mimic Vercel's check: true
     },
   } satisfies RoutingRuleRewrite
@@ -438,41 +435,62 @@ export async function generateRoutingRules(
     // apply x-nextjs-matched-path header and __next_data_catchall rewrite
     // if middleware + pages
 
-    // { handle: 'hit' },
+    {
+      // originally: handle: 'hit' },
+      // this is no-op on its own, it's just marker to be able to run subset of routing rules
+      description: "'hit' routing phase marker",
+      routingPhase: 'hit',
+      continue: true,
+    },
 
     // Before we handle static files we need to set proper caching headers
-    // {
-    //   // This ensures we only match known emitted-by-Next.js files and not
-    //   // user-emitted files which may be missing a hash in their filename.
-    //   src: path.posix.join(
-    //     '/',
-    //     config.basePath,
-    //     `_next/static/(?:[^/]+/pages|pages|chunks|runtime|css|image|media)/.+`,
-    //   ),
-    //   // Next.js assets contain a hash or entropy in their filenames, so they
-    //   // are guaranteed to be unique and cacheable indefinitely.
-    //   headers: {
-    //     'cache-control': `public,max-age=${MAX_AGE_ONE_YEAR},immutable`,
-    //   },
-    //   continue: true,
-    //   important: true,
-    // },
-    // {
-    //   src: path.posix.join('/', config.basePath, '/index(?:/)?'),
-    //   headers: {
-    //     'x-matched-path': '/',
-    //   },
-    //   continue: true,
-    //   important: true,
-    // },
-    // {
-    //   src: path.posix.join('/', config.basePath, `/((?!index$).*?)(?:/)?`),
-    //   headers: {
-    //     'x-matched-path': '/$1',
-    //   },
-    //   continue: true,
-    //   important: true,
-    // },
+    {
+      // This ensures we only match known emitted-by-Next.js files and not
+      // user-emitted files which may be missing a hash in their filename.
+      description: 'Ensure static files caching headers',
+      match: {
+        path: join(
+          '/',
+          nextAdapterContext.config.basePath || '',
+          `_next/static/(?:[^/]+/pages|pages|chunks|runtime|css|image|media|${nextAdapterContext.buildId})/.+`,
+        ),
+      },
+      apply: {
+        type: 'apply',
+        // Next.js assets contain a hash or entropy in their filenames, so they
+        // are guaranteed to be unique and cacheable indefinitely.
+        headers: {
+          'cache-control': 'public,max-age=31536000,immutable',
+        },
+      },
+      continue: true,
+    },
+    {
+      description: 'Apply x-matched-path header if index',
+      match: {
+        path: join('^/', nextAdapterContext.config.basePath, '/index(?:/)?$'),
+      },
+      apply: {
+        type: 'apply',
+        headers: {
+          'x-matched-path': '/',
+        },
+      },
+      continue: true,
+    },
+    {
+      description: 'Apply x-matched-path header if not index',
+      match: {
+        path: join('^/', nextAdapterContext.config.basePath, '/((?!index$).*?)(?:/)?$'),
+      },
+      apply: {
+        type: 'apply',
+        headers: {
+          'x-matched-path': '/$1',
+        },
+      },
+      continue: true,
+    },
 
     // { handle: 'error' },
 
