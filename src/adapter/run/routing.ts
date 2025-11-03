@@ -331,9 +331,17 @@ export async function runNextRouting(
   )
   currentRequest = updatedCurrentRequest
 
+  if (!maybeResponse.response) {
+    // check other things
+    maybeResponse = {
+      ...maybeResponse,
+      response: await context.next(currentRequest),
+    }
+  }
+
   let response: Response
 
-  if (maybeResponse.response) {
+  if (maybeResponse.response && (maybeResponse.status ?? maybeResponse.response?.status !== 404)) {
     const initialResponse = maybeResponse.response
     const { maybeResponse: updatedMaybeResponse } = await match(
       currentRequest,
