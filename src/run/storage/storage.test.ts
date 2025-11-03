@@ -90,7 +90,7 @@ describe('getMemoizedKeyValueStoreBackedByRegionalBlobStore', () => {
     const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
     const get1 = await store.get(TEST_KEY, OTEL_SPAN_TITLE)
 
-    expect(mockedStore.getWithMetadata, 'Blobs should be requested').toHaveBeenCalledTimes(1)
+    expect(mockedStore.getWithMetadata, 'Blobs should be requested').toHaveBeenCalledOnce()
     expect(get1, 'Expected blob should be returned').toBe(TEST_DEFAULT_VALUE)
 
     const get2 = await store.get(TEST_KEY, OTEL_SPAN_TITLE)
@@ -103,14 +103,14 @@ describe('getMemoizedKeyValueStoreBackedByRegionalBlobStore', () => {
       const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
 
       const get1 = await store.get(TEST_KEY, OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Blobs should be requested').toHaveBeenCalledTimes(1)
+      expect(mockedStore.getWithMetadata, 'Blobs should be requested').toHaveBeenCalledOnce()
       expect(get1, 'Expected blob should be returned').toBe(TEST_DEFAULT_VALUE)
 
       const get2 = await store.get(TEST_KEY, OTEL_SPAN_TITLE)
       expect(
         mockedStore.getWithMetadata,
         'Blobs should be requested just once',
-      ).toHaveBeenCalledTimes(1)
+      ).toHaveBeenCalledOnce()
       expect(get2, 'Expected second .get to return the same as first one').toBe(get1)
     })
   })
@@ -126,12 +126,10 @@ describe('getMemoizedKeyValueStoreBackedByRegionalBlobStore', () => {
 
       await store.set(TEST_KEY, writeValue, OTEL_SPAN_TITLE)
 
-      expect(mockedStore.setJSON, 'Blobs should be posted').toHaveBeenCalledTimes(1)
+      expect(mockedStore.setJSON, 'Blobs should be posted').toHaveBeenCalledOnce()
 
       const get = await store.get(TEST_KEY, OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from memory').toHaveBeenCalledTimes(
-        0,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from memory').not.toHaveBeenCalled()
       expect(get, 'Value from memory should be correct').toBe(writeValue)
     })
   })
@@ -213,16 +211,14 @@ describe('getMemoizedKeyValueStoreBackedByRegionalBlobStore', () => {
     await runWithRequestContext(requestContext1, async () => {
       const get = await store.get(TEST_KEY, OTEL_SPAN_TITLE)
       expect(get, 'Value from memory should be the same as before').toBe(TEST_DEFAULT_VALUE)
-      expect(mockedStore.getWithMetadata, 'Blobs should be requested').toHaveBeenCalledTimes(1)
+      expect(mockedStore.getWithMetadata, 'Blobs should be requested').toHaveBeenCalledOnce()
     })
 
     await runWithRequestContext(requestContext2, async () => {
       mockedStore.getWithMetadata.mockClear()
       await store.set(TEST_KEY, writeValue, OTEL_SPAN_TITLE)
       const get = await store.get(TEST_KEY, OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from memory').toHaveBeenCalledTimes(
-        0,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from memory').not.toHaveBeenCalled()
       expect(get, 'Value from memory should be correct').toBe(writeValue)
     })
 
@@ -233,9 +229,7 @@ describe('getMemoizedKeyValueStoreBackedByRegionalBlobStore', () => {
         get,
         'Value from memory should be the same as before and not affected by other request context',
       ).toBe(TEST_DEFAULT_VALUE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from memory').toHaveBeenCalledTimes(
-        0,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from memory').not.toHaveBeenCalled()
     })
   })
 
@@ -253,21 +247,15 @@ describe('getMemoizedKeyValueStoreBackedByRegionalBlobStore', () => {
 
     await runWithRequestContext(requestContext1, async () => {
       await store.get('heavy-route-1', OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from blobs').toHaveBeenCalledTimes(
-        1,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from blobs').toHaveBeenCalledOnce()
       mockedStore.getWithMetadata.mockClear()
 
       await store.get('heavy-route-1', OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from memory').toHaveBeenCalledTimes(
-        0,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from memory').not.toHaveBeenCalled()
       mockedStore.getWithMetadata.mockClear()
 
       await store.get('heavy-route-2', OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from blobs').toHaveBeenCalledTimes(
-        1,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from blobs').toHaveBeenCalledOnce()
       mockedStore.getWithMetadata.mockClear()
 
       // at this point we should exceed the memory limit and least recently used value should be evicted
@@ -275,43 +263,35 @@ describe('getMemoizedKeyValueStoreBackedByRegionalBlobStore', () => {
       expect(
         mockedStore.getWithMetadata,
         'Previously stored in-memory value should be evicted and fresh value should be read from blobs',
-      ).toHaveBeenCalledTimes(1)
+      ).toHaveBeenCalledOnce()
       mockedStore.getWithMetadata.mockClear()
 
       await store.get('heavy-route-1', OTEL_SPAN_TITLE)
       expect(
         mockedStore.getWithMetadata,
         'Value should be read from memory again',
-      ).toHaveBeenCalledTimes(0)
+      ).not.toHaveBeenCalled()
       mockedStore.getWithMetadata.mockClear()
     })
 
     await runWithRequestContext(requestContext2, async () => {
       await store.get('heavy-route-1', OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from blobs').toHaveBeenCalledTimes(
-        1,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from blobs').toHaveBeenCalledOnce()
       mockedStore.getWithMetadata.mockClear()
 
       await store.get('heavy-route-1', OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from memory').toHaveBeenCalledTimes(
-        0,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from memory').not.toHaveBeenCalled()
       mockedStore.getWithMetadata.mockClear()
     })
 
     await runWithRequestContext(requestContext1, async () => {
       await store.get('heavy-route-1', OTEL_SPAN_TITLE)
       // operations in requestContext2 should result in evicting value for requestContext1
-      expect(mockedStore.getWithMetadata, 'Value should be read from blobs').toHaveBeenCalledTimes(
-        1,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from blobs').toHaveBeenCalledOnce()
       mockedStore.getWithMetadata.mockClear()
 
       await store.get('heavy-route-1', OTEL_SPAN_TITLE)
-      expect(mockedStore.getWithMetadata, 'Value should be read from memory').toHaveBeenCalledTimes(
-        0,
-      )
+      expect(mockedStore.getWithMetadata, 'Value should be read from memory').not.toHaveBeenCalled()
       mockedStore.getWithMetadata.mockClear()
     })
   })
