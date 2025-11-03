@@ -6,7 +6,6 @@ import { decodeBlobKey } from '../../../tests/utils/helpers.ts'
 import { BlobType } from '../../shared/blob-types.cts'
 import { createRequestContext, runWithRequestContext } from '../handlers/request-context.cts'
 
-import { clearInMemoryLRUCacheForTesting } from './request-scoped-in-memory-cache.cts'
 import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage.cts'
 
 function mockGenerateRecord(data: BlobType) {
@@ -77,7 +76,11 @@ function generate30MBBlobTypeValue(id: string): BlobType {
 }
 
 beforeEach(() => {
-  clearInMemoryLRUCacheForTesting()
+  // reset in memory cache between tests
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const unTypedGlobalThis = globalThis as any
+  unTypedGlobalThis[Symbol.for('nf-in-memory-lru-cache')] = undefined
+
   mockBlobValues = {
     [TEST_KEY]: mockGenerateRecord(TEST_DEFAULT_VALUE),
   }

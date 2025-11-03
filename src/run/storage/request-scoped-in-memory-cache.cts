@@ -150,10 +150,6 @@ function getInMemoryLRUCache() {
   return extendedGlobalThis[IN_MEMORY_LRU_CACHE]
 }
 
-export function clearInMemoryLRUCacheForTesting() {
-  extendedGlobalThis[IN_MEMORY_LRU_CACHE] = undefined
-}
-
 interface RequestScopedInMemoryCache {
   get(key: string):
     | { conditional: false; currentRequestValue: BlobType | null | Promise<BlobType | null> }
