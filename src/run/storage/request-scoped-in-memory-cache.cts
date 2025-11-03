@@ -9,13 +9,34 @@ import { recordWarning } from '../handlers/tracer.cjs'
 // lru-cache types don't like using `null` for values, so we use a symbol to represent it and do conversion
 // so it doesn't leak outside
 const NullValue = Symbol.for('null-value')
-type BlobLRUCache = LRUCache<string, BlobType | typeof NullValue | Promise<BlobType | null>>
+type DataWithEtag = { data: BlobType; etag: string }
+
+const isDataWithEtag = (value: unknown): value is DataWithEtag => {
+  return typeof value === 'object' && value !== null && 'data' in value && 'etag' in value
+}
+
+type BlobLRUCache = LRUCache<
+  string,
+  BlobType | typeof NullValue | Promise<BlobType | null> | DataWithEtag
+>
 
 const IN_MEMORY_CACHE_MAX_SIZE = Symbol.for('nf-in-memory-cache-max-size')
 const IN_MEMORY_LRU_CACHE = Symbol.for('nf-in-memory-lru-cache')
 const extendedGlobalThis = globalThis as typeof globalThis & {
   [IN_MEMORY_CACHE_MAX_SIZE]?: number
-  [IN_MEMORY_LRU_CACHE]?: BlobLRUCache | null
+  [IN_MEMORY_LRU_CACHE]?: {
+    /**
+     * entries are scoped to request IDs
+     */
+    perRequest: BlobLRUCache
+    /**
+     * global cache shared between requests, does not allow immediate re-use, but is used for
+     * conditional blob gets with etags and given blob key is first tried in given request.
+     * Map values are weak references to avoid this map strongly referencing blobs and allowing
+     * GC based on per request LRU cache evictions alone.
+     */
+    global: Map<string, WeakRef<DataWithEtag>>
+  } | null
 }
 
 const DEFAULT_FALLBACK_MAX_SIZE = 50 * 1024 * 1024 // 50MB, same as default Next.js config
@@ -31,40 +52,46 @@ const isPositiveNumber = (value: unknown): value is PositiveNumber => {
 }
 
 const BASE_BLOB_SIZE = 25 as PositiveNumber
+const BASE_BLOB_WITH_ETAG_SIZE = (BASE_BLOB_SIZE + 34) as PositiveNumber
 
 const estimateBlobKnownTypeSize = (
-  valueToStore: BlobType | null | Promise<unknown>,
+  valueToStore: BlobType | null | Promise<unknown> | DataWithEtag,
 ): number | undefined => {
   // very approximate size calculation to avoid expensive exact size calculation
   // inspired by https://github.com/vercel/next.js/blob/ed10f7ed0246fcc763194197eb9beebcbd063162/packages/next/src/server/lib/incremental-cache/file-system-cache.ts#L60-L79
-  if (valueToStore === null || isPromise(valueToStore) || isTagManifest(valueToStore)) {
+  if (valueToStore === null || isPromise(valueToStore)) {
     return BASE_BLOB_SIZE
   }
-  if (isHtmlBlob(valueToStore)) {
-    return BASE_BLOB_SIZE + valueToStore.html.length
+
+  const { data, baseSize } = isDataWithEtag(valueToStore)
+    ? { data: valueToStore.data, baseSize: BASE_BLOB_WITH_ETAG_SIZE }
+    : { data: valueToStore, baseSize: BASE_BLOB_SIZE }
+
+  if (isTagManifest(data)) {
+    return baseSize
   }
 
-  if (valueToStore.value?.kind === 'FETCH') {
-    return BASE_BLOB_SIZE + valueToStore.value.data.body.length
+  if (isHtmlBlob(data)) {
+    return baseSize + data.html.length
   }
-  if (valueToStore.value?.kind === 'APP_PAGE') {
-    return (
-      BASE_BLOB_SIZE + valueToStore.value.html.length + (valueToStore.value.rscData?.length ?? 0)
-    )
+
+  if (data.value?.kind === 'FETCH') {
+    return baseSize + data.value.data.body.length
   }
-  if (valueToStore.value?.kind === 'PAGE' || valueToStore.value?.kind === 'PAGES') {
-    return (
-      BASE_BLOB_SIZE +
-      valueToStore.value.html.length +
-      JSON.stringify(valueToStore.value.pageData).length
-    )
+  if (data.value?.kind === 'APP_PAGE') {
+    return baseSize + data.value.html.length + (data.value.rscData?.length ?? 0)
   }
-  if (valueToStore.value?.kind === 'ROUTE' || valueToStore.value?.kind === 'APP_ROUTE') {
-    return BASE_BLOB_SIZE + valueToStore.value.body.length
+  if (data.value?.kind === 'PAGE' || data.value?.kind === 'PAGES') {
+    return baseSize + data.value.html.length + JSON.stringify(data.value.pageData).length
+  }
+  if (data.value?.kind === 'ROUTE' || data.value?.kind === 'APP_ROUTE') {
+    return baseSize + data.value.body.length
   }
 }
 
-const estimateBlobSize = (valueToStore: BlobType | null | Promise<unknown>): PositiveNumber => {
+const estimateBlobSize = (
+  valueToStore: BlobType | null | Promise<unknown> | DataWithEtag,
+): PositiveNumber => {
   let estimatedKnownTypeSize: number | undefined
   let estimateBlobKnownTypeSizeError: unknown
   try {
@@ -98,23 +125,41 @@ function getInMemoryLRUCache() {
         ? extendedGlobalThis[IN_MEMORY_CACHE_MAX_SIZE]
         : DEFAULT_FALLBACK_MAX_SIZE
 
-    extendedGlobalThis[IN_MEMORY_LRU_CACHE] =
-      maxSize === 0
-        ? null // if user sets 0 in their config, we should honor that and not use in-memory cache
-        : new LRUCache<string, BlobType | typeof NullValue | Promise<BlobType | null>>({
-            max: 1000,
-            maxSize,
-            sizeCalculation: (valueToStore) => {
-              return estimateBlobSize(valueToStore === NullValue ? null : valueToStore)
-            },
-          })
+    if (maxSize === 0) {
+      extendedGlobalThis[IN_MEMORY_LRU_CACHE] = null
+    } else {
+      const global = new Map<string, WeakRef<DataWithEtag>>()
+
+      const perRequest = new LRUCache<
+        string,
+        BlobType | typeof NullValue | Promise<BlobType | null> | DataWithEtag
+      >({
+        max: 1000,
+        maxSize,
+        sizeCalculation: (valueToStore) => {
+          return estimateBlobSize(valueToStore === NullValue ? null : valueToStore)
+        },
+      })
+
+      extendedGlobalThis[IN_MEMORY_LRU_CACHE] = {
+        perRequest,
+        global,
+      }
+    }
   }
   return extendedGlobalThis[IN_MEMORY_LRU_CACHE]
 }
 
 interface RequestScopedInMemoryCache {
-  get(key: string): BlobType | null | Promise<BlobType | null> | undefined
-  set(key: string, value: BlobType | null | Promise<BlobType | null>): void
+  get(key: string):
+    | { conditional: false; currentRequestValue: BlobType | null | Promise<BlobType | null> }
+    | {
+        conditional: true
+        globalValue: BlobType
+        etag: string
+      }
+    | undefined
+  set(key: string, value: BlobType | null | Promise<BlobType | null> | DataWithEtag): void
 }
 
 export const getRequestScopedInMemoryCache = (): RequestScopedInMemoryCache => {
@@ -125,8 +170,35 @@ export const getRequestScopedInMemoryCache = (): RequestScopedInMemoryCache => {
     get(key) {
       if (!requestContext) return
       try {
-        const value = inMemoryLRUCache?.get(`${requestContext.requestID}:${key}`)
-        return value === NullValue ? null : value
+        const currentRequestValue = inMemoryLRUCache?.perRequest.get(
+          `${requestContext.requestID}:${key}`,
+        )
+        if (currentRequestValue) {
+          return {
+            conditional: false,
+            currentRequestValue:
+              currentRequestValue === NullValue
+                ? null
+                : isDataWithEtag(currentRequestValue)
+                  ? currentRequestValue.data
+                  : currentRequestValue,
+          }
+        }
+
+        const globalEntry = inMemoryLRUCache?.global.get(key)
+        if (globalEntry) {
+          const derefencedGlobalEntry = globalEntry.deref()
+          if (derefencedGlobalEntry) {
+            return {
+              conditional: true,
+              globalValue: derefencedGlobalEntry.data,
+              etag: derefencedGlobalEntry.etag,
+            }
+          }
+
+          // value has been GC'ed so we can cleanup entry from the map as it no longer points to existing value
+          inMemoryLRUCache?.global.delete(key)
+        }
       } catch (error) {
         // using in-memory store is perf optimization not requirement
         // trying to use optimization should NOT cause crashes
@@ -137,7 +209,10 @@ export const getRequestScopedInMemoryCache = (): RequestScopedInMemoryCache => {
     set(key, value) {
       if (!requestContext) return
       try {
-        inMemoryLRUCache?.set(`${requestContext?.requestID}:${key}`, value ?? NullValue)
+        if (isDataWithEtag(value)) {
+          inMemoryLRUCache?.global.set(key, new WeakRef(value))
+        }
+        inMemoryLRUCache?.perRequest.set(`${requestContext.requestID}:${key}`, value ?? NullValue)
       } catch (error) {
         // using in-memory store is perf optimization not requirement
         // trying to use optimization should NOT cause crashes
