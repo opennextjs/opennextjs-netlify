@@ -3,7 +3,12 @@ import { join } from 'node:path/posix'
 
 import { glob } from 'fast-glob'
 
-import type { RoutingRule, RoutingRuleRedirect, RoutingRuleRewrite } from '../run/routing.js'
+import type {
+  RoutingRule,
+  RoutingRuleApply,
+  RoutingRuleRedirect,
+  RoutingRuleRewrite,
+} from '../run/routing.js'
 
 import {
   DISPLAY_NAME_ROUTING,
@@ -80,10 +85,18 @@ export function convertDynamicRouteToRoutingRule(
   } satisfies RoutingRuleRewrite
 }
 
+const matchOperatorsRegex = /[|\\{}()[\]^$+*?.-]/g
+
+export function escapeStringRegexp(str: string): string {
+  return str.replace(matchOperatorsRegex, '\\$&')
+}
+
 export async function generateRoutingRules(
   nextAdapterContext: OnBuildCompleteContext,
   netlifyAdapterContext: NetlifyAdapterContext,
 ) {
+  const escapedBuildId = escapeStringRegexp(nextAdapterContext.buildId)
+
   const hasMiddleware = Boolean(nextAdapterContext.outputs.middleware)
   const hasPages =
     nextAdapterContext.outputs.pages.length !== 0 ||
@@ -148,7 +161,7 @@ export async function generateRoutingRules(
         {
           description: 'Normalize _next/data',
           match: {
-            path: `^${nextAdapterContext.config.basePath}/_next/data/${await netlifyAdapterContext.getBuildId()}/(.*)\\.json`,
+            path: `^${nextAdapterContext.config.basePath}/_next/data/${escapedBuildId}/(.*)\\.json`,
             has: [
               {
                 type: 'header',
@@ -211,7 +224,7 @@ export async function generateRoutingRules(
           },
           apply: {
             type: 'rewrite',
-            destination: `${nextAdapterContext.config.basePath}/_next/data/${await netlifyAdapterContext.getBuildId()}/$1.json`,
+            destination: `${nextAdapterContext.config.basePath}/_next/data/${nextAdapterContext.buildId}/$1.json`,
           },
         },
       ]
@@ -432,8 +445,44 @@ export async function generateRoutingRules(
     // apply normal dynamic routes
     ...dynamicRoutes, // originally: ...convertedDynamicRoutes,
 
-    // apply x-nextjs-matched-path header and __next_data_catchall rewrite
-    // if middleware + pages
+    ...(hasMiddleware && hasPages
+      ? [
+          // apply x-nextjs-matched-path header
+          // if middleware + pages
+          {
+            description: 'Apply x-nextjs-matched-path header if middleware + pages',
+            match: {
+              path: `^${join(
+                '/',
+                nextAdapterContext.config.basePath,
+                '/_next/data/',
+                escapedBuildId,
+                '/(.*).json',
+              )}`,
+            },
+            apply: {
+              type: 'apply',
+              headers: {
+                'x-nextjs-matched-path': '/$1',
+              },
+            },
+            continue: true,
+          } satisfies RoutingRuleApply,
+          {
+            // apply __next_data_catchall rewrite
+            // if middleware + pages
+            description: 'Apply __next_data_catchall rewrite if middleware + pages',
+            match: {
+              path: ``,
+            },
+            apply: {
+              type: 'rewrite',
+              destination: '__next_data_catchall',
+              statusCode: 200,
+            },
+          } satisfies RoutingRule,
+        ]
+      : []),
 
     {
       // originally: handle: 'hit' },

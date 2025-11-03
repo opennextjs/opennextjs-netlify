@@ -19,7 +19,7 @@ export async function onBuildComplete(
           NEXT_RUNTIME_STATIC_ASSETS,
           '_next',
           'data',
-          await netlifyAdapterContext.getBuildId(),
+          nextAdapterContext.buildId,
           // eslint-disable-next-line unicorn/no-nested-ternary
           `${distPathname === '/' ? 'index' : distPathname.endsWith('/') ? distPathname.slice(0, -1) : distPathname}.json`,
         )
@@ -65,5 +65,19 @@ export async function onBuildComplete(
     await cp('public', NEXT_RUNTIME_STATIC_ASSETS, {
       recursive: true,
     })
+    // TODO: glob things to add to preparedOutputs.staticAssets
+  }
+
+  const hasMiddleware = Boolean(nextAdapterContext.outputs.middleware)
+  const hasPages =
+    nextAdapterContext.outputs.pages.length !== 0 ||
+    nextAdapterContext.outputs.pagesApi.length !== 0
+
+  if (hasMiddleware && hasPages) {
+    // create empty __next_data_catchall json file used for fully static pages
+    await writeFile(join(NEXT_RUNTIME_STATIC_ASSETS, '__next_data_catchall.json'), '{}')
+    netlifyAdapterContext.preparedOutputs.staticAssets.push('__next_data_catchall.json')
+    netlifyAdapterContext.preparedOutputs.staticAssetsAliases.__next_data_catchall =
+      '__next_data_catchall.json'
   }
 }
