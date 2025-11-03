@@ -18,34 +18,6 @@ import {
 } from './constants.js'
 import type { NetlifyAdapterContext, OnBuildCompleteContext } from './types.js'
 
-function fixDestinationGroupReplacements(destination: string, sourceRegex: string): string {
-  // convert $nxtPslug to $<nxtPslug> etc
-
-  // find all capturing groups in sourceRegex
-  const segments = [...sourceRegex.matchAll(/\(\?<(?<segment_name>[^>]+)>/g)]
-
-  let adjustedDestination = destination
-  for (const segment of segments) {
-    if (segment.groups?.segment_name) {
-      adjustedDestination = adjustedDestination.replaceAll(
-        `$${segment.groups.segment_name}`,
-        `$<${segment.groups.segment_name}>`,
-      )
-    }
-  }
-
-  if (adjustedDestination !== destination) {
-    console.log('fixing named captured group replacement', {
-      sourceRegex,
-      segments,
-      destination,
-      adjustedDestination,
-    })
-  }
-
-  return adjustedDestination
-}
-
 export function convertRedirectToRoutingRule(
   redirect: Pick<
     OnBuildCompleteContext['routes']['redirects'][number],
@@ -256,6 +228,88 @@ export async function generateRoutingRules(
     ...normalizeNextData, // originally: // normalize _next/data if middleware + pages
 
     // i18n prefixing routes
+    ...(nextAdapterContext.config.i18n
+      ? [
+          // i18n domain handling - not implementing for now
+          // Handle auto-adding current default locale to path based on $wildcard
+          // This is split into two rules to avoid matching the `/index` route as it causes issues with trailing slash redirect
+          // {
+          //   description: 'stuff1',
+          //   match: {
+          //     path: `^${join(
+          //       '/',
+          //       nextAdapterContext.config.basePath,
+          //       '/',
+          //     )}(?!(?:_next/.*|${nextAdapterContext.config.i18n.locales
+          //       .map((locale) => escapeStringRegexp(locale))
+          //       .join('|')})(?:/.*|$))$`,
+          //   },
+          //   apply: {
+          //     type: 'rewrite',
+          //     // we aren't able to ensure trailing slash mode here
+          //     // so ensure this comes after the trailing slash redirect
+          //     destination: `${
+          //       nextAdapterContext.config.basePath && nextAdapterContext.config.basePath !== '/'
+          //         ? join('/', nextAdapterContext.config.basePath)
+          //         : ''
+          //     }$wildcard${nextAdapterContext.config.trailingSlash ? '/' : ''}`,
+          //   },
+          // } satisfies RoutingRuleRewrite,
+
+          // Handle redirecting to locale paths based on NEXT_LOCALE cookie or Accept-Language header
+          // eslint-disable-next-line no-negated-condition
+          ...(nextAdapterContext.config.i18n.localeDetection !== false
+            ? [
+                // TODO: implement locale detection
+                // {
+                //   description: 'Detect locale on root path, redirect and set cookie',
+                //   match: {
+                //     path: '/',
+                //   },
+                //   apply: {
+                //     type: 'apply',
+                //   },
+                // } satisfies RoutingRuleApply,
+              ]
+            : []),
+
+          {
+            description: 'Prefix default locale to index',
+            match: {
+              path: `^${join('/', nextAdapterContext.config.basePath)}$`,
+            },
+            apply: {
+              type: 'rewrite',
+              destination: join(
+                '/',
+                nextAdapterContext.config.basePath,
+                nextAdapterContext.config.i18n.defaultLocale,
+              ),
+            },
+          } satisfies RoutingRuleRewrite,
+          {
+            description: 'Auto-prefix non-locale path with default locale',
+            match: {
+              path: `^${join(
+                '/',
+                nextAdapterContext.config.basePath,
+                '/',
+              )}(?!(?:_next/.*|${nextAdapterContext.config.i18n.locales
+                .map((locale) => escapeStringRegexp(locale))
+                .join('|')})(?:/.*|$))(.*)$`,
+            },
+            apply: {
+              type: 'rewrite',
+              destination: join(
+                '/',
+                nextAdapterContext.config.basePath,
+                nextAdapterContext.config.i18n.defaultLocale,
+                '$1',
+              ),
+            },
+          } satisfies RoutingRuleRewrite,
+        ]
+      : []),
 
     // ...convertedHeaders,
 
