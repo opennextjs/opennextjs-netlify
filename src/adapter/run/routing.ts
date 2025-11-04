@@ -22,7 +22,7 @@ type RoutingRuleBase = {
 
 type Match = {
   /** Regex */
-  path: string
+  path?: string
 
   /** additional conditions */
   has?: {
@@ -140,7 +140,10 @@ async function match(
     if (prefix) {
       console.log(prefix, 'Evaluating rule:', rule.description ?? JSON.stringify(rule))
     }
+
     if ('match' in rule) {
+      let matched = false
+
       if ('type' in rule.match) {
         if (rule.match.type === 'static-asset-or-function') {
           let matchedType: 'static-asset' | 'function' | 'static-asset-alias' | null = null
@@ -171,6 +174,7 @@ async function match(
               ...maybeResponse,
               response: await context.next(currentRequest),
             }
+            matched = true
           }
         } else if (rule.match.type === 'image-cdn' && pathname.startsWith('/.netlify/image/')) {
           if (prefix) {
@@ -181,111 +185,117 @@ async function match(
             ...maybeResponse,
             response: await context.next(currentRequest),
           }
+          matched = true
         }
       } else if ('apply' in rule) {
-        const sourceRegexp = new RegExp(rule.match.path)
-        const sourceMatch = pathname.match(sourceRegexp)
-        if (sourceMatch) {
-          // check additional conditions
-          if (rule.match.has) {
-            let hasAllMatch = true
-            for (const condition of rule.match.has) {
-              if (condition.type === 'header') {
-                if (typeof condition.value === 'undefined') {
-                  if (!currentRequest.headers.has(condition.key)) {
-                    hasAllMatch = false
-                    break
-                  }
-                } else if (currentRequest.headers.get(condition.key) !== condition.value) {
+        const replacements: Record<string, string> = {}
+
+        if (rule.match.path) {
+          const sourceRegexp = new RegExp(rule.match.path)
+          const sourceMatch = pathname.match(sourceRegexp)
+          if (sourceMatch) {
+            if (sourceMatch.groups) {
+              for (const [key, value] of Object.entries(sourceMatch.groups)) {
+                replacements[`$${key}`] = value
+              }
+            }
+            for (const [index, element] of sourceMatch.entries()) {
+              replacements[`$${index}`] = element ?? ''
+            }
+          } else {
+            continue
+          }
+        }
+
+        if (rule.match.has) {
+          let hasAllMatch = true
+          for (const condition of rule.match.has) {
+            if (condition.type === 'header') {
+              if (typeof condition.value === 'undefined') {
+                if (!currentRequest.headers.has(condition.key)) {
                   hasAllMatch = false
                   break
                 }
+              } else if (currentRequest.headers.get(condition.key) !== condition.value) {
+                hasAllMatch = false
+                break
               }
             }
-
-            if (!hasAllMatch) {
-              continue
-            }
           }
 
-          const replacements: Record<string, string> = {}
-          if (sourceMatch.groups) {
-            for (const [key, value] of Object.entries(sourceMatch.groups)) {
-              replacements[`$${key}`] = value
-            }
-          }
-          for (const [index, element] of sourceMatch.entries()) {
-            replacements[`$${index}`] = element ?? ''
-          }
-
-          if (prefix) {
-            console.log(prefix, 'Matched rule', pathname, rule, sourceMatch, replacements)
-          }
-
-          if (rule.apply.headers) {
-            maybeResponse = {
-              ...maybeResponse,
-              headers: {
-                ...maybeResponse.headers,
-                ...Object.fromEntries(
-                  Object.entries(rule.apply.headers).map(([key, value]) => {
-                    return [key, replaceGroupReferences(value, replacements)]
-                  }),
-                ),
-              },
-            }
-          }
-
-          if (rule.apply.type === 'rewrite') {
-            const replaced = replaceGroupReferences(rule.apply.destination, replacements)
-
-            // pathname.replace(sourceRegexp, rule.apply.destination)
-            const destURL = new URL(replaced, currentURL)
-            currentRequest = new Request(destURL, currentRequest)
-
-            if (rule.apply.statusCode) {
-              maybeResponse = {
-                ...maybeResponse,
-                status: rule.apply.statusCode,
-              }
-            }
-
-            if (rule.apply.rerunRoutingPhases) {
-              const { maybeResponse: updatedMaybeResponse } = await match(
-                currentRequest,
-                context,
-                selectRoutingPhasesRules(routingRules, rule.apply.rerunRoutingPhases),
-                allRoutingRules,
-                outputs,
-                prefix,
-                maybeResponse,
-              )
-              maybeResponse = updatedMaybeResponse
-            }
-          } else if (rule.apply.type === 'redirect') {
-            const replaced = pathname.replace(sourceRegexp, rule.apply.destination)
-            if (prefix) {
-              console.log(prefix, `Redirecting ${pathname} to ${replaced}`)
-            }
-            const status = rule.apply.statusCode ?? 307
-            maybeResponse = {
-              ...maybeResponse,
-              status,
-              response: new Response(null, {
-                status,
-                headers: {
-                  Location: replaced,
-                },
-              }),
-            }
+          if (!hasAllMatch) {
+            continue
           }
         }
-      }
-    }
 
-    if (maybeResponse?.response && !rule.continue) {
-      // once hit a response short circuit
-      return { maybeResponse, currentRequest }
+        if (prefix) {
+          console.log(prefix, 'Matched rule', pathname, rule, replacements)
+        }
+
+        if (rule.apply.headers) {
+          maybeResponse = {
+            ...maybeResponse,
+            headers: {
+              ...maybeResponse.headers,
+              ...Object.fromEntries(
+                Object.entries(rule.apply.headers).map(([key, value]) => {
+                  return [key, replaceGroupReferences(value, replacements)]
+                }),
+              ),
+            },
+          }
+        }
+
+        if (rule.apply.type === 'rewrite') {
+          const replaced = replaceGroupReferences(rule.apply.destination, replacements)
+
+          // pathname.replace(sourceRegexp, rule.apply.destination)
+          const destURL = new URL(replaced, currentURL)
+          currentRequest = new Request(destURL, currentRequest)
+
+          if (rule.apply.statusCode) {
+            maybeResponse = {
+              ...maybeResponse,
+              status: rule.apply.statusCode,
+            }
+          }
+
+          if (rule.apply.rerunRoutingPhases) {
+            const { maybeResponse: updatedMaybeResponse } = await match(
+              currentRequest,
+              context,
+              selectRoutingPhasesRules(routingRules, rule.apply.rerunRoutingPhases),
+              allRoutingRules,
+              outputs,
+              prefix,
+              maybeResponse,
+            )
+            maybeResponse = updatedMaybeResponse
+          }
+        } else if (rule.apply.type === 'redirect') {
+          const replaced = replaceGroupReferences(rule.apply.destination, replacements)
+          if (prefix) {
+            console.log(prefix, `Redirecting ${pathname} to ${replaced}`)
+          }
+          const status = rule.apply.statusCode ?? 307
+          maybeResponse = {
+            ...maybeResponse,
+            status,
+            response: new Response(null, {
+              status,
+              headers: {
+                Location: replaced,
+              },
+            }),
+          }
+        }
+        matched = true
+      }
+
+      if (matched && !rule.continue) {
+        // once hit a match short circuit
+        return { maybeResponse, currentRequest }
+      }
     }
   }
   return { maybeResponse, currentRequest }
