@@ -76,8 +76,6 @@ export async function onBuildComplete(
   if (hasMiddleware && hasPages) {
     // create empty __next_data_catchall json file used for fully static pages
     await writeFile(join(NEXT_RUNTIME_STATIC_ASSETS, '__next_data_catchall.json'), '{}')
-    netlifyAdapterContext.preparedOutputs.staticAssets.push('__next_data_catchall.json')
-    netlifyAdapterContext.preparedOutputs.staticAssetsAliases.__next_data_catchall =
-      '__next_data_catchall.json'
+    netlifyAdapterContext.preparedOutputs.staticAssets.push('/__next_data_catchall.json')
   }
 }

@@ -537,7 +537,7 @@ export async function generateRoutingRules(
             },
             apply: {
               type: 'rewrite',
-              destination: '__next_data_catchall',
+              destination: '/__next_data_catchall.json',
               statusCode: 200,
             },
           } satisfies RoutingRule,
