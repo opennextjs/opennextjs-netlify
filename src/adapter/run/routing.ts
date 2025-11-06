@@ -541,7 +541,7 @@ export async function runNextRouting(
       }
     }
 
-    log('Incoming request for routing:', request.url)
+    log('Incoming request for routing:', request.method, request.url)
 
     let currentRequest = new Request(request)
     currentRequest.headers.set('x-ntl-routing', '1')

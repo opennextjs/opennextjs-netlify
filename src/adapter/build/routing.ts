@@ -655,7 +655,7 @@ export async function onBuildComplete(
     const routingRules = ${JSON.stringify(routing, null, 2)}
     const outputs = ${JSON.stringify(netlifyAdapterContext.preparedOutputs, null, 2)}
 
-    const asyncLoadMiddleware = outputs.middleware ? () => import('./next_middleware.js').then(mod => mod.default) : () => Promise.reject(new Error('No middleware output'));
+    const asyncLoadMiddleware = () => ${netlifyAdapterContext.preparedOutputs.middleware ? `import('./next_middleware.js').then(mod => mod.default)` : `Promise.reject(new Error('No middleware output'))`}
 
     export default async function handler(request, context) {
       return runNextRouting(request, context, routingRules, outputs, asyncLoadMiddleware)
