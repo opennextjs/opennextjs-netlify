@@ -1,21 +1,10 @@
-import type { Context } from '@netlify/edge-functions'
-
-import matchers from './matchers.json' with { type: 'json' }
-import nextConfig from './next.config.json' with { type: 'json' }
+// import type { Context } from '@netlify/edge-functions'
 
 import { InternalHeaders } from './lib/headers.ts'
 import { logger, LogLevel } from './lib/logging.ts'
-import { buildNextRequest, localizeRequest, RequestData } from './lib/next-request.ts'
-import { buildResponse, FetchEventResult } from './lib/response.ts'
-import {
-  getMiddlewareRouteMatcher,
-  searchParamsToUrlQuery,
-  type MiddlewareRouteMatch,
-} from './lib/routing.ts'
-
-type NextHandler = (params: { request: RequestData }) => Promise<FetchEventResult>
-
-const matchesMiddleware: MiddlewareRouteMatch = getMiddlewareRouteMatcher(matchers || [])
+import { buildNextRequest } from './lib/next-request.ts'
+import type { NextHandler } from './lib/types.ts'
+// import { buildResponse } from './lib/response.ts'
 
 /**
  * Runs a Next.js middleware as a Netlify Edge Function. It translates a web
@@ -26,11 +15,7 @@ const matchesMiddleware: MiddlewareRouteMatch = getMiddlewareRouteMatcher(matche
  * @param context Netlify-specific context object
  * @param nextHandler Next.js middleware handler
  */
-export async function handleMiddleware(
-  request: Request,
-  context: Context,
-  nextHandler: NextHandler,
-) {
+export async function handleMiddleware(request: Request, nextHandler: NextHandler) {
   const url = new URL(request.url)
 
   const reqLogger = logger
@@ -40,34 +25,21 @@ export async function handleMiddleware(
     .withFields({ url_path: url.pathname })
     .withRequestID(request.headers.get(InternalHeaders.NFRequestID))
 
-  const { localizedUrl } = localizeRequest(url, nextConfig)
-  // While we have already checked the path when mapping to the edge function,
-  // Next.js supports extra rules that we need to check here too, because we
-  // might be running an edge function for a path we should not. If we find
-  // that's the case, short-circuit the execution.
-  if (
-    !matchesMiddleware(localizedUrl.pathname, request, searchParamsToUrlQuery(url.searchParams))
-  ) {
-    reqLogger.debug('Aborting middleware due to runtime rules')
-
-    return
-  }
-
-  const nextRequest = buildNextRequest(request, context, nextConfig)
+  const nextRequest = buildNextRequest(request)
   try {
     const result = await nextHandler({ request: nextRequest })
-    const response = await buildResponse({
-      context,
-      logger: reqLogger,
-      request,
-      result,
-      nextConfig,
-    })
 
-    return response
+    return result.response
+    // const response = await buildResponse({
+    //   logger: reqLogger,
+    //   request,
+    //   result,
+    // })
+
+    // return response
   } catch (error) {
     console.error(error)
 
-    return new Response(error.message, { status: 500 })
+    return new Response(error instanceof Error ? error.message : String(error), { status: 500 })
   }
 }

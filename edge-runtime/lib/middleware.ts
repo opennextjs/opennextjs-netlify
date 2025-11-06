@@ -1,42 +1,4 @@
-import type { Context } from '@netlify/edge-functions'
-
-import type { ElementHandlers } from '../vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
 import { getCookies } from '../vendor/deno.land/std@0.175.0/http/cookie.ts'
-
-type NextDataTransform = <T>(data: T) => T
-
-interface ResponseCookies {
-  // This is non-standard that Next.js adds.
-  // https://github.com/vercel/next.js/blob/de08f8b3d31ef45131dad97a7d0e95fa01001167/packages/next/src/compiled/@edge-runtime/cookies/index.js#L158
-  readonly _headers: Headers
-}
-
-interface MiddlewareResponse extends Response {
-  originResponse: Response
-  dataTransforms: NextDataTransform[]
-  elementHandlers: Array<[selector: string, handlers: ElementHandlers]>
-  get cookies(): ResponseCookies
-}
-
-interface MiddlewareRequest {
-  request: Request
-  context: Context
-  originalRequest: Request
-  next(): Promise<MiddlewareResponse>
-  rewrite(destination: string | URL, init?: ResponseInit): Response
-}
-
-export function isMiddlewareRequest(
-  response: Response | MiddlewareRequest,
-): response is MiddlewareRequest {
-  return 'originalRequest' in response
-}
-
-export function isMiddlewareResponse(
-  response: Response | MiddlewareResponse,
-): response is MiddlewareResponse {
-  return 'dataTransforms' in response
-}
 
 export const addMiddlewareHeaders = async (
   originResponse: Promise<Response> | Response,

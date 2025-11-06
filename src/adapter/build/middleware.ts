@@ -15,10 +15,7 @@ import type { NetlifyAdapterContext, NextConfigComplete, OnBuildCompleteContext 
 
 const MIDDLEWARE_FUNCTION_INTERNAL_NAME = 'next_middleware'
 
-const MIDDLEWARE_FUNCTION_DIR = join(
-  NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS,
-  MIDDLEWARE_FUNCTION_INTERNAL_NAME,
-)
+const MIDDLEWARE_FUNCTION_DIR = join(NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS, 'next_routing')
 
 export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
@@ -149,7 +146,7 @@ const writeHandlerFile = async (
   middleware: Required<OnBuildCompleteContext['outputs']>['middleware'],
   nextConfig: NextConfigComplete,
 ) => {
-  const handlerRuntimeDirectory = join(MIDDLEWARE_FUNCTION_DIR, 'edge-runtime')
+  // const handlerRuntimeDirectory = join(MIDDLEWARE_FUNCTION_DIR, 'edge-runtime')
 
   // Copying the runtime files. These are the compatibility layer between
   // Netlify Edge Functions and the Next.js edge runtime.
@@ -157,56 +154,49 @@ const writeHandlerFile = async (
 
   // Writing a file with the matchers that should trigger this function. We'll
   // read this file from the function at runtime.
-  await writeFile(
-    join(handlerRuntimeDirectory, 'matchers.json'),
-    JSON.stringify(middleware.config.matchers ?? []),
-  )
+  // await writeFile(
+  //   join(handlerRuntimeDirectory, 'matchers.json'),
+  //   JSON.stringify(middleware.config.matchers ?? []),
+  // )
 
   // The config is needed by the edge function to match and normalize URLs. To
   // avoid shipping and parsing a large file at runtime, let's strip it down to
   // just the properties that the edge function actually needs.
-  const minimalNextConfig = {
-    basePath: nextConfig.basePath,
-    i18n: nextConfig.i18n,
-    trailingSlash: nextConfig.trailingSlash,
-    skipMiddlewareUrlNormalize: nextConfig.skipMiddlewareUrlNormalize,
-  }
+  // const minimalNextConfig = {
+  //   basePath: nextConfig.basePath,
+  //   i18n: nextConfig.i18n,
+  //   trailingSlash: nextConfig.trailingSlash,
+  //   skipMiddlewareUrlNormalize: nextConfig.skipMiddlewareUrlNormalize,
+  // }
 
-  await writeFile(
-    join(handlerRuntimeDirectory, 'next.config.json'),
-    JSON.stringify(minimalNextConfig),
-  )
+  // await writeFile(
+  //   join(handlerRuntimeDirectory, 'next.config.json'),
+  //   JSON.stringify(minimalNextConfig),
+  // )
 
-  const htmlRewriterWasm = await readFile(
-    join(
-      PLUGIN_DIR,
-      'edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm',
-    ),
-  )
+  // const htmlRewriterWasm = await readFile(
+  //   join(
+  //     PLUGIN_DIR,
+  //     'edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm',
+  //   ),
+  // )
 
-  const functionConfig = {
-    cache: undefined,
-    generator: GENERATOR,
-    name: DISPLAY_NAME_MIDDLEWARE,
-    pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.sourceRegex),
-  } satisfies IntegrationsConfig
+  // const functionConfig = {
+  //   cache: undefined,
+  //   generator: GENERATOR,
+  //   name: DISPLAY_NAME_MIDDLEWARE,
+  //   pattern: augmentMatchers(middleware, nextConfig).map((matcher) => matcher.sourceRegex),
+  // } satisfies IntegrationsConfig
 
   // Writing the function entry file. It wraps the middleware code with the
   // compatibility layer mentioned above.
   await writeFile(
     join(MIDDLEWARE_FUNCTION_DIR, `${MIDDLEWARE_FUNCTION_INTERNAL_NAME}.js`),
     /* javascript */ `
-    import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
     import { handleMiddleware } from './edge-runtime/middleware.ts';
     import handler from './concatenated-file.js';
 
-    await htmlRewriterInit({ module_or_path: Uint8Array.from(${JSON.stringify([
-      ...htmlRewriterWasm,
-    ])}) });
-
-    export default (req, context) => handleMiddleware(req, context, handler);
-
-    export const config = ${JSON.stringify(functionConfig, null, 2)}
+    export default (req) => handleMiddleware(req, handler);
     `,
   )
 }
@@ -230,33 +220,33 @@ const copyRuntime = async (handlerDirectory: string): Promise<void> => {
  * the locale to ensure that the edge function can handle it.
  * We don't need to do this for data routes because they always have the locale.
  */
-const augmentMatchers = (
-  middleware: Required<OnBuildCompleteContext['outputs']>['middleware'],
-  nextConfig: NextConfigComplete,
-) => {
-  const i18NConfig = nextConfig.i18n
-  if (!i18NConfig) {
-    return middleware.config.matchers ?? []
-  }
-  return (middleware.config.matchers ?? []).flatMap((matcher) => {
-    if (matcher.originalSource && matcher.locale !== false) {
-      return [
-        matcher.regexp
-          ? {
-              ...matcher,
-              // https://github.com/vercel/next.js/blob/5e236c9909a768dc93856fdfad53d4f4adc2db99/packages/next/src/build/analysis/get-page-static-info.ts#L332-L336
-              // Next is producing pretty broad matcher for i18n locale. Presumably rest of their infrastructure protects this broad matcher
-              // from matching on non-locale paths. For us this becomes request entry point, so we need to narrow it down to just defined locales
-              // otherwise users might get unexpected matches on paths like `/api*`
-              regexp: matcher.regexp.replace(/\[\^\/\.]+/g, `(${i18NConfig.locales.join('|')})`),
-            }
-          : matcher,
-        {
-          ...matcher,
-          regexp: pathToRegexp(matcher.originalSource).source,
-        },
-      ]
-    }
-    return matcher
-  })
-}
+// const augmentMatchers = (
+//   middleware: Required<OnBuildCompleteContext['outputs']>['middleware'],
+//   nextConfig: NextConfigComplete,
+// ) => {
+//   const i18NConfig = nextConfig.i18n
+//   if (!i18NConfig) {
+//     return middleware.config.matchers ?? []
+//   }
+//   return (middleware.config.matchers ?? []).flatMap((matcher) => {
+//     if (matcher.originalSource && matcher.locale !== false) {
+//       return [
+//         matcher.regexp
+//           ? {
+//               ...matcher,
+//               // https://github.com/vercel/next.js/blob/5e236c9909a768dc93856fdfad53d4f4adc2db99/packages/next/src/build/analysis/get-page-static-info.ts#L332-L336
+//               // Next is producing pretty broad matcher for i18n locale. Presumably rest of their infrastructure protects this broad matcher
+//               // from matching on non-locale paths. For us this becomes request entry point, so we need to narrow it down to just defined locales
+//               // otherwise users might get unexpected matches on paths like `/api*`
+//               regexp: matcher.regexp.replace(/\[\^\/\.]+/g, `(${i18NConfig.locales.join('|')})`),
+//             }
+//           : matcher,
+//         {
+//           ...matcher,
+//           regexp: pathToRegexp(matcher.originalSource).source,
+//         },
+//       ]
+//     }
+//     return matcher
+//   })
+// }

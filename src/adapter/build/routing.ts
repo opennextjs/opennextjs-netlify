@@ -3,12 +3,7 @@ import { join } from 'node:path/posix'
 
 import { glob } from 'fast-glob'
 
-import type {
-  RoutingRule,
-  RoutingRuleApply,
-  RoutingRuleRedirect,
-  RoutingRuleRewrite,
-} from '../run/routing.js'
+import type { RoutingRule, RoutingRuleApply } from '../run/routing.js'
 
 import {
   DISPLAY_NAME_ROUTING,
@@ -24,7 +19,7 @@ export function convertRedirectToRoutingRule(
     'sourceRegex' | 'destination' | 'priority'
   >,
   description: string,
-): RoutingRuleRedirect {
+): RoutingRuleApply {
   return {
     description,
     match: {
@@ -34,7 +29,7 @@ export function convertRedirectToRoutingRule(
       type: 'redirect',
       destination: redirect.destination,
     },
-  } satisfies RoutingRuleRedirect
+  } satisfies RoutingRuleApply
 }
 
 export function convertDynamicRouteToRoutingRule(
@@ -43,7 +38,7 @@ export function convertDynamicRouteToRoutingRule(
     'sourceRegex' | 'destination'
   >,
   description: string,
-): RoutingRuleRewrite {
+): RoutingRuleApply {
   return {
     description,
     match: {
@@ -54,7 +49,7 @@ export function convertDynamicRouteToRoutingRule(
       destination: dynamicRoute.destination,
       rerunRoutingPhases: ['filesystem', 'rewrite'], // this is attempt to mimic Vercel's check: true
     },
-  } satisfies RoutingRuleRewrite
+  } satisfies RoutingRuleApply
 }
 
 const matchOperatorsRegex = /[|\\{}()[\]^$+*?.-]/g
@@ -80,8 +75,8 @@ export async function generateRoutingRules(
     hasMiddleware && hasPages && nextAdapterContext.config.skipMiddlewareUrlNormalize
 
   // group redirects by priority, as it impact ordering of routing rules
-  const priorityRedirects: RoutingRuleRedirect[] = []
-  const redirects: RoutingRuleRedirect[] = []
+  const priorityRedirects: RoutingRuleApply[] = []
+  const redirects: RoutingRuleApply[] = []
   for (const redirect of nextAdapterContext.routes.redirects) {
     if (redirect.priority) {
       priorityRedirects.push(
@@ -100,7 +95,7 @@ export async function generateRoutingRules(
     }
   }
 
-  const dynamicRoutes: RoutingRuleRewrite[] = []
+  const dynamicRoutes: RoutingRuleApply[] = []
 
   for (const dynamicRoute of nextAdapterContext.routes.dynamicRoutes) {
     const isNextData = dynamicRoute.sourceRegex.includes('_next/data')
@@ -128,7 +123,7 @@ export async function generateRoutingRules(
     )
   }
 
-  const normalizeNextData: RoutingRuleRewrite[] = shouldDenormalizeJsonDataForMiddleware
+  const normalizeNextData: RoutingRuleApply[] = shouldDenormalizeJsonDataForMiddleware
     ? [
         {
           description: 'Normalize _next/data',
@@ -165,7 +160,7 @@ export async function generateRoutingRules(
       ]
     : []
 
-  const denormalizeNextData: RoutingRuleRewrite[] = shouldDenormalizeJsonDataForMiddleware
+  const denormalizeNextData: RoutingRuleApply[] = shouldDenormalizeJsonDataForMiddleware
     ? [
         {
           description: 'Fix _next/data index denormalization',
@@ -254,7 +249,7 @@ export async function generateRoutingRules(
           //         : ''
           //     }$wildcard${nextAdapterContext.config.trailingSlash ? '/' : ''}`,
           //   },
-          // } satisfies RoutingRuleRewrite,
+          // } satisfies RoutingRuleApply,
 
           // Handle redirecting to locale paths based on NEXT_LOCALE cookie or Accept-Language header
           // eslint-disable-next-line no-negated-condition
@@ -286,7 +281,7 @@ export async function generateRoutingRules(
                 nextAdapterContext.config.i18n.defaultLocale,
               ),
             },
-          } satisfies RoutingRuleRewrite,
+          } satisfies RoutingRuleApply,
           {
             description: 'Auto-prefix non-locale path with default locale',
             match: {
@@ -307,7 +302,7 @@ export async function generateRoutingRules(
                 '$1',
               ),
             },
-          } satisfies RoutingRuleRewrite,
+          } satisfies RoutingRuleApply,
         ]
       : []),
 
@@ -324,7 +319,10 @@ export async function generateRoutingRules(
           {
             // originally: middleware route
             description: 'Middleware',
-            match: { type: 'middleware' },
+            // match: {
+            //   path: 'wat',
+            // },
+            apply: { type: 'middleware' },
           } as const,
         ]
       : []),
@@ -365,7 +363,7 @@ export async function generateRoutingRules(
                 vary: 'RSC, Next-Router-State-Tree, Next-Router-Prefetch',
               },
             },
-          } satisfies RoutingRuleRewrite,
+          } satisfies RoutingRuleApply,
           {
             description: 'Normalize RSC requests',
             match: {
@@ -385,7 +383,7 @@ export async function generateRoutingRules(
                 vary: 'RSC, Next-Router-State-Tree, Next-Router-Prefetch',
               },
             },
-          } satisfies RoutingRuleRewrite,
+          } satisfies RoutingRuleApply,
         ]
       : []),
 
@@ -400,7 +398,7 @@ export async function generateRoutingRules(
       // originally: { handle: 'filesystem' },
       // this is to actual match on things 'filesystem' should match on
       description: 'Static assets or Functions (no dynamic paths for functions)',
-      match: { type: 'static-asset-or-function' },
+      type: 'static-asset-or-function',
     },
 
     // TODO(pieh): do we need this given our next/image url loader/generator?
@@ -430,7 +428,7 @@ export async function generateRoutingRules(
               type: 'rewrite',
               destination: join('/', nextAdapterContext.config.basePath),
             },
-          } satisfies RoutingRuleRewrite,
+          } satisfies RoutingRuleApply,
         ]
       : []),
 
@@ -448,7 +446,7 @@ export async function generateRoutingRules(
               type: 'rewrite',
               destination: join('/', nextAdapterContext.config.basePath, `/index.rsc`),
             },
-          } satisfies RoutingRuleRewrite,
+          } satisfies RoutingRuleApply,
           {
             description: 'Ensure index <anything>/.rsc is mapped to <anything>.rsc',
             match: {
@@ -458,14 +456,14 @@ export async function generateRoutingRules(
               type: 'rewrite',
               destination: join('/', nextAdapterContext.config.basePath, `$1.rsc`),
             },
-          } satisfies RoutingRuleRewrite,
+          } satisfies RoutingRuleApply,
         ]
       : []),
 
     {
       // originally: { handle: 'resource' },
       description: 'Image CDN',
-      match: { type: 'image-cdn' },
+      type: 'image-cdn',
     },
 
     // ...convertedRewrites.fallback,
@@ -640,8 +638,10 @@ export async function onBuildComplete(
     const routingRules = ${JSON.stringify(routing, null, 2)}
     const outputs = ${JSON.stringify(netlifyAdapterContext.preparedOutputs, null, 2)}
 
+    const asyncLoadMiddleware = outputs.middleware ? () => import('./next_middleware.js').then(mod => mod.default) : () => Promise.reject(new Error('No middleware output'));
+
     export default async function handler(request, context) {
-      return runNextRouting(request, context, routingRules, outputs)
+      return runNextRouting(request, context, routingRules, outputs, asyncLoadMiddleware)
     }
 
     export const config = ${JSON.stringify({

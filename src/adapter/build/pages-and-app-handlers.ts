@@ -71,19 +71,19 @@ export async function onBuildComplete(
     const normalizedParentOutputId = normalizeIndex(prerender.parentOutputId)
 
     if (normalizedPathname in pathnameToEntry) {
-      console.log('Skipping prerender, already have route:', normalizedPathname)
+      // console.log('Skipping prerender, already have route:', normalizedPathname)
     } else if (normalizedParentOutputId in pathnameToEntry) {
       // if we don't have routing for this route yet, add it
-      console.log('prerender mapping', {
-        from: normalizedPathname,
-        to: normalizedParentOutputId,
-      })
+      // console.log('prerender mapping', {
+      //   from: normalizedPathname,
+      //   to: normalizedParentOutputId,
+      // })
       pathnameToEntry[normalizedPathname] = pathnameToEntry[normalizedParentOutputId]
     } else {
-      console.warn('Could not find parent output for prerender:', {
-        pathname: normalizedPathname,
-        parentOutputId: normalizedParentOutputId,
-      })
+      // console.warn('Could not find parent output for prerender:', {
+      //   pathname: normalizedPathname,
+      //   parentOutputId: normalizedParentOutputId,
+      // })
     }
   }
 
