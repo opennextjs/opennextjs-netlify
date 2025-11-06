@@ -298,6 +298,7 @@ export async function generateRoutingRules(
                 nextAdapterContext.config.i18n.defaultLocale,
               ),
             },
+            continue: true,
           } satisfies RoutingRuleApply,
           {
             description: 'Auto-prefix non-locale path with default locale',
@@ -319,6 +320,7 @@ export async function generateRoutingRules(
                 '$1',
               ),
             },
+            continue: true,
           } satisfies RoutingRuleApply,
         ]
       : []),
