@@ -330,19 +330,16 @@ export async function generateRoutingRules(
     // server actions name meta routes
 
     ...(hasMiddleware
-      ? [
-          {
+      ? (nextAdapterContext.outputs.middleware!.config.matchers?.map((matcher, index) => {
+          return {
             // originally: middleware route
-            description: 'Middleware',
-            // match: {
-            //   path: 'test',
-            // },
-            // match: {
-            //   path: 'wat',
-            // },
+            description: `Middleware (matcher #${index})`,
+            match: {
+              path: matcher.sourceRegex,
+            },
             apply: { type: 'middleware' },
-          } as const,
-        ]
+          } as const
+        }) ?? [])
       : []),
 
     // ...convertedRewrites.beforeFiles,
