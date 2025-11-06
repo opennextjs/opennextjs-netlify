@@ -21,6 +21,8 @@ type RoutingRuleBase = {
   description: string
   /** if we should keep going even if we already have potential response */
   continue?: true
+  /** this will allow to evaluate route even if previous route was matched and didn't have continue: true */
+  override?: true
 }
 
 type Match = {
@@ -142,12 +144,20 @@ async function match(
   let currentRequest = request
   let maybeResponse: MaybeResponse = initialResponse
 
+  let onlyOverrides = false
+
   return tracer.withActiveSpan(spanName, async (span) => {
     for (const rule of routingRules) {
       const currentURL = new URL(currentRequest.url)
       const { pathname } = currentURL
 
       const desc = rule.description ?? JSON.stringify(rule)
+
+      if (onlyOverrides && !rule.override) {
+        log('Skipping rule because there is a match and this is not override:', desc, pathname)
+        continue
+      }
+
       // eslint-disable-next-line no-loop-func
       const result = await tracer.withActiveSpan(desc, async (span) => {
         log('Evaluating rule:', desc, pathname)
@@ -472,8 +482,9 @@ async function match(
         }
 
         if (matched && !shouldContinueOnMatch) {
+          onlyOverrides = true
           // once hit a match short circuit, unless we should continue
-          return { maybeResponse, currentRequest }
+          // return { maybeResponse, currentRequest }
         }
 
         if (!matched) {
@@ -481,9 +492,9 @@ async function match(
         }
       })
 
-      if (result) {
-        return result
-      }
+      // if (result) {
+      //   return result
+      // }
     }
     return { maybeResponse, currentRequest }
   })

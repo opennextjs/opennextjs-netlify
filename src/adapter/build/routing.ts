@@ -113,6 +113,19 @@ export async function generateRoutingRules(
       //   })
       // }
     }
+
+    // TODO: this seems wrong in Next.js (?)
+    if (
+      dynamicRoute.sourceRegex.includes('_next/data') &&
+      !dynamicRoute.destination.includes('/_next/data')
+    ) {
+      console.log(
+        'Skipping dynamic route because source care about next/data while destination does not',
+        dynamicRoute,
+      )
+      continue
+    }
+
     dynamicRoutes.push(
       convertDynamicRouteToRoutingRule(
         dynamicRoute,
@@ -523,6 +536,7 @@ export async function generateRoutingRules(
               },
             },
             continue: true,
+            override: true,
           } satisfies RoutingRuleApply,
           {
             // apply __next_data_catchall rewrite
