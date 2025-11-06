@@ -119,6 +119,20 @@ export async function onBuildComplete(
 
     globalThis.AsyncLocalStorage = AsyncLocalStorage
 
+    const RouterServerContextSymbol = Symbol.for(
+      '@next/router-server-methods'
+    );
+
+    if (!globalThis[RouterServerContextSymbol]) {
+      globalThis[RouterServerContextSymbol] = {};
+    }
+
+    globalThis[RouterServerContextSymbol]['.'] = {
+      revalidate: (...args) => {
+        console.log('revalidate called with args:', ...args); 
+      }
+    }
+    
     const require = createRequire(import.meta.url)
 
     const pathnameToEntry = ${JSON.stringify(pathnameToEntry, null, 2)}

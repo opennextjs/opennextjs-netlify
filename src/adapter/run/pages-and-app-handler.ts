@@ -72,6 +72,14 @@ type NextHandler = (
   },
 ) => Promise<void | null>
 
+function addRequestMeta(req: IncomingMessage, key: string, value: any) {
+  const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
+  const meta = (req as any)[NEXT_REQUEST_META] || {}
+  meta[key] = value
+  ;(req as any)[NEXT_REQUEST_META] = meta
+  return meta
+}
+
 export async function runNextHandler(
   request: Request,
   context: Context,
@@ -94,6 +102,8 @@ export async function runNextHandler(
       return {}
     },
   })
+
+  addRequestMeta(req, 'relativeProjectDir', '.')
 
   disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
 
