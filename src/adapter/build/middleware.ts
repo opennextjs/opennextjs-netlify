@@ -1,13 +1,17 @@
 import { cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, parse, relative } from 'node:path/posix'
 
-import type { IntegrationsConfig } from '@netlify/edge-functions'
 import { glob } from 'fast-glob'
-import { pathToRegexp } from 'path-to-regexp'
+
+import type { RequestData } from '../../../edge-runtime/lib/types.ts'
+
+// import type { IntegrationsConfig } from '@netlify/edge-functions'
+
+// import { pathToRegexp } from 'path-to-regexp'
 
 import {
-  DISPLAY_NAME_MIDDLEWARE,
-  GENERATOR,
+  // DISPLAY_NAME_MIDDLEWARE,
+  // GENERATOR,
   NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS,
   PLUGIN_DIR,
 } from './constants.js'
@@ -152,6 +156,18 @@ const writeHandlerFile = async (
   // Netlify Edge Functions and the Next.js edge runtime.
   await copyRuntime(MIDDLEWARE_FUNCTION_DIR)
 
+  const nextConfigForMiddleware: RequestData['nextConfig'] = {
+    basePath: nextConfig.basePath,
+    i18n: nextConfig.i18n,
+    trailingSlash: nextConfig.trailingSlash,
+    experimental: {
+      // Include any experimental config that might affect middleware behavior
+      cacheLife: nextConfig.experimental?.cacheLife,
+      authInterrupts: nextConfig.experimental?.authInterrupts,
+      clientParamParsingOrigins: nextConfig.experimental?.clientParamParsingOrigins,
+    },
+  }
+
   // Writing a file with the matchers that should trigger this function. We'll
   // read this file from the function at runtime.
   // await writeFile(
@@ -196,7 +212,9 @@ const writeHandlerFile = async (
     import { handleMiddleware } from './edge-runtime/middleware.ts';
     import handler from './concatenated-file.js';
 
-    export default (req) => handleMiddleware(req, handler);
+    const nextConfig = ${JSON.stringify(nextConfigForMiddleware)}
+
+    export default (req) => handleMiddleware(req, handler, nextConfig);
     `,
   )
 }

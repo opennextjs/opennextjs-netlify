@@ -33,7 +33,7 @@ const adapter: NextAdapter = {
     await writeFile('./onBuildComplete.json', JSON.stringify(nextAdapterContext, null, 2))
     // debugger
 
-    const netlifyAdapterContext = createNetlifyAdapterContext(nextAdapterContext)
+    const netlifyAdapterContext = createNetlifyAdapterContext()
 
     await onBuildCompleteForImageCDN(nextAdapterContext, netlifyAdapterContext)
     await onBuildCompleteForMiddleware(nextAdapterContext, netlifyAdapterContext)

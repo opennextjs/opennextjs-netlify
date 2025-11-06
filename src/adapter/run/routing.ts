@@ -142,17 +142,18 @@ async function match(
   let currentRequest = request
   let maybeResponse: MaybeResponse = initialResponse
 
-  const currentURL = new URL(currentRequest.url)
-  let { pathname } = currentURL
-
   return tracer.withActiveSpan(spanName, async (span) => {
     for (const rule of routingRules) {
+      const currentURL = new URL(currentRequest.url)
+      const { pathname } = currentURL
+
       const desc = rule.description ?? JSON.stringify(rule)
       // eslint-disable-next-line no-loop-func
       const result = await tracer.withActiveSpan(desc, async (span) => {
-        log('Evaluating rule:', desc)
+        log('Evaluating rule:', desc, pathname)
 
         let matched = false
+        let shouldContinueOnMatch = rule.continue ?? false
 
         if ('type' in rule) {
           if (rule.type === 'static-asset-or-function') {
@@ -172,7 +173,7 @@ async function match(
                   new URL(staticAlias, currentRequest.url),
                   currentRequest,
                 )
-                pathname = staticAlias
+                // pathname = staticAlias
               }
             }
 
@@ -213,6 +214,7 @@ async function match(
               }
             } else {
               span.setStatus({ code: SpanStatusCode.ERROR, message: 'Miss' })
+              // log('Path did not match regex', rule.match.path, pathname)
               return
             }
           }
@@ -224,10 +226,18 @@ async function match(
                 if (typeof condition.value === 'undefined') {
                   if (!currentRequest.headers.has(condition.key)) {
                     hasAllMatch = false
+                    // log('request header does not exist', {
+                    //   key: condition.key,
+                    // })
                     break
                   }
                 } else if (currentRequest.headers.get(condition.key) !== condition.value) {
                   hasAllMatch = false
+                  // log('request header not the same', {
+                  //   key: condition.key,
+                  //   match: condition.value,
+                  //   actual: currentRequest.headers.get(condition.key),
+                  // })
                   break
                 }
               }
@@ -381,12 +391,15 @@ async function match(
                   new URL(rewriteUrl, currentRequest.url),
                   currentRequest,
                 )
+                shouldContinueOnMatch = true
               } else if (nextRedirect) {
+                shouldContinueOnMatch = true
                 // just continue
                 // } else if (redirect) {
                 //   relativizeURL(redirect, currentRequest.url)
               } else if (isNext) {
                 // just continue
+                shouldContinueOnMatch = true
               } else {
                 // this includes redirect case
                 maybeResponse = {
@@ -458,7 +471,7 @@ async function match(
           }
         }
 
-        if (matched && !rule.continue) {
+        if (matched && !shouldContinueOnMatch) {
           // once hit a match short circuit, unless we should continue
           return { maybeResponse, currentRequest }
         }

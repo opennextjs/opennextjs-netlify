@@ -62,7 +62,7 @@ export async function generateRoutingRules(
   nextAdapterContext: OnBuildCompleteContext,
   netlifyAdapterContext: NetlifyAdapterContext,
 ) {
-  const escapedBuildId = escapeStringRegexp(nextAdapterContext.buildId)
+  // const escapedBuildId = escapeStringRegexp(nextAdapterContext.buildId)
 
   const hasMiddleware = Boolean(nextAdapterContext.outputs.middleware)
   const hasPages =
@@ -72,7 +72,7 @@ export async function generateRoutingRules(
     nextAdapterContext.outputs.appPages.length !== 0 ||
     nextAdapterContext.outputs.appRoutes.length !== 0
   const shouldDenormalizeJsonDataForMiddleware =
-    hasMiddleware && hasPages && nextAdapterContext.config.skipMiddlewareUrlNormalize
+    hasMiddleware && hasPages && !nextAdapterContext.config.skipMiddlewareUrlNormalize
 
   // group redirects by priority, as it impact ordering of routing rules
   const priorityRedirects: RoutingRuleApply[] = []
@@ -128,7 +128,7 @@ export async function generateRoutingRules(
         {
           description: 'Normalize _next/data',
           match: {
-            path: `^${nextAdapterContext.config.basePath}/_next/data/${escapedBuildId}/(.*)\\.json`,
+            path: `^${nextAdapterContext.config.basePath}/_next/data/${nextAdapterContext.buildId}/(.*)\\.json`,
             has: [
               {
                 type: 'header',
@@ -140,6 +140,7 @@ export async function generateRoutingRules(
             type: 'rewrite',
             destination: `${nextAdapterContext.config.basePath}/$1${nextAdapterContext.config.trailingSlash ? '/' : ''}`,
           },
+          continue: true,
         },
         {
           description: 'Fix _next/data index normalization',
@@ -156,6 +157,7 @@ export async function generateRoutingRules(
             type: 'rewrite',
             destination: `${nextAdapterContext.config.basePath}/`,
           },
+          continue: true,
         },
       ]
     : []
@@ -177,6 +179,7 @@ export async function generateRoutingRules(
             type: 'rewrite',
             destination: `${nextAdapterContext.config.basePath}/index`,
           },
+          continue: true,
         },
         {
           description: 'Denormalize _next/data',
@@ -193,6 +196,7 @@ export async function generateRoutingRules(
             type: 'rewrite',
             destination: `${nextAdapterContext.config.basePath}/_next/data/${nextAdapterContext.buildId}/$1.json`,
           },
+          continue: true,
         },
       ]
     : []
@@ -312,13 +316,14 @@ export async function generateRoutingRules(
 
     // server actions name meta routes
 
-    ...denormalizeNextData, // originally: // if skip middleware url normalize we denormalize _next/data if middleware + pages
-
     ...(hasMiddleware
       ? [
           {
             // originally: middleware route
             description: 'Middleware',
+            // match: {
+            //   path: 'test',
+            // },
             // match: {
             //   path: 'wat',
             // },
@@ -326,8 +331,6 @@ export async function generateRoutingRules(
           } as const,
         ]
       : []),
-
-    ...normalizeNextData, // originally: // if skip middleware url normalize we normalize _next/data if middleware + pages
 
     // ...convertedRewrites.beforeFiles,
 
@@ -487,6 +490,7 @@ export async function generateRoutingRules(
       routingPhase: 'rewrite',
     },
 
+    ...denormalizeNextData,
     // denormalize _next/data if middleware + pages
 
     // apply _next/data routes (including static ones if middleware + pages)
@@ -508,7 +512,7 @@ export async function generateRoutingRules(
                 '/',
                 nextAdapterContext.config.basePath,
                 '/_next/data/',
-                escapedBuildId,
+                nextAdapterContext.buildId,
                 '/(.*).json',
               )}`,
             },
@@ -529,7 +533,7 @@ export async function generateRoutingRules(
                 '/',
                 nextAdapterContext.config.basePath,
                 '/_next/data/',
-                escapedBuildId,
+                nextAdapterContext.buildId,
                 '/(.*).json',
               )}`,
             },

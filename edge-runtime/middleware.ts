@@ -3,7 +3,7 @@
 import { InternalHeaders } from './lib/headers.ts'
 import { logger, LogLevel } from './lib/logging.ts'
 import { buildNextRequest } from './lib/next-request.ts'
-import type { NextHandler } from './lib/types.ts'
+import type { NextHandler, RequestData } from './lib/types.ts'
 // import { buildResponse } from './lib/response.ts'
 
 /**
@@ -15,7 +15,11 @@ import type { NextHandler } from './lib/types.ts'
  * @param context Netlify-specific context object
  * @param nextHandler Next.js middleware handler
  */
-export async function handleMiddleware(request: Request, nextHandler: NextHandler) {
+export async function handleMiddleware(
+  request: Request,
+  nextHandler: NextHandler,
+  nextConfig: RequestData['nextConfig'],
+) {
   const url = new URL(request.url)
 
   const reqLogger = logger
@@ -25,7 +29,7 @@ export async function handleMiddleware(request: Request, nextHandler: NextHandle
     .withFields({ url_path: url.pathname })
     .withRequestID(request.headers.get(InternalHeaders.NFRequestID))
 
-  const nextRequest = buildNextRequest(request)
+  const nextRequest = buildNextRequest(request, nextConfig)
   try {
     const result = await nextHandler({ request: nextRequest })
 

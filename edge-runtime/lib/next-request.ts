@@ -2,7 +2,10 @@ import type { Context } from '@netlify/edge-functions'
 
 import type { RequestData } from './types'
 
-export const buildNextRequest = (request: Request): RequestData => {
+export const buildNextRequest = (
+  request: Request,
+  nextConfig: RequestData['nextConfig'],
+): RequestData => {
   const { url, method, body, headers } = request
 
   // we don't really use it but Next.js expects a signal
@@ -11,12 +14,7 @@ export const buildNextRequest = (request: Request): RequestData => {
   return {
     headers: Object.fromEntries(headers.entries()),
     method,
-    // nextConfig?: {
-    //     basePath?: string;
-    //     i18n?: I18NConfig | null;
-    //     trailingSlash?: boolean;
-    //     experimental?: Pick<ExperimentalConfig, 'cacheLife' | 'authInterrupts' | 'clientParamParsingOrigins'>;
-    // };
+    nextConfig,
     // page?: {
     //     name?: string;
     //     params?: {
