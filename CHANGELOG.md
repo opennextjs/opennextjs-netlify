@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.14.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.4...v5.14.5) (2025-11-03)
+
+
+### Bug Fixes
+
+* add Buffer shim if is not globally available, adjust process and AsyncLocalStorage shims to only be applied when not available ([#3222](https://github.com/opennextjs/opennextjs-netlify/issues/3222)) ([e536181](https://github.com/opennextjs/opennextjs-netlify/commit/e536181f1b8d5518216a33c1c9d5052efa537f0d))
+
+
+### Performance Improvements
+
+* use conditional blob gets if same blob was fetched before for previous requests ([#3218](https://github.com/opennextjs/opennextjs-netlify/issues/3218)) ([2c6b3f5](https://github.com/opennextjs/opennextjs-netlify/commit/2c6b3f547f2f465ad10e96082cf957e49457248f))
+
 ## [5.14.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.3...v5.14.4) (2025-10-27)
 
 

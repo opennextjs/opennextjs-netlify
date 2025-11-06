@@ -78,7 +78,7 @@ jobs:
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ steps.resolve-next-version.outputs.version }}' is '$NODE_VERSION'"
       - name: "Install Node"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
           cache: "npm"
@@ -124,7 +124,7 @@ jobs:
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           NODE_OPTIONS: --import ${{ github.workspace }}/tools/fetch-retry.mjs
       - name: Upload blob report to GitHub Actions Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: blob-report-${{matrix.version}}-${{ matrix.shard }}
@@ -168,7 +168,7 @@ jobs:
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ matrix.version }}' is '$NODE_VERSION'"
       - name: "Install Node"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
           cache: "npm"
@@ -258,7 +258,7 @@ jobs:
           echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
           echo "Node version for 'next@${{ matrix.version }}' is '$NODE_VERSION'"
       - name: "Install Node"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ steps.decide-node-version.outputs.version }}
           cache: "npm"
@@ -301,14 +301,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 18
       - name: Install dependencies
         run: npm ci
 
       - name: Download blob reports from GitHub Actions Artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: all-blob-reports
           pattern: blob-report-${{ matrix.version }}-*
@@ -320,7 +320,7 @@ jobs:
           npx playwright merge-reports --reporter json ./all-blob-reports > merged_reports.json
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
           path: playwright-report
