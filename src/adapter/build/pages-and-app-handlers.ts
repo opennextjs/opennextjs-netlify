@@ -1,4 +1,4 @@
-import { cp, mkdir, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path/posix'
 
 import type { InSourceConfig } from '@netlify/zip-it-and-ship-it/dist/runtimes/node/in_source_config/index.js'
@@ -41,7 +41,7 @@ export async function onBuildComplete(
   netlifyAdapterContext: NetlifyAdapterContext,
 ) {
   const requiredFiles = new Set<string>()
-  const pathnameToEntry: Record<string, string> = {}
+  const { isrGroups, endpoints } = netlifyAdapterContext.preparedOutputs
 
   for (const outputs of [
     nextAdapterContext.outputs.pages,
@@ -59,10 +59,11 @@ export async function onBuildComplete(
       }
 
       requiredFiles.add(output.filePath)
-      pathnameToEntry[normalizeIndex(output.pathname)] = relative(
-        nextAdapterContext.repoRoot,
-        output.filePath,
-      )
+      endpoints[normalizeIndex(output.pathname)] = {
+        entry: relative(nextAdapterContext.repoRoot, output.filePath),
+        id: normalizeIndex(output.pathname),
+        type: 'function',
+      }
     }
   }
 
@@ -70,20 +71,47 @@ export async function onBuildComplete(
     const normalizedPathname = normalizeIndex(prerender.pathname)
     const normalizedParentOutputId = normalizeIndex(prerender.parentOutputId)
 
-    if (normalizedPathname in pathnameToEntry) {
-      // console.log('Skipping prerender, already have route:', normalizedPathname)
-    } else if (normalizedParentOutputId in pathnameToEntry) {
-      // if we don't have routing for this route yet, add it
-      // console.log('prerender mapping', {
-      //   from: normalizedPathname,
-      //   to: normalizedParentOutputId,
-      // })
-      pathnameToEntry[normalizedPathname] = pathnameToEntry[normalizedParentOutputId]
+    const existingEntryForParent = endpoints[normalizedParentOutputId]
+
+    if (existingEntryForParent) {
+      endpoints[normalizedPathname] = {
+        ...existingEntryForParent,
+        id: normalizedPathname,
+        type: 'isr',
+        isrGroup: prerender.groupId,
+      }
+
+      if (!isrGroups[prerender.groupId]) {
+        isrGroups[prerender.groupId] = []
+      }
+      const isrGroup: (typeof isrGroups)[number][number] = {
+        pathname: normalizedPathname,
+        queryParams: prerender.config.allowQuery ?? [],
+      }
+
+      if (prerender.fallback) {
+        isrGroup.fallback = {
+          content: await readFile(prerender.fallback.filePath, 'utf-8'),
+          status: prerender.fallback.initialStatus,
+          headers: prerender.fallback.initialHeaders
+            ? Object.fromEntries(
+                Object.entries(prerender.fallback.initialHeaders).map(([key, value]) => [
+                  key,
+                  Array.isArray(value) ? value.join(',') : value,
+                ]),
+              )
+            : undefined,
+          expiration: prerender.fallback.initialExpiration,
+          revalidate: prerender.fallback.initialRevalidate,
+        }
+      }
+
+      isrGroups[prerender.groupId].push(isrGroup)
     } else {
-      // console.warn('Could not find parent output for prerender:', {
-      //   pathname: normalizedPathname,
-      //   parentOutputId: normalizedParentOutputId,
-      // })
+      console.warn('Could not find parent output for prerender:', {
+        pathname: normalizedPathname,
+        parentOutputId: normalizedParentOutputId,
+      })
     }
   }
 
@@ -99,12 +127,14 @@ export async function onBuildComplete(
     )
   }
 
-  // copy needed runtime files
-
   await copyRuntime(join(PAGES_AND_APP_FUNCTION_DIR, RUNTIME_DIR))
 
+  const normalizedPathsForFunctionConfig = Object.keys(endpoints).map((pathname) =>
+    pathname.toLowerCase(),
+  )
+
   const functionConfig = {
-    path: Object.keys(pathnameToEntry).map((pathname) => pathname.toLowerCase()),
+    path: normalizedPathsForFunctionConfig,
     nodeBundler: 'none',
     includedFiles: ['**'],
     generator: GENERATOR,
@@ -113,45 +143,18 @@ export async function onBuildComplete(
 
   // generate needed runtime files
   const entrypoint = /* javascript */ `
-    import { AsyncLocalStorage } from 'node:async_hooks'
     import { createRequire } from 'node:module'
-    import { runNextHandler } from './${RUNTIME_DIR}/dist/adapter/run/pages-and-app-handler.js'
 
-    globalThis.AsyncLocalStorage = AsyncLocalStorage
+    import { runHandler } from './${RUNTIME_DIR}/dist/adapter/run/pages-and-app-handler.js'
 
-    const RouterServerContextSymbol = Symbol.for(
-      '@next/router-server-methods'
-    );
+    const pickedOutputs = ${JSON.stringify({ isrGroups, endpoints }, null, 2)}
 
-    if (!globalThis[RouterServerContextSymbol]) {
-      globalThis[RouterServerContextSymbol] = {};
-    }
-
-    globalThis[RouterServerContextSymbol]['.'] = {
-      revalidate: (...args) => {
-        console.log('revalidate called with args:', ...args); 
-      }
-    }
-    
     const require = createRequire(import.meta.url)
 
-    const pathnameToEntry = ${JSON.stringify(pathnameToEntry, null, 2)}
-
     export default async function handler(request, context) {
-      const url = new URL(request.url)
-
-      const entry = pathnameToEntry[url.pathname]
-      if (!entry) {
-        return new Response('Not Found', { status: 404 })
-      }
-
-      const nextHandler = await require('./' + entry)
-
-      if (typeof nextHandler.handler !== 'function') {
-        console.log('.handler is not a function', { nextHandler })
-      }
-
-      return runNextHandler(request, context, nextHandler.handler)
+      const response = await runHandler(request, context, pickedOutputs, require)
+      console.log('Serving response with status:', response.status)
+      return response
     }
 
     export const config = ${JSON.stringify(functionConfig, null, 2)}
@@ -161,7 +164,7 @@ export async function onBuildComplete(
     entrypoint,
   )
 
-  netlifyAdapterContext.preparedOutputs.endpoints.push(...functionConfig.path)
+  // netlifyAdapterContext.preparedOutputs.endpoints.push(...functionConfig.path)
 }
 
 const copyRuntime = async (handlerDirectory: string): Promise<void> => {

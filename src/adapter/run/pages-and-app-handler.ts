@@ -1,9 +1,38 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http'
 import { join } from 'node:path/posix'
 import { fileURLToPath } from 'node:url'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
 import type { Context } from '@netlify/functions'
+
+import { getTracer, withActiveSpan } from '../../run/handlers/tracer.cjs'
+import type { NetlifyAdapterContext } from '../build/types.js'
+
+import {
+  generateIsrCacheKey,
+  matchIsrDefinitionFromIsrGroup,
+  matchIsrGroupFromOutputs,
+  requestToIsrRequest,
+  responseToCacheEntry,
+  storeIsrGroupUpdate,
+} from './isr.js'
+
+globalThis.AsyncLocalStorage = AsyncLocalStorage
+
+const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
+
+const anyGlobalThis = globalThis as any
+
+if (!anyGlobalThis[RouterServerContextSymbol]) {
+  anyGlobalThis[RouterServerContextSymbol] = {}
+}
+
+anyGlobalThis[RouterServerContextSymbol]['.'] = {
+  revalidate: (...args) => {
+    console.log('revalidate called with args:', ...args)
+  },
+}
 
 /**
  * When Next.js proxies requests externally, it writes the response back as-is.
@@ -80,15 +109,13 @@ function addRequestMeta(req: IncomingMessage, key: string, value: any) {
   return meta
 }
 
-export async function runNextHandler(
+async function runNextHandler(
   request: Request,
   context: Context,
   nextHandler: NextHandler,
-): Promise<Response> {
-  console.log('Handling request', {
-    url: request.url,
-    isDataRequest: request.headers.get('x-nextjs-data'),
-  })
+  onEnd?: () => Promise<void>,
+) {
+  console.log('Handling request', request.url)
 
   const { req, res } = toReqRes(request)
   // Work around a bug in http-proxy in next@<14.0.2
@@ -121,6 +148,11 @@ export async function runNextHandler(
       // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
       // otherwise Next would never run the callback variant of `next/after`
       res.emit('close')
+
+      // run any of our own post handling work
+      if (onEnd) {
+        context.waitUntil(onEnd())
+      }
     })
 
   const response = await toComputeResponse(res)
@@ -154,7 +186,7 @@ export async function runNextHandler(
         'cache-control',
         browserCacheControl || 'public, max-age=0, must-revalidate',
       )
-      // response.headers.set('netlify-cdn-cache-control', cdnCacheControl)
+      response.headers.set('should-be-netlify-cdn-cache-control', cdnCacheControl)
     }
   }
 
@@ -171,4 +203,124 @@ export async function runNextHandler(
   }
 
   return response
+}
+
+export async function runHandler(
+  request: Request,
+  context: Context,
+  outputs: Pick<NetlifyAdapterContext['preparedOutputs'], 'endpoints' | 'isrGroups'>,
+  require: NodeJS.Require,
+): Promise<Response> {
+  const tracer = getTracer()
+
+  return withActiveSpan(tracer, 'Adapter Handler', async (span) => {
+    const url = new URL(request.url)
+
+    console.log('Incoming request', request.url)
+    span?.setAttribute('next.match.pathname', url.pathname)
+
+    let matchType = 'miss'
+    let matchOutput: string | undefined
+
+    const endpoint = outputs.endpoints[url.pathname]
+
+    if (endpoint) {
+      matchType = endpoint.type
+      matchOutput = endpoint.id
+    }
+
+    span?.setAttributes({
+      'next.match.pathname': url.pathname,
+      'next.match.type': matchType,
+      'next.match.output': matchOutput,
+    })
+
+    if (!endpoint) {
+      span?.setAttribute(
+        'next.unexpected',
+        'We should not execute handler without matching endpoint',
+      )
+      return new Response('Not Found', { status: 404 })
+    }
+
+    // eslint-disable-next-line import/no-dynamic-require
+    const mod = await require(`./${endpoint.entry}`)
+    const nextHandler: NextHandler = mod.handler
+
+    if (typeof nextHandler !== 'function') {
+      span?.setAttribute('next.unexpected', 'nextHandler is not a function')
+    }
+
+    if (endpoint.type === 'isr') {
+      const isrDefs = matchIsrGroupFromOutputs(request, outputs)
+
+      if (!isrDefs) {
+        span?.setAttribute('next.unexpected', "can't find ISR group for pathname")
+        throw new Error("can't find ISR group for pathname")
+      }
+
+      const isrDef = matchIsrDefinitionFromIsrGroup(request, isrDefs)
+
+      if (!isrDef) {
+        span?.setAttribute('next.unexpected', "can't find ISR definition for pathname")
+        throw new Error("can't find ISR definition for pathname")
+      }
+
+      // const handlerRequest = new Request(isrUrl, request)
+      const isrRequest = requestToIsrRequest(request, isrDef)
+
+      let resolveInitialPromiseToStore: (response: Response) => void = () => {
+        // no-op
+      }
+      const promise = new Promise<Response>((resolve) => {
+        resolveInitialPromiseToStore = resolve
+      })
+
+      const response = await runNextHandler(isrRequest, context, nextHandler, async () => {
+        // first let's make sure we have current response ready
+        const isrResponseToStore = await promise
+
+        const groupUpdate = {
+          [generateIsrCacheKey(isrRequest, isrDef)]: await responseToCacheEntry(isrResponseToStore),
+        }
+
+        console.log('handle remaining ISR work in background')
+
+        await Promise.all(
+          isrDefs.map(async (def) => {
+            if (def === isrDef) {
+              // we already did the current on
+              return
+            }
+
+            const newUrl = new URL(isrRequest.url)
+            newUrl.pathname = def.pathname
+
+            const newRequest = new Request(newUrl, isrRequest)
+            const newResponse = await runNextHandler(newRequest, context, nextHandler)
+
+            const cacheKey = generateIsrCacheKey(newRequest, def)
+            groupUpdate[cacheKey] = await responseToCacheEntry(newResponse)
+          }),
+        )
+
+        console.log('we now should have all responses for the group', groupUpdate)
+        await storeIsrGroupUpdate(groupUpdate)
+      })
+
+      if (!response.body) {
+        throw new Error('ISR response has no body')
+      }
+
+      const [body1, body2] = response.body.tee()
+      const returnedResponse = new Response(body1, response)
+      const isrResponseToStore = new Response(body2, response)
+
+      resolveInitialPromiseToStore(isrResponseToStore)
+
+      return returnedResponse
+    }
+
+    return await runNextHandler(request, context, nextHandler)
+  })
 }

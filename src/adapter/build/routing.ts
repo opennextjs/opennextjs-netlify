@@ -647,8 +647,6 @@ export async function onBuildComplete(
 
   await copyRuntime(ROUTING_FUNCTION_DIR)
 
-  // TODO(pieh): middleware case would need to be split in 2 functions
-
   const entrypoint = /* javascript */ `
     import { runNextRouting } from "./dist/adapter/run/routing.js";
 

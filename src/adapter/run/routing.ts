@@ -7,6 +7,8 @@ import { SugaredTracer } from '@opentelemetry/api/experimental'
 
 import type { NetlifyAdapterContext } from '../build/types.js'
 
+import { getIsrResponse } from './isr.js'
+
 const routingPhases = ['entry', 'filesystem', 'rewrite', 'hit', 'error'] as const
 const routingPhasesWithoutHitOrError = routingPhases.filter(
   (phase) => phase !== 'hit' && phase !== 'error',
@@ -146,7 +148,7 @@ async function match(
 
   let onlyOverrides = false
 
-  return tracer.withActiveSpan(spanName, async (span) => {
+  return tracer.withActiveSpan(spanName, async () => {
     for (const rule of routingRules) {
       const currentURL = new URL(currentRequest.url)
       const { pathname } = currentURL
@@ -159,7 +161,7 @@ async function match(
       }
 
       // eslint-disable-next-line no-loop-func
-      const result = await tracer.withActiveSpan(desc, async (span) => {
+      await tracer.withActiveSpan(desc, async (span) => {
         log('Evaluating rule:', desc, pathname)
 
         let matched = false
@@ -167,15 +169,14 @@ async function match(
 
         if ('type' in rule) {
           if (rule.type === 'static-asset-or-function') {
-            let matchedType: 'static-asset' | 'function' | 'static-asset-alias' | null = null
+            let matchedType: 'static-asset' | 'static-asset-alias' | 'function' | 'isr' | null =
+              null
 
             // below assumes no overlap between static assets (files and aliases) and functions so order of checks "doesn't matter"
             // unclear what should be precedence if there would ever be overlap
             if (outputs.staticAssets.includes(pathname)) {
               matchedType = 'static-asset'
-            } else if (outputs.endpoints.includes(pathname.toLowerCase())) {
-              matchedType = 'function'
-            } else {
+            } else if (pathname in outputs.staticAssetsAliases) {
               const staticAlias = outputs.staticAssetsAliases[pathname]
               if (staticAlias) {
                 matchedType = 'static-asset-alias'
@@ -183,8 +184,11 @@ async function match(
                   new URL(staticAlias, currentRequest.url),
                   currentRequest,
                 )
-                // pathname = staticAlias
               }
+            } else if (pathname.toLowerCase() in outputs.endpoints) {
+              const endpoint = outputs.endpoints[pathname.toLowerCase()]
+
+              matchedType = endpoint.type
             }
 
             if (matchedType) {
@@ -192,9 +196,27 @@ async function match(
                 `Matched static asset or function (${matchedType}): ${pathname} -> ${currentRequest.url}`,
               )
 
-              maybeResponse = {
-                ...maybeResponse,
-                response: await context.next(currentRequest),
+              let handled = false
+              if (matchedType === 'isr') {
+                const isrResponse = await getIsrResponse(currentRequest, outputs)
+                if (isrResponse) {
+                  const isrSource = isrResponse.headers.get('x-isr-source')
+                  log(
+                    `Serving ISR response for: ${pathname} -> ${currentRequest.url} from ${isrSource}`,
+                  )
+                  maybeResponse = {
+                    ...maybeResponse,
+                    response: isrResponse,
+                  }
+                  handled = true
+                }
+              }
+
+              if (!handled) {
+                maybeResponse = {
+                  ...maybeResponse,
+                  response: await context.next(currentRequest),
+                }
               }
               matched = true
             }
@@ -447,10 +469,11 @@ async function match(
               }
 
               if (rule.apply.rerunRoutingPhases) {
+                log('Re-running routing phases:', rule.apply.rerunRoutingPhases.join(', '))
                 const { maybeResponse: updatedMaybeResponse } = await match(
                   currentRequest,
                   context,
-                  selectRoutingPhasesRules(routingRules, rule.apply.rerunRoutingPhases),
+                  selectRoutingPhasesRules(allRoutingRules, rule.apply.rerunRoutingPhases),
                   allRoutingRules,
                   outputs,
                   log,
@@ -491,10 +514,6 @@ async function match(
           span.setStatus({ code: SpanStatusCode.ERROR, message: 'Miss' })
         }
       })
-
-      // if (result) {
-      //   return result
-      // }
     }
     return { maybeResponse, currentRequest }
   })
