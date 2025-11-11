@@ -19,8 +19,7 @@ coverage
 # Turbo
 .turbo
 
-# Vercel
-.vercel
+
 
 # Build Outputs
 .next/

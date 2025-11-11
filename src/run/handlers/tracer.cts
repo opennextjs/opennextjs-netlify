@@ -43,7 +43,7 @@ let tracer: NetlifyOtelTracer | undefined
 export function getTracer(): NetlifyOtelTracer | undefined {
   if (tracer) return tracer
 
-  const baseTracer = otelGetTracer('Next.js Runtime')
+  const baseTracer = otelGetTracer('Next.js Adapter Runtime')
 
   if (!baseTracer) return undefined
 
