@@ -96,7 +96,7 @@
     "semver": "^7.6.0",
     "typescript": "^5.4.5",
     "unionfs": "^4.5.4",
-    "uuid": "^11.0.0",
+    "uuid": "^13.0.0",
     "vitest": "^3.0.0"
   },
   "overrides": {
