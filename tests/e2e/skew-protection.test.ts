@@ -72,29 +72,15 @@ const test = baseTest.extend<
         name: `next-skew-tests-${Date.now()}`,
       })
 
-      let onBuildStart: () => void = () => {}
-      const waitForBuildStart = new Promise<void>((resolve) => {
-        onBuildStart = () => {
-          resolve()
-        }
-      })
-
       const deployAPromise = createE2EFixture('skew-protection', {
         siteId,
-        useBuildbot: true,
-        onBuildStart,
         env: {
           NETLIFY_NEXT_SKEW_PROTECTION: 'true',
         },
       })
 
-      // we don't have to wait for deployA to finish completely before starting deployB, but we do have to wait a little bit
-      // to at least when build starts building, as otherwise whole deploy might be skipped and only second deploy happens
-      await waitForBuildStart
-
       const deployBPromise = createE2EFixture('skew-protection', {
         siteId,
-        useBuildbot: true,
         env: {
           NETLIFY_NEXT_SKEW_PROTECTION: 'true',
         },
