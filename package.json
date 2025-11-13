@@ -69,7 +69,6 @@
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^20.12.7",
     "@types/picomatch": "^3.0.0",
-    "@types/uuid": "^10.0.0",
     "@vercel/nft": "^0.30.0",
     "adm-zip": "^0.5.16",
     "cheerio": "^1.0.0-rc.12",
@@ -97,7 +96,7 @@
     "semver": "^7.6.0",
     "typescript": "^5.4.5",
     "unionfs": "^4.5.4",
-    "uuid": "^11.0.0",
+    "uuid": "^13.0.0",
     "vitest": "^3.0.0"
   },
   "overrides": {
