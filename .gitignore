@@ -22,3 +22,6 @@ tests/**/package-lock.json
 tests/**/pnpm-lock.yaml
 tests/**/yarn.lock
 tests/**/out/
+
+# Local Vercel folder
+.vercel

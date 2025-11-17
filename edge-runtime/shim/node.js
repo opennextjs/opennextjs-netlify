@@ -3,7 +3,7 @@
 // application.
 import { createRequire } from 'node:module' // used in dynamically generated part
 
-import { registerCJSModules } from '../edge-runtime/lib/cjs.ts' // used in dynamically generated part
+import { registerCJSModules } from './edge-runtime/lib/cjs.ts' // used in dynamically generated part
 
 if (typeof process === 'undefined') {
   globalThis.process = (await import('node:process')).default

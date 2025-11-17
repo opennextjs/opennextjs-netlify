@@ -108,3 +108,48 @@ export const test = base.extend<
     { auto: true },
   ],
 })
+
+/**
+ * Generate tags based on the provided options. This is useful to notice patterns when group of tests fail
+ * @param options The options to generate tags from.
+ * @returns An array of generated tags.
+ */
+export const generateTestTags = (options: {
+  pagesRouter?: boolean
+  appRouter?: boolean
+  i18n?: boolean
+  basePath?: boolean
+  middleware?: false | 'edge' | 'node'
+  customDistDir?: boolean
+  export?: boolean
+  monorepo?: boolean
+}) => {
+  const tags: string[] = []
+
+  if (options.pagesRouter) {
+    tags.push('@pages-router')
+  }
+  if (options.appRouter) {
+    tags.push('@app-router')
+  }
+  if (options.i18n) {
+    tags.push('@i18n')
+  }
+  if (options.basePath) {
+    tags.push('@base-path')
+  }
+  if (options.middleware) {
+    tags.push(`@middleware-${options.middleware}`)
+  }
+  if (options.customDistDir) {
+    tags.push('@custom-dist-dir')
+  }
+  if (options.export) {
+    tags.push('@export')
+  }
+  if (options.monorepo) {
+    tags.push('@monorepo')
+  }
+
+  return tags
+}

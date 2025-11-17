@@ -19,7 +19,6 @@ import {
   test,
   vi,
 } from 'vitest'
-import { getPatchesToApply } from '../../src/build/content/server.js'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import {
   createFixture,
