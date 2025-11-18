@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.14.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.5...v5.14.6) (2025-11-18)
+
+
+### Bug Fixes
+
+* api routes module parsing for recent Next.js releases ([#3257](https://github.com/opennextjs/opennextjs-netlify/issues/3257)) ([1d1288a](https://github.com/opennextjs/opennextjs-netlify/commit/1d1288aff7fe4513afa941b60a216037e8e406a0))
+
 ## [5.14.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.4...v5.14.5) (2025-11-03)
 
 
