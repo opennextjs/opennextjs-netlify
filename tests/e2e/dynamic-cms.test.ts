@@ -2,6 +2,8 @@ import { expect } from '@playwright/test'
 import { test } from '../utils/playwright-helpers.js'
 
 test.describe('Dynamic CMS', () => {
+  test.describe.configure({ mode: 'serial' })
+
   test.describe('Invalidates 404 pages from durable cache', () => {
     // using postFix allows to rerun tests without having to redeploy the app because paths/keys will be unique for each test run
     const postFix = Date.now()
