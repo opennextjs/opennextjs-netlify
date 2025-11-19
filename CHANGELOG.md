@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.14.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.6...v5.14.7) (2025-11-19)
+
+
+### Bug Fixes
+
+* incorrect path of middleware nft in setups using base directory ([#3262](https://github.com/opennextjs/opennextjs-netlify/issues/3262)) ([48753bc](https://github.com/opennextjs/opennextjs-netlify/commit/48753bcaaa4a98654de034b6e4e7ecf9daeded82))
+
 ## [5.14.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.5...v5.14.6) (2025-11-18)
 
 
