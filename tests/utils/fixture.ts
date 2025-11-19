@@ -199,6 +199,11 @@ export async function runPluginStep(
   step: 'onPreBuild' | 'onBuild' | 'onPostBuild' | 'onEnd',
   constants: Partial<NetlifyPluginConstants> = {},
 ) {
+  // `invokeFunction` also does cwd mocking (to function directory in that case),
+  // so in case `runPluginStep` is executed after `invokeFunction`,
+  // we ensure the cwd is set to fixture root again
+  vi.spyOn(process, 'cwd').mockReturnValue(ctx.cwd)
+
   const stepFunction = (await import('../../src/index.js'))[step]
 
   let netlifyConfig = {
