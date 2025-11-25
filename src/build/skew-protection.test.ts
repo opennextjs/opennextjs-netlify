@@ -33,6 +33,7 @@ describe('shouldEnableSkewProtection', () => {
 
     // Reset env vars
     delete process.env.NETLIFY_NEXT_SKEW_PROTECTION
+    delete process.env.NETLIFY_SKEW_PROTECTION_TOKEN
     // Set valid DEPLOY_ID by default
     process.env.DEPLOY_ID = 'test-deploy-id'
 
@@ -72,6 +73,7 @@ describe('shouldEnableSkewProtection', () => {
         expect(result).toEqual({
           enabled: true,
           enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+          token: 'test-deploy-id',
         })
       })
 
@@ -83,6 +85,7 @@ describe('shouldEnableSkewProtection', () => {
         expect(result).toEqual({
           enabled: true,
           enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+          token: 'test-deploy-id',
         })
       })
     })
@@ -121,6 +124,7 @@ describe('shouldEnableSkewProtection', () => {
       expect(result).toEqual({
         enabled: true,
         enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_FF,
+        token: 'test-deploy-id',
       })
     })
 
@@ -146,6 +150,7 @@ describe('shouldEnableSkewProtection', () => {
       expect(result).toEqual({
         enabled: false,
         enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID,
+        token: undefined,
       })
     })
 
@@ -158,6 +163,7 @@ describe('shouldEnableSkewProtection', () => {
       expect(result).toEqual({
         enabled: false,
         enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID,
+        token: '0',
       })
     })
 
@@ -171,6 +177,7 @@ describe('shouldEnableSkewProtection', () => {
       expect(result).toEqual({
         enabled: false,
         enabledOrDisabledReason: EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID_ENV_VAR,
+        token: '0',
       })
     })
   })
@@ -197,6 +204,50 @@ describe('shouldEnableSkewProtection', () => {
       expect(result).toEqual({
         enabled: true,
         enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+        token: 'test-deploy-id',
+      })
+    })
+  })
+
+  describe('NETLIFY_SKEW_PROTECTION_TOKEN handling', () => {
+    it('should prefer NETLIFY_SKEW_PROTECTION_TOKEN over DEPLOY_ID', () => {
+      process.env.NETLIFY_NEXT_SKEW_PROTECTION = 'true'
+      process.env.NETLIFY_SKEW_PROTECTION_TOKEN = 'custom-token'
+      process.env.DEPLOY_ID = 'deploy-id'
+
+      const result = shouldEnableSkewProtection(mockCtx)
+
+      expect(result).toEqual({
+        enabled: true,
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+        token: 'custom-token',
+      })
+    })
+
+    it('should fall back to DEPLOY_ID when NETLIFY_SKEW_PROTECTION_TOKEN is not set', () => {
+      process.env.NETLIFY_NEXT_SKEW_PROTECTION = 'true'
+      delete process.env.NETLIFY_SKEW_PROTECTION_TOKEN
+      process.env.DEPLOY_ID = 'deploy-id'
+
+      const result = shouldEnableSkewProtection(mockCtx)
+
+      expect(result).toEqual({
+        enabled: true,
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_ENV_VAR,
+        token: 'deploy-id',
+      })
+    })
+
+    it('should use NETLIFY_SKEW_PROTECTION_TOKEN with feature flag', () => {
+      mockCtx.featureFlags = { 'next-runtime-skew-protection': true }
+      process.env.NETLIFY_SKEW_PROTECTION_TOKEN = 'ff-custom-token'
+
+      const result = shouldEnableSkewProtection(mockCtx)
+
+      expect(result).toEqual({
+        enabled: true,
+        enabledOrDisabledReason: EnabledOrDisabledReason.OPT_IN_FF,
+        token: 'ff-custom-token',
       })
     })
   })
@@ -217,6 +268,7 @@ describe('setSkewProtection', () => {
 
     // Reset env vars
     delete process.env.NETLIFY_NEXT_SKEW_PROTECTION
+    delete process.env.NETLIFY_SKEW_PROTECTION_TOKEN
     delete process.env.NEXT_DEPLOYMENT_ID
     // Set valid DEPLOY_ID by default
     process.env.DEPLOY_ID = 'test-deploy-id'
@@ -329,6 +381,22 @@ describe('setSkewProtection', () => {
 
     expect(consoleSpy.log).toHaveBeenCalledWith(
       'Setting up Next.js Skew Protection due to NETLIFY_NEXT_SKEW_PROTECTION=1 environment variable.',
+    )
+  })
+
+  it('should use NETLIFY_SKEW_PROTECTION_TOKEN when available', async () => {
+    process.env.NETLIFY_NEXT_SKEW_PROTECTION = 'true'
+    process.env.NETLIFY_SKEW_PROTECTION_TOKEN = 'custom-skew-token'
+    process.env.DEPLOY_ID = 'deploy-id'
+
+    vi.mocked(dirname).mockReturnValue('/test/path')
+
+    await setSkewProtection(mockCtx, mockSpan)
+
+    expect(process.env.NEXT_DEPLOYMENT_ID).toBe('custom-skew-token')
+    expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+      'skewProtection',
+      EnabledOrDisabledReason.OPT_IN_ENV_VAR,
     )
   })
 })
