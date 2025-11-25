@@ -10,7 +10,6 @@
   "dependencies": {
     "@netlify/blobs": "^8.1.0",
     "@netlify/functions": "^2.7.0",
-    "netlify-cli": "^19.0.3",
     "next": "latest",
     "react": "18.2.0",
     "react-dom": "18.2.0"
