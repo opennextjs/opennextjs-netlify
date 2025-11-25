@@ -5,7 +5,7 @@ import { exec } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { cpus } from 'os'
@@ -228,6 +228,14 @@ async function installRuntime(
     await rm(join(isolatedFixtureRoot, 'package-lock.json'), { force: true })
   }
 
+  let relativePathToPackage = relative(
+    join(isolatedFixtureRoot, siteRelDir),
+    join(isolatedFixtureRoot, packageName),
+  )
+  if (!relativePathToPackage.startsWith('.')) {
+    relativePathToPackage = `./${relativePathToPackage}`
+  }
+
   switch (packageManger) {
     case 'npm':
       command = `npm install --ignore-scripts --no-audit --legacy-peer-deps ${packageName} ${
@@ -248,7 +256,7 @@ async function installRuntime(
       env['YARN_ENABLE_SCRIPTS'] = 'false'
       break
     case 'pnpm':
-      command = `pnpm add file:${join(isolatedFixtureRoot, packageName)} ${
+      command = `pnpm add file:${relativePathToPackage} ${
         workspaceRelPath ? `--filter ./${workspaceRelPath}` : ''
       } --ignore-scripts`
       break
@@ -349,8 +357,8 @@ export async function deploySiteWithBuildbot(
   newZip.addLocalFolder(isolatedFixtureRoot, '', (entry) => {
     if (
       // don't include node_modules / .git / publish dir in zip
-      entry.startsWith('node_modules') ||
-      entry.startsWith('.git') ||
+      entry.includes('node_modules') ||
+      entry.includes('.git') ||
       entry.startsWith(publishDirectory)
     ) {
       return false
@@ -358,15 +366,18 @@ export async function deploySiteWithBuildbot(
     return true
   })
 
-  const result = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}/builds`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/zip',
-      Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
+  const result = await fetch(
+    `https://api.netlify.com/api/v1/sites/${siteId}/builds?clear_cache=true`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/zip',
+        Authorization: `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
+      },
+      // @ts-expect-error sigh, it works
+      body: newZip.toBuffer(),
     },
-    // @ts-expect-error sigh, it works
-    body: newZip.toBuffer(),
-  })
+  )
   const { deploy_id } = await result.json()
 
   let didRunOnBuildStartCallback = false
@@ -635,6 +646,16 @@ export const fixtureFactories = {
       packagePath: 'apps/site',
       publishDirectory: 'apps/site/.next',
       smoke: true,
+    }),
+  pnpmMonorepoBaseProxy: () =>
+    createE2EFixture('pnpm-monorepo-base-proxy', {
+      buildCommand: 'pnpm run build',
+      generateNetlifyToml: false,
+      packageManger: 'pnpm',
+      publishDirectory: '.next',
+      runtimeInstallationPath: 'app',
+      smoke: true,
+      useBuildbot: true,
     }),
   dynamicCms: () => createE2EFixture('dynamic-cms'),
   after: () => createE2EFixture('after'),
