@@ -97,7 +97,7 @@
     "typescript": "^5.4.5",
     "unionfs": "^4.5.4",
     "uuid": "^13.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.0"
   },
   "overrides": {
     "react": "19.0.0-rc.0",
