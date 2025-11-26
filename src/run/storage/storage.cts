@@ -38,7 +38,7 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
           ? memoizedValue
           : {}
 
-        span?.setAttributes({ key, blobKey, previousEtag })
+        span?.setAttributes({ key })
 
         const result = await store.getWithMetadata(blobKey, {
           type: 'json',
@@ -61,12 +61,6 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
           // within the same request
           inMemoryCache.set(key, blob)
         }
-
-        span?.setAttributes({
-          etag: result?.etag,
-          reusingPreviouslyFetchedBlob: shouldReuseMemoizedBlob,
-          status: blob ? (shouldReuseMemoizedBlob ? 'Hit, no change' : 'Hit') : 'Miss',
-        })
 
         return blob
       })
