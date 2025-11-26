@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.7...v5.15.0) (2025-11-25)
+
+
+### Features
+
+* support skew protection token ([#3269](https://github.com/opennextjs/opennextjs-netlify/issues/3269)) ([90c8bd7](https://github.com/opennextjs/opennextjs-netlify/commit/90c8bd70f6e463c6d67fc83c30e6a28ee77c3db9))
+
 ## [5.14.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.6...v5.14.7) (2025-11-19)
 
 
