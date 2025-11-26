@@ -43,6 +43,7 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
         const result = await store.getWithMetadata(blobKey, {
           type: 'json',
           etag: previousEtag,
+          span,
         })
 
         const shouldReuseMemoizedBlob = result?.etag && previousEtag === result?.etag
@@ -80,7 +81,7 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
       const blobKey = await encodeBlobKey(key)
       return withActiveSpan(tracer, otelSpanTitle, async (span) => {
         span?.setAttributes({ key, blobKey })
-        const writeResult = await store.setJSON(blobKey, value)
+        const writeResult = await store.setJSON(blobKey, value, { span })
         if (writeResult?.etag) {
           inMemoryCache.set(key, {
             data: value,
