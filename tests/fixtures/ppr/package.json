@@ -15,7 +15,7 @@
   },
   "test": {
     "dependencies": {
-      "next": "canary"
+      "next": "canary || >=16.0.0"
     }
   }
 }

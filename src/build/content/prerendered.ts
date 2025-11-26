@@ -76,6 +76,7 @@ const RSC_SEGMENT_SUFFIX = '.segment.rsc'
 const buildAppCacheValue = async (
   path: string,
   shouldUseAppPageKind: boolean,
+  rscIsRequired = true,
 ): Promise<NetlifyCachedAppPageValue | NetlifyCachedPageValue> => {
   const meta = JSON.parse(await readFile(`${path}.meta`, 'utf-8')) as RouteMetadata
   const html = await readFile(`${path}.html`, 'utf-8')
@@ -104,9 +105,16 @@ const buildAppCacheValue = async (
     return {
       kind: 'APP_PAGE',
       html,
-      rscData: await readFile(`${path}.rsc`, 'base64').catch(() =>
-        readFile(`${path}.prefetch.rsc`, 'base64'),
-      ),
+      rscData: await readFile(`${path}.rsc`, 'base64')
+        .catch(() => readFile(`${path}.prefetch.rsc`, 'base64'))
+        .catch((error) => {
+          if (rscIsRequired) {
+            throw error
+          }
+          // disabling unicorn/no-useless-undefined because we need to return undefined explicitly to satisfy types
+          // eslint-disable-next-line unicorn/no-useless-undefined
+          return undefined
+        }),
       segmentData,
       ...meta,
     }
@@ -186,6 +194,8 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
           })
         : false
 
+      let appRouterNotFoundDefinedInPrerenderManifest = false
+
       await Promise.all([
         ...Object.entries(manifest.routes).map(
           ([route, meta]): Promise<void> =>
@@ -215,7 +225,11 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
                   value = await buildAppCacheValue(
                     join(ctx.publishDir, 'server/app', key),
                     shouldUseAppPageKind,
+                    meta.renderingMode !== 'PARTIALLY_STATIC',
                   )
+                  if (route === '/_not-found') {
+                    appRouterNotFoundDefinedInPrerenderManifest = true
+                  }
                   break
                 case meta.dataRoute === null:
                   value = await buildRouteCacheValue(
@@ -262,9 +276,12 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
         ),
       ])
 
-      // app router 404 pages are not in the prerender manifest
-      // so we need to check for them manually
-      if (existsSync(join(ctx.publishDir, `server/app/_not-found.html`))) {
+      // app router 404 pages are not in the prerender manifest for some next.js versions
+      // so we need to check for them manually if prerender manifest does not include it
+      if (
+        !appRouterNotFoundDefinedInPrerenderManifest &&
+        existsSync(join(ctx.publishDir, `server/app/_not-found.html`))
+      ) {
         const lastModified = Date.now()
         const key = '/404'
         const value = await buildAppCacheValue(

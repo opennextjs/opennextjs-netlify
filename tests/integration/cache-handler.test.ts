@@ -218,7 +218,7 @@ describe('app router', () => {
     const blobEntries = await getBlobEntries(ctx)
     expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
       [
-        '/404',
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/index',
@@ -372,7 +372,7 @@ describe('plugin', () => {
     const blobEntries = await getBlobEntries(ctx)
     expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
       [
-        '/404',
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
         '/api/revalidate-handler',
