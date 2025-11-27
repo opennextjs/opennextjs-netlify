@@ -6,7 +6,7 @@ import { type FixtureTestContext } from '../../tests/utils/contexts.js'
 import { generateRandomObjectID, startMockBlobStore } from '../../tests/utils/helpers.js'
 
 import { createRequestContext, type RequestContext } from './handlers/request-context.cjs'
-import { setCacheControlHeaders, setVaryHeaders } from './headers.js'
+import { setCacheControlHeaders, setCacheStatusHeader, setVaryHeaders } from './headers.js'
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
@@ -551,5 +551,31 @@ describe('headers', () => {
         's-maxage=604800, stale-while-revalidate=86400, durable',
       )
     })
+  })
+
+  describe("setCacheStatusHeader", () => {
+    test("should append the cache status if a cache status header already exists", () => {
+      const headers = new Headers({
+        "Cache-Status": `"Netlify Durable"; hit; ttl=31535509"`,
+        "x-nextjs-cache": "MISS"
+      })
+
+      setCacheStatusHeader(headers, "MISS")
+
+      expect(headers.get("Cache-Status")).toEqual(`"Netlify Durable"; hit; ttl=31535509", "Next.js"; fwd=miss`)
+      expect(headers.get("x-nextjs-cache")).toBeNull()
+    })
+
+    test("should add the cache status if a cache status header does not exist", () => {
+      const headers = new Headers({
+        "x-nextjs-cache": "MISS"
+      })
+
+      setCacheStatusHeader(headers, "MISS")
+
+      expect(headers.get("Cache-Status")).toEqual(`"Next.js"; fwd=miss`)
+      expect(headers.get("x-nextjs-cache")).toBeNull()
+    })
+
   })
 })
