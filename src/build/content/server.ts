@@ -116,36 +116,71 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
       },
     )
 
-    await Promise.all(
-      paths.map(async (path: string) => {
-        const srcPath = join(srcDir, path)
-        const destPath = join(destDir, path)
+    const promises = paths.map(async (path: string) => {
+      const srcPath = join(srcDir, path)
+      const destPath = join(destDir, path)
 
-        // If this is the middleware manifest file, replace it with an empty
-        // manifest to avoid running middleware again in the server handler.
-        if (path === 'server/middleware-manifest.json') {
-          try {
-            await replaceMiddlewareManifest(srcPath, destPath)
-          } catch (error) {
-            throw new Error('Could not patch middleware manifest file', { cause: error })
-          }
-
-          return
+      // If this is the middleware manifest file, replace it with an empty
+      // manifest to avoid running middleware again in the server handler.
+      if (path === 'server/middleware-manifest.json') {
+        try {
+          await replaceMiddlewareManifest(srcPath, destPath)
+        } catch (error) {
+          throw new Error('Could not patch middleware manifest file', { cause: error })
         }
 
-        if (path === 'server/functions-config-manifest.json') {
-          try {
-            await replaceFunctionsConfigManifest(srcPath, destPath)
-          } catch (error) {
-            throw new Error('Could not patch functions config manifest file', { cause: error })
-          }
+        return
+      }
 
-          return
+      if (path === 'server/functions-config-manifest.json') {
+        try {
+          await replaceFunctionsConfigManifest(srcPath, destPath)
+        } catch (error) {
+          throw new Error('Could not patch functions config manifest file', { cause: error })
         }
 
-        await cp(srcPath, destPath, { recursive: true, force: true })
-      }),
-    )
+        return
+      }
+
+      await cp(srcPath, destPath, { recursive: true, force: true })
+    })
+
+    // this is different node_modules than one handled `copyNextDependencies`
+    // this is under the standalone/.next folder (not standalone/node_modules)
+    // and started to be created by Next.js in some cases in next@16.1.0-canary.3
+    if (existsSync(join(srcDir, 'node_modules'))) {
+      const filter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
+      const src = join(srcDir, 'node_modules')
+      const dest = join(destDir, 'node_modules')
+      await cp(src, dest, {
+        recursive: true,
+        verbatimSymlinks: true,
+        force: true,
+        filter,
+      })
+
+      const workspaceNodeModulesDir = ctx.resolveFromSiteDir('node_modules')
+      const rootNodeModulesDir = resolve('node_modules')
+
+      // chain trying to fix potentially broken symlinks first using workspace node_modules if it exist
+      // and later root node_modules for monorepo cases
+      const workspacePromise = existsSync(workspaceNodeModulesDir)
+        ? recreateNodeModuleSymlinks(workspaceNodeModulesDir, dest)
+        : Promise.resolve()
+
+      promises.push(
+        workspacePromise.then(() => {
+          if (
+            rootNodeModulesDir !== workspaceNodeModulesDir &&
+            existsSync(resolve('node_modules'))
+          ) {
+            return recreateNodeModuleSymlinks(rootNodeModulesDir, dest)
+          }
+        }),
+      )
+    }
+
+    await Promise.all(promises)
   })
 }
 
