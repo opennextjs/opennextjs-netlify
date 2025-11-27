@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.0...v5.15.1) (2025-11-27)
+
+
+### Bug Fixes
+
+* handle cacheComponents case not producing prerendered .rsc files ([#3275](https://github.com/opennextjs/opennextjs-netlify/issues/3275)) ([80db8f4](https://github.com/opennextjs/opennextjs-netlify/commit/80db8f4025ce751bad1bc56ee10a70766497c207))
+
 ## [5.15.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.7...v5.15.0) (2025-11-25)
 
 
