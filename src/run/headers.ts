@@ -270,11 +270,11 @@ export const setCacheControlHeaders = (
       headers.get('x-nextjs-cache') === 'STALE'
         ? 'public, max-age=0, must-revalidate, durable'
         : [
-          ...getHeaderValueArray(cacheControl).map((value) =>
-            value === 'stale-while-revalidate' ? 'stale-while-revalidate=31536000' : value,
-          ),
-          'durable',
-        ].join(', ')
+            ...getHeaderValueArray(cacheControl).map((value) =>
+              value === 'stale-while-revalidate' ? 'stale-while-revalidate=31536000' : value,
+            ),
+            'durable',
+          ].join(', ')
 
     headers.set('cache-control', browserCacheControl || 'public, max-age=0, must-revalidate')
     headers.set('netlify-cdn-cache-control', cdnCacheControl)
@@ -331,10 +331,7 @@ export const setCacheStatusHeader = (headers: Headers, nextCache: string | null)
 
       const nextEntry = `"Next.js"; ${cacheStatus}`
 
-      headers.set(
-        'cache-status',
-        existing ? `${existing}, ${nextEntry}` : nextEntry
-      )
+      headers.set('cache-status', existing ? `${existing}, ${nextEntry}` : nextEntry)
     }
 
     headers.delete('x-nextjs-cache')

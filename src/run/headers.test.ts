@@ -553,29 +553,30 @@ describe('headers', () => {
     })
   })
 
-  describe("setCacheStatusHeader", () => {
-    test("should append the cache status if a cache status header already exists", () => {
+  describe('setCacheStatusHeader', () => {
+    test('should append the cache status if a cache status header already exists', () => {
       const headers = new Headers({
-        "Cache-Status": `"Netlify Durable"; hit; ttl=31535509"`,
-        "x-nextjs-cache": "MISS"
+        'Cache-Status': `"Netlify Durable"; hit; ttl=31535509"`,
+        'x-nextjs-cache': 'MISS',
       })
 
-      setCacheStatusHeader(headers, "MISS")
+      setCacheStatusHeader(headers, 'MISS')
 
-      expect(headers.get("Cache-Status")).toEqual(`"Netlify Durable"; hit; ttl=31535509", "Next.js"; fwd=miss`)
-      expect(headers.get("x-nextjs-cache")).toBeNull()
+      expect(headers.get('Cache-Status')).toEqual(
+        `"Netlify Durable"; hit; ttl=31535509", "Next.js"; fwd=miss`,
+      )
+      expect(headers.get('x-nextjs-cache')).toBeNull()
     })
 
-    test("should add the cache status if a cache status header does not exist", () => {
+    test('should add the cache status if a cache status header does not exist', () => {
       const headers = new Headers({
-        "x-nextjs-cache": "MISS"
+        'x-nextjs-cache': 'MISS',
       })
 
-      setCacheStatusHeader(headers, "MISS")
+      setCacheStatusHeader(headers, 'MISS')
 
-      expect(headers.get("Cache-Status")).toEqual(`"Next.js"; fwd=miss`)
-      expect(headers.get("x-nextjs-cache")).toBeNull()
+      expect(headers.get('Cache-Status')).toEqual(`"Next.js"; fwd=miss`)
+      expect(headers.get('x-nextjs-cache')).toBeNull()
     })
-
   })
 })
