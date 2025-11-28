@@ -8,6 +8,7 @@ const nextConfig = {
   },
   transpilePackages: ['@repo/ui'],
   outputFileTracingRoot: join(__dirname, '..', '..'),
+  serverExternalPackages: ['lodash'],
 }
 
 module.exports = nextConfig

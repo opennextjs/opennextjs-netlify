@@ -8,6 +8,8 @@
   },
   "dependencies": {
     "@netlify/functions": "^2.7.0",
+    "@repo/dep-a": "workspace:*",
+    "@repo/dep-b": "workspace:*",
     "@repo/ui": "workspace:*",
     "next": "latest",
     "react": "^18.2.0",

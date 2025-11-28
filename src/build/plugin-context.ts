@@ -85,6 +85,17 @@ export class PluginContext {
   }
 
   /**
+   * The root directory for output file tracing. Paths inside standalone directory preserve paths of project, relative to this directory.
+   */
+  get outputFileTracingRoot(): string {
+    return (
+      this.requiredServerFiles.config.outputFileTracingRoot ??
+      // fallback for older Next.js versions that don't have outputFileTracingRoot in the config, but had it in config.experimental
+      this.requiredServerFiles.config.experimental.outputFileTracingRoot
+    )
+  }
+
+  /**
    * The working directory inside the lambda that is used for monorepos to execute the serverless function
    */
   get lambdaWorkingDirectory(): string {
