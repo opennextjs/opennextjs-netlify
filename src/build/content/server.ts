@@ -10,7 +10,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { join as posixJoin, sep as posixSep } from 'node:path/posix'
 
 import { trace } from '@opentelemetry/api'
@@ -145,9 +145,11 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
       await cp(srcPath, destPath, { recursive: true, force: true })
     })
 
-    // this is different node_modules than one handled `copyNextDependencies`
-    // this is under the standalone/.next folder (not standalone/node_modules)
+    // this is different node_modules than ones handled by `copyNextDependencies`
+    // this is under the standalone/.next folder (not standalone/node_modules or standalone/<some-workspace/node_modules)
     // and started to be created by Next.js in some cases in next@16.1.0-canary.3
+    // this node_modules is artificially created and doesn't have equivalent in the repo
+    // so we only copy it, without additional symlinks handling
     if (existsSync(join(srcDir, 'node_modules'))) {
       const filter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
       const src = join(srcDir, 'node_modules')
@@ -158,26 +160,6 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         force: true,
         filter,
       })
-
-      // const workspaceNodeModulesDir = ctx.resolveFromSiteDir('node_modules')
-      // const rootNodeModulesDir = resolve('node_modules')
-
-      // // chain trying to fix potentially broken symlinks first using workspace node_modules if it exist
-      // // and later root node_modules for monorepo cases
-      // const workspacePromise = existsSync(workspaceNodeModulesDir)
-      //   ? recreateNodeModuleSymlinks(workspaceNodeModulesDir, dest)
-      //   : Promise.resolve()
-
-      // promises.push(
-      //   workspacePromise.then(() => {
-      //     if (
-      //       rootNodeModulesDir !== workspaceNodeModulesDir &&
-      //       existsSync(resolve('node_modules'))
-      //     ) {
-      //       return recreateNodeModuleSymlinks(rootNodeModulesDir, dest)
-      //     }
-      //   }),
-      // )
     }
 
     await Promise.all(promises)
@@ -325,42 +307,41 @@ async function patchNextModules(
 
 export const copyNextDependencies = async (ctx: PluginContext): Promise<void> => {
   await tracer.withActiveSpan('copyNextDependencies', async () => {
-    const entries = await readdir(ctx.standaloneDir)
-    const filter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
+    const promises: Promise<void>[] = []
 
-    const promises: Promise<void>[] = entries.map(async (entry) => {
-      // copy all except the distDir (.next) folder as this is handled in a separate function
-      // this will include the node_modules folder as well
-      if (entry === ctx.nextDistDir) {
-        return
-      }
-      const src = join(ctx.standaloneDir, entry)
-      const dest = join(ctx.serverHandlerDir, entry)
-      await cp(src, dest, {
-        recursive: true,
-        verbatimSymlinks: true,
-        force: true,
-        filter,
-      })
+    const nodeModulesLocationsInStandalone = new Set<string>()
+    const commonFilter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
 
-      if (entry === 'node_modules') {
-        await recreateNodeModuleSymlinks(ctx.resolveFromSiteDir('node_modules'), dest)
-      }
+    const dotNextDir = join(ctx.standaloneDir, ctx.nextDistDir)
+
+    await cp(ctx.standaloneRootDir, ctx.serverHandlerRootDir, {
+      recursive: true,
+      verbatimSymlinks: true,
+      force: true,
+      filter: async (sourcePath: string) => {
+        if (sourcePath === dotNextDir) {
+          // copy all except the distDir (.next) folder as this is handled in a separate function
+          // this will include the node_modules folder as well
+          return false
+        }
+
+        if (sourcePath.endsWith('node_modules')) {
+          // keep track of node_modules as we might need to recreate symlinks
+          // we are still copying them
+          nodeModulesLocationsInStandalone.add(sourcePath)
+        }
+
+        // finally apply common filter if defined
+        return commonFilter?.(sourcePath) ?? true
+      },
     })
 
-    // inside a monorepo there is a root `node_modules` folder that contains all the dependencies
-    const rootSrcDir = join(ctx.standaloneRootDir, 'node_modules')
-    const rootDestDir = join(ctx.serverHandlerRootDir, 'node_modules')
+    for (const nodeModulesLocationInStandalone of nodeModulesLocationsInStandalone) {
+      const relativeToRoot = relative(ctx.standaloneRootDir, nodeModulesLocationInStandalone)
+      const locationInProject = join(ctx.outputFileTracingRoot, relativeToRoot)
+      const locationInServerHandler = join(ctx.serverHandlerRootDir, relativeToRoot)
 
-    // use the node_modules tree from the process.cwd() and not the one from the standalone output
-    // as the standalone node_modules are already wrongly assembled by Next.js.
-    // see: https://github.com/vercel/next.js/issues/50072
-    if (existsSync(rootSrcDir) && ctx.standaloneRootDir !== ctx.standaloneDir) {
-      promises.push(
-        cp(rootSrcDir, rootDestDir, { recursive: true, verbatimSymlinks: true, filter }).then(() =>
-          recreateNodeModuleSymlinks(resolve('node_modules'), rootDestDir),
-        ),
-      )
+      promises.push(recreateNodeModuleSymlinks(locationInProject, locationInServerHandler))
     }
 
     await Promise.all(promises)
@@ -486,7 +467,7 @@ export const verifyHandlerDirStructure = async (ctx: PluginContext) => {
 // https://github.com/pnpm/pnpm/issues/9654
 // https://github.com/pnpm/pnpm/issues/5928
 // https://github.com/pnpm/pnpm/issues/7362 (persisting even though ticket is closed)
-const nodeModulesFilter = async (sourcePath: string) => {
+const nodeModulesFilter = (sourcePath: string) => {
   // Filtering rule for the following packages:
   // - @rspack+binding-linux-x64-musl
   // - @swc+core-linux-x64-musl
