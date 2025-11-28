@@ -191,10 +191,6 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
  * @returns
  */
 async function recreateNodeModuleSymlinks(src: string, dest: string, org?: string): Promise<void> {
-  if (!org) {
-    console.log('recreateNodeModuleSymlinks', { src, dest })
-  }
-
   const dirents = await readdir(join(src, org || ''), { withFileTypes: true })
 
   await Promise.all(
@@ -211,8 +207,6 @@ async function recreateNodeModuleSymlinks(src: string, dest: string, org?: strin
         // the location where the symlink points to
         const symlinkTarget = await readlink(join(src, org || '', dirent.name))
         const symlinkDest = join(dest, org || '', symlinkTarget)
-
-        console.log({ symlinkSrc, symlinkTarget, symlinkDest })
         // only copy over symlinks that are traced through the nft bundle
         // and don't exist in the destination node_modules
         if (existsSync(symlinkDest) && !existsSync(symlinkSrc)) {
@@ -220,9 +214,7 @@ async function recreateNodeModuleSymlinks(src: string, dest: string, org?: strin
             // if it is an organization folder let's create the folder first
             await mkdir(join(dest, org), { recursive: true })
           }
-
-          // await symlink(symlinkTarget, symlinkSrc)
-          throw new Error('(just for testing) hitting recreateNodeModuleSymlinks case')
+          await symlink(symlinkTarget, symlinkSrc)
         }
       }
     }),
