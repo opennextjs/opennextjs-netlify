@@ -159,25 +159,25 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         filter,
       })
 
-      const workspaceNodeModulesDir = ctx.resolveFromSiteDir('node_modules')
-      const rootNodeModulesDir = resolve('node_modules')
+      // const workspaceNodeModulesDir = ctx.resolveFromSiteDir('node_modules')
+      // const rootNodeModulesDir = resolve('node_modules')
 
-      // chain trying to fix potentially broken symlinks first using workspace node_modules if it exist
-      // and later root node_modules for monorepo cases
-      const workspacePromise = existsSync(workspaceNodeModulesDir)
-        ? recreateNodeModuleSymlinks(workspaceNodeModulesDir, dest)
-        : Promise.resolve()
+      // // chain trying to fix potentially broken symlinks first using workspace node_modules if it exist
+      // // and later root node_modules for monorepo cases
+      // const workspacePromise = existsSync(workspaceNodeModulesDir)
+      //   ? recreateNodeModuleSymlinks(workspaceNodeModulesDir, dest)
+      //   : Promise.resolve()
 
-      promises.push(
-        workspacePromise.then(() => {
-          if (
-            rootNodeModulesDir !== workspaceNodeModulesDir &&
-            existsSync(resolve('node_modules'))
-          ) {
-            return recreateNodeModuleSymlinks(rootNodeModulesDir, dest)
-          }
-        }),
-      )
+      // promises.push(
+      //   workspacePromise.then(() => {
+      //     if (
+      //       rootNodeModulesDir !== workspaceNodeModulesDir &&
+      //       existsSync(resolve('node_modules'))
+      //     ) {
+      //       return recreateNodeModuleSymlinks(rootNodeModulesDir, dest)
+      //     }
+      //   }),
+      // )
     }
 
     await Promise.all(promises)
