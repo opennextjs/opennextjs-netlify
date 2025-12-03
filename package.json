@@ -1,6 +1,6 @@
 {
   "name": "@netlify/plugin-nextjs",
-  "version": "5.15.0",
+  "version": "5.15.1",
   "description": "Run Next.js seamlessly on Netlify",
   "main": "./dist/index.js",
   "type": "module",
@@ -53,7 +53,7 @@
   "homepage": "https://opennext.js.org/netlify",
   "devDependencies": {
     "@fastly/http-compute-js": "1.1.5",
-    "@netlify/blobs": "^10.4.1",
+    "@netlify/blobs": "^10.4.2",
     "@netlify/build": "^35.5.2",
     "@netlify/config": "^24.1.1",
     "@netlify/edge-bundler": "^14.9.0",
@@ -83,7 +83,7 @@
     "memfs": "^4.9.2",
     "mock-require": "^3.0.3",
     "msw": "^2.0.7",
-    "netlify-cli": "23.11.1",
+    "netlify-cli": "23.12.2",
     "next": "^15.0.0-canary.28",
     "next-with-cache-handler-v2": "npm:next@15.3.0-canary.13",
     "next-with-cache-handler-v3": "npm:next@16.0.0-beta.0",

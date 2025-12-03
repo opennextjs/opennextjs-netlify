@@ -58,7 +58,7 @@ jobs:
         shard: [1, 2, 3, 4, 5]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Resolve Next.js version
         id: resolve-next-version
         shell: bash
@@ -93,7 +93,7 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
-          deno-version: v2.4.2
+          deno-version: 2.5.6
       - name: "Install dependencies"
         run: npm ci
       - name: "Prepare Netlify CLI"
@@ -146,7 +146,7 @@ jobs:
             version: "14.2.15"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Resolve Next.js version
         id: resolve-next-version
         shell: bash
@@ -188,7 +188,7 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/edge-bundler/blob/e55f825bd985d3c92e21d1b765d71e70d5628fba/node/bridge.ts#L17
-          deno-version: v2.4.2
+          deno-version: 2.5.6
       - name: "Install dependencies"
         run: npm ci
       - name: "Build"
@@ -236,7 +236,7 @@ jobs:
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Resolve Next.js version
         id: resolve-next-version
         shell: bash
@@ -268,7 +268,7 @@ jobs:
         uses: denoland/setup-deno@v1
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
-          deno-version: v2.4.2
+          deno-version: 2.5.6
       - name: "Install dependencies"
         run: npm ci
       - name: "Build"
@@ -298,7 +298,7 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 18

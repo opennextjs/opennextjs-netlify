@@ -104,7 +104,7 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
   const blobEntries = await getBlobEntries(ctx)
   expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
     [
-      '/404',
+      shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
       '/api/cached-permanent',
       '/api/cached-revalidate',
@@ -392,41 +392,40 @@ test<FixtureTestContext>('rewrites to external addresses dont use compression', 
   expect(gunzipSync(page.bodyBuffer).toString('utf-8')).toContain('<title>Example Domain</title>')
 })
 
-test.skipIf(process.env.NEXT_VERSION !== 'canary')<FixtureTestContext>(
-  'Test that a simple next app with PPR is working',
-  async (ctx) => {
-    await createFixture('ppr', ctx)
-    await runPlugin(ctx)
-    // check if the blob entries where successful set on the build plugin
-    const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
-      [
-        '/1',
-        '/2',
-        '/404',
-        isExperimentalPPRHardDeprecated() ? undefined : '/[dynamic]',
-        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-        '/index',
-        '404.html',
-        '500.html',
-      ].filter(Boolean),
-    )
+test.skipIf(
+  process.env.NEXT_VERSION !== 'canary' && nextVersionSatisfies('<16.0.0'),
+)<FixtureTestContext>('Test that a simple next app with PPR is working', async (ctx) => {
+  await createFixture('ppr', ctx)
+  await runPlugin(ctx)
+  // check if the blob entries where successful set on the build plugin
+  const blobEntries = await getBlobEntries(ctx)
+  expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
+    [
+      '/1',
+      '/2',
+      shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+      isExperimentalPPRHardDeprecated() ? undefined : '/[dynamic]',
+      shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
+      shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+      '/index',
+      '404.html',
+      '500.html',
+    ].filter(Boolean),
+  )
 
-    // test the function call
-    const home = await invokeFunction(ctx)
-    expect(home.statusCode).toBe(200)
-    expect(load(home.body)('h1').text()).toBe('Home')
+  // test the function call
+  const home = await invokeFunction(ctx)
+  expect(home.statusCode).toBe(200)
+  expect(load(home.body)('h1').text()).toBe('Home')
 
-    const dynamicPrerendered = await invokeFunction(ctx, { url: '/1' })
-    expect(dynamicPrerendered.statusCode).toBe(200)
-    expect(load(dynamicPrerendered.body)('h1').text()).toBe('Dynamic Page: 1')
+  const dynamicPrerendered = await invokeFunction(ctx, { url: '/1' })
+  expect(dynamicPrerendered.statusCode).toBe(200)
+  expect(load(dynamicPrerendered.body)('h1').text()).toBe('Dynamic Page: 1')
 
-    const dynamicNotPrerendered = await invokeFunction(ctx, { url: '/3' })
-    expect(dynamicNotPrerendered.statusCode).toBe(200)
-    expect(load(dynamicNotPrerendered.body)('h1').text()).toBe('Dynamic Page: 3')
-  },
-)
+  const dynamicNotPrerendered = await invokeFunction(ctx, { url: '/3' })
+  expect(dynamicNotPrerendered.statusCode).toBe(200)
+  expect(load(dynamicNotPrerendered.body)('h1').text()).toBe('Dynamic Page: 3')
+})
 
 // setup for this test only works with webpack builds due to usage of ` __non_webpack_require__` to avoid bundling a file
 test.skipIf(hasDefaultTurbopackBuilds())<FixtureTestContext>(

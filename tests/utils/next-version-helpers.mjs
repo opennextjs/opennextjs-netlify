@@ -6,7 +6,7 @@ import fg from 'fast-glob'
 import { coerce, gt, gte, satisfies, valid } from 'semver'
 import { execaCommand } from 'execa'
 
-const FUTURE_NEXT_PATCH_VERSION = '15.999.0'
+const FUTURE_NEXT_PATCH_VERSION = '16.999.0'
 
 const NEXT_VERSION_REQUIRES_REACT_19 = '14.3.0-canary.45'
 const REACT_18_VERSION = '18.2.0'
@@ -114,23 +114,44 @@ export async function setNextVersionInFixture(
     packageJsons.map(async (packageJsonPath) => {
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
       if (packageJson.dependencies?.next) {
-        const versionConstraint = packageJson.test?.dependencies?.next
-        // We can't use semver to check "canary" or "latest", so we use a fake future minor version
-        const checkVersion = isSemverVersion ? resolvedVersion : FUTURE_NEXT_PATCH_VERSION
-        if (
-          operation === 'update' &&
-          versionConstraint &&
-          !(versionConstraint === 'canary'
-            ? isNextCanary()
-            : satisfies(checkVersion, versionConstraint, { includePrerelease: true })) &&
-          version !== versionConstraint
-        ) {
-          if (!silent) {
-            console.log(
-              `${logPrefix}⏩ Skipping '${packageJson.name}' because it requires next@${versionConstraint}`,
+        /** @type {string | undefined} */
+        const versionConstraints = packageJson.test?.dependencies?.next
+
+        if (versionConstraints) {
+          // We need to be able to define constraint such as "canary or >=16.0.0" for testing features that might have
+          // canary-only support (you can only even try them on canary releases) that later on get promoted to be usable in stable
+          // releases.
+          // There is no proper semver range to express "canary" portion of it, so we have to implement custom logic here
+
+          if (versionConstraints.includes('(') || versionConstraints.includes(')')) {
+            // We currently don't have a use case for complex semver ranges, so to simplify the implementation we literally
+            // just split on '||' and check each part separately. This might not work work with '()' groups in semver ranges
+            // so we throw here for clarity that it's not supported
+            throw new Error(
+              `${logPrefix}Complex semver ranges with '()' groups are not supported in test.dependencies.next: ${versionConstraints}`,
             )
           }
-          return { packageJsonPath, needUpdate: false }
+
+          // We can't use semver to check "canary" or "latest", so we use a fake future minor version
+          const checkVersion = isSemverVersion ? resolvedVersion : FUTURE_NEXT_PATCH_VERSION
+
+          if (
+            operation === 'update' &&
+            version !== versionConstraints &&
+            !versionConstraints.split('||').some((versionConstraintUntrimmedPart) => {
+              const versionConstraintPart = versionConstraintUntrimmedPart.trim()
+              return versionConstraintPart === 'canary'
+                ? isNextCanary()
+                : satisfies(checkVersion, versionConstraintPart, { includePrerelease: true })
+            })
+          ) {
+            if (!silent) {
+              console.log(
+                `${logPrefix}⏩ Skipping '${packageJson.name}' because it requires next@${versionConstraints}`,
+              )
+            }
+            return { packageJsonPath, needUpdate: false }
+          }
         }
       }
       return { packageJsonPath, needUpdate: true }
