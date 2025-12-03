@@ -74,7 +74,7 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
 
       const blobKey = await encodeBlobKey(key)
       return withActiveSpan(tracer, otelSpanTitle, async (span) => {
-        span?.setAttributes({ key, blobKey })
+        span?.setAttributes({ key })
         const writeResult = await store.setJSON(blobKey, value, { span })
         if (writeResult?.etag) {
           inMemoryCache.set(key, {
