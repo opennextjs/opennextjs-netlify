@@ -100,8 +100,8 @@
     "vitest": "^3.0.0"
   },
   "overrides": {
-    "react": "19.0.0-rc.0",
-    "react-dom": "19.0.0-rc.0"
+    "react": "19.2.1",
+    "react-dom": "19.2.1"
   },
   "clean-package": {
     "indent": 2,
