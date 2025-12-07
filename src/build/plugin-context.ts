@@ -91,7 +91,8 @@ export class PluginContext {
     return (
       this.requiredServerFiles.config.outputFileTracingRoot ??
       // fallback for older Next.js versions that don't have outputFileTracingRoot in the config, but had it in config.experimental
-      this.requiredServerFiles.config.experimental.outputFileTracingRoot
+      this.requiredServerFiles.config.experimental.outputFileTracingRoot ??
+      process.cwd()
     )
   }
 
