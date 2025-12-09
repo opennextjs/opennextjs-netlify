@@ -17,7 +17,7 @@
   },
   "test": {
     "dependencies": {
-      "next": ">=15.3.0-canary.13"
+      "next": ">=15.3.6"
     }
   }
 }
