@@ -3,7 +3,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 
 import fg from 'fast-glob'
-import { coerce, gt, gte, satisfies, valid } from 'semver'
+import { coerce, gt, gte, parse as parseSemver, satisfies, valid } from 'semver'
 import { execaCommand } from 'execa'
 
 const FUTURE_NEXT_PATCH_VERSION = '16.999.0'
@@ -193,7 +193,7 @@ export async function setNextVersionInFixture(
         const nextPeerDependencies = JSON.parse(stdout)
 
         if (updateReact && nextVersionRequiresReact19(checkVersion)) {
-          // canaries started reporting peerDependencies as `^18.2.0 || 19.0.0-rc-<hash>-<date>`
+          // canaries started reporting peerDependencies as `^18.2.0 || 19.0.0-rc-<hash>-<date> || ^19.0.0`
           // with https://github.com/vercel/next.js/pull/70219 which is valid range for package managers
           // but not for @nx/next which checks dependencies and tries to assure that at least React 18 is used
           // but the check doesn't handle the alternative in version selector which thinks it's not valid:
@@ -205,14 +205,22 @@ export async function setNextVersionInFixture(
             .split('||')
             .map((alternative) => {
               const selector = alternative.trim()
-              const coerced = coerce(selector)?.format()
+              // we need to pick the highest version from alternatives and to handle
+              // comparison of both range selectors (^) and pinned prerelease version (-rc-<hash>-<date>)
+              // we need to use couple of tricks:
+              // 1. we do try to parse semver - this only works for pinned versions and will handle prereleases, it will return null for ranges
+              // 2. if parsing returns null, we coerce
+              // this will allow us to preserve prerelease identifiers for comparisons (as coercing prerelease version strip those)
+
+              const versionToCompare = (parseSemver(selector) ?? coerce(selector))?.format()
+
               return {
                 selector,
-                coerced,
+                versionToCompare,
               }
             })
             .sort((a, b) => {
-              return gt(a.coerced, b.coerced) ? -1 : 1
+              return gt(a.versionToCompare, b.versionToCompare) ? -1 : 1
             })[0].selector
 
           const reactVersion =

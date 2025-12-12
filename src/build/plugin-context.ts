@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { join, relative, resolve } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 import { join as posixJoin, relative as posixRelative } from 'node:path/posix'
 import { fileURLToPath } from 'node:url'
 
@@ -88,11 +88,39 @@ export class PluginContext {
    * The root directory for output file tracing. Paths inside standalone directory preserve paths of project, relative to this directory.
    */
   get outputFileTracingRoot(): string {
-    return (
+    // Up until https://github.com/vercel/next.js/pull/86812 we had direct access to computed value of it with following
+    const outputFileTracingRootFromRequiredServerFiles =
       this.requiredServerFiles.config.outputFileTracingRoot ??
       // fallback for older Next.js versions that don't have outputFileTracingRoot in the config, but had it in config.experimental
       this.requiredServerFiles.config.experimental.outputFileTracingRoot
-    )
+    if (outputFileTracingRootFromRequiredServerFiles) {
+      return outputFileTracingRootFromRequiredServerFiles
+    }
+
+    if (!this.relativeAppDir.includes('..')) {
+      // For newer Next.js versions outputFileTracingRoot is not written to the output directly anymore, but we can use appDir and relativeAppDir to compute it.
+      // This assumes that relative app dir will never contain '..' segments. Some monorepos support workspaces outside of the monorepo root (verified with pnpm)
+      // However Next.js itself have some limits on it:
+      //  - turbopack by default would throw "Module not found: Can't resolve '<name_of_package_outside_of_root>'"
+      //    forcing user to manually set `outputFileTracingRoot` in next.config which will impact `appDir` and `relativeAppDir` preserving the lack of '..' in `relativeAppDir`
+      //  - webpack case depends on wether dependency is marked as external or not:
+      //    - if it's marked as external then standalone while working locally, it would never work when someone tries to deploy it (and not just on Netlify, but also in fully self-hosted scenarios)
+      //      because parts of application would be outside of "standalone" directory
+      //    - if it's not marked as external it will be included in next.js produced chunks
+
+      const depth = this.relativeAppDir === '' ? 0 : this.relativeAppDir.split(sep).length
+
+      const computedOutputFileTracingRoot = resolve(
+        this.requiredServerFiles.appDir,
+        ...Array.from<string>({ length: depth }).fill('..'),
+      )
+      return computedOutputFileTracingRoot
+    }
+
+    // if relativeAppDir contains '..', we can't actually figure out the outputFileTracingRoot
+    // so best fallback is to just cwd() which won't work in wild edge cases, but there is no way of getting anything better
+    // if it's not correct it will cause build failures later when assembling a server handler function
+    return process.cwd()
   }
 
   /**

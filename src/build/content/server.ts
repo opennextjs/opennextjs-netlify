@@ -10,8 +10,8 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, join, relative, sep } from 'node:path'
-import { join as posixJoin, sep as posixSep } from 'node:path/posix'
+import { dirname, join, sep } from 'node:path'
+import { join as posixJoin, relative as posixRelative, sep as posixSep } from 'node:path/posix'
 
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
@@ -26,7 +26,11 @@ import type { PluginContext, RequiredServerFilesManifest } from '../plugin-conte
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
-const toPosixPath = (path: string) => path.split(sep).join(posixSep)
+const toPosixPath = (path: string) =>
+  path
+    .replace(/^\\+\?\\+/, '') // https://github.com/nodejs/node/blob/81e05e124f71b3050cd4e60c95017af975568413/lib/internal/fs/utils.js#L370-L372
+    .split(sep)
+    .join(posixSep)
 
 function isError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error
@@ -309,17 +313,21 @@ export const copyNextDependencies = async (ctx: PluginContext): Promise<void> =>
   await tracer.withActiveSpan('copyNextDependencies', async () => {
     const promises: Promise<void>[] = []
 
-    const nodeModulesLocationsInStandalone = new Set<string>()
+    const nodeModulesLocations = new Set<{ source: string; destination: string }>()
     const commonFilter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
 
-    const dotNextDir = join(ctx.standaloneDir, ctx.nextDistDir)
+    const dotNextDir = toPosixPath(join(ctx.standaloneDir, ctx.nextDistDir))
+
+    const standaloneRootDir = toPosixPath(ctx.standaloneRootDir)
+    const outputFileTracingRoot = toPosixPath(ctx.outputFileTracingRoot)
 
     await cp(ctx.standaloneRootDir, ctx.serverHandlerRootDir, {
       recursive: true,
       verbatimSymlinks: true,
       force: true,
-      filter: async (sourcePath: string) => {
-        if (sourcePath === dotNextDir) {
+      filter: async (sourcePath: string, destination: string) => {
+        const posixSourcePath = toPosixPath(sourcePath)
+        if (posixSourcePath === dotNextDir) {
           // copy all except the distDir (.next) folder as this is handled in a separate function
           // this will include the node_modules folder as well
           return false
@@ -328,7 +336,10 @@ export const copyNextDependencies = async (ctx: PluginContext): Promise<void> =>
         if (sourcePath.endsWith('node_modules')) {
           // keep track of node_modules as we might need to recreate symlinks
           // we are still copying them
-          nodeModulesLocationsInStandalone.add(sourcePath)
+          nodeModulesLocations.add({
+            source: posixSourcePath,
+            destination: toPosixPath(destination),
+          })
         }
 
         // finally apply common filter if defined
@@ -336,10 +347,12 @@ export const copyNextDependencies = async (ctx: PluginContext): Promise<void> =>
       },
     })
 
-    for (const nodeModulesLocationInStandalone of nodeModulesLocationsInStandalone) {
-      const relativeToRoot = relative(ctx.standaloneRootDir, nodeModulesLocationInStandalone)
-      const locationInProject = join(ctx.outputFileTracingRoot, relativeToRoot)
-      const locationInServerHandler = join(ctx.serverHandlerRootDir, relativeToRoot)
+    for (const {
+      source: nodeModulesLocationInStandalone,
+      destination: locationInServerHandler,
+    } of nodeModulesLocations) {
+      const relativeToRoot = posixRelative(standaloneRootDir, nodeModulesLocationInStandalone)
+      const locationInProject = posixJoin(outputFileTracingRoot, relativeToRoot)
 
       promises.push(recreateNodeModuleSymlinks(locationInProject, locationInServerHandler))
     }
