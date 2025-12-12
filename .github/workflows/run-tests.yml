@@ -28,25 +28,43 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
             });
-            const shouldTestAllVersions = labels.some(label => label.name === 'autorelease: pending' || label.name === 'test all versions');
-            if (shouldTestAllVersions) {
-              return 'all'
+
+            const runOnWindows = labels.some(label => label.name === 'test on windows');
+
+            let versionsToTest = 'latest';
+            if (labels.some(label => label.name === 'autorelease: pending' || label.name === 'test all versions')) {
+              versionsToTest = 'all';
+            } else if (labels.some(label => label.name === 'test latest and canary')) {
+              versionsToTest = 'latest-and-canary';
             }
 
-            return labels.some(label => label.name === 'test latest and canary') ? 'latest-and-canary' : 'latest'
+            return {
+              versionsToTest,
+              runOnWindows
+            }
+
       - name: Set Next.js versions to test
         id: set-matrix
-        # If this is the nightly build or a release PR then run the full matrix of versions
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "matrix=${{ github.event.inputs.versions }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" = "schedule" ] || [ "${{ steps.check-labels.outputs.result }}" = "all" ]; then
-            echo "matrix=[\"latest\", \"canary\", \"14.2.15\", \"13.5.1\"]" >> $GITHUB_OUTPUT
-          elif [ "${{ steps.check-labels.outputs.result }}" = "latest-and-canary" ]; then
-            echo "matrix=[\"latest\", \"canary\"]" >> $GITHUB_OUTPUT
-          else
-            echo "matrix=[\"latest\"]" >> $GITHUB_OUTPUT
-          fi
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { versionsToTest, runOnWindows} = ${{ steps.check-labels.outputs.result }} ?? {}
+
+            if ('${{ github.event_name }}' === 'workflow_dispatch') {
+              core.setOutput('matrix', '${{ github.event.inputs.versions }}');
+            } else if ('${{ github.event_name }}' === 'schedule' || versionsToTest === 'all') {
+              core.setOutput('matrix', '["latest", "canary", "14.2.15", "13.5.1"]');
+            } else if ()versionsToTest === 'latest-and-canary') {
+              core.setOutput('matrix', '["latest", "canary"]');
+            } else {
+              core.setOutput('matrix', '["latest"]');}
+            }
+
+            if (runOnWindows) {
+              core.setOutput('os', '[''ubuntu-latest', 'windows-2025']');
+            } else {
+              core.setOutput('os', '[''ubuntu-latest']');
+            }
 
   e2e:
     needs: setup
@@ -137,7 +155,7 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
-        os: [ubuntu-latest]
+        os: ${{ fromJson(needs.setup.outputs.os) }}
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         exclude:
           - os: windows-2025
