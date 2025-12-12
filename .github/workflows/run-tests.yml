@@ -53,7 +53,7 @@ jobs:
             if ('${{ github.event_name }}' === 'workflow_dispatch') {
               core.setOutput('matrix', '${{ github.event.inputs.versions }}');
             } else if ('${{ github.event_name }}' === 'schedule' || versionsToTest === 'all') {
-              core.setOutput('matrix', '["latest", "canary", "14.2.15", "13.5.1"]');
+              core.setOutput('matrix', '["latest", "canary", "15.5.9", "14.2.35", "13.5.1"]');
             } else if (versionsToTest === 'latest-and-canary') {
               core.setOutput('matrix', '["latest", "canary"]');
             } else {
@@ -68,13 +68,21 @@ jobs:
 
   e2e:
     needs: setup
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        os: ${{ fromJson(needs.setup.outputs.os) }}
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         shard: [1, 2, 3, 4, 5]
+        exclude:
+          - os: windows-2025
+            version: "13.5.1"
+          - os: windows-2025
+            version: "14.2.35"
+          - os: windows-2025
+            version: "15.5.9"
 
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - name: Resolve Next.js version
@@ -145,7 +153,7 @@ jobs:
         uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: blob-report-${{matrix.version}}-${{ matrix.shard }}
+          name: blob-report-${{matrix.version}}-${{ matrix.shard }}-${{ matrix.os }}
           path: blob-report
           retention-days: 1
 
@@ -161,7 +169,10 @@ jobs:
           - os: windows-2025
             version: "13.5.1"
           - os: windows-2025
-            version: "14.2.15"
+            version: "14.2.35"
+          - os: windows-2025
+            version: "15.5.9"
+
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -248,11 +259,14 @@ jobs:
   smoke:
     if: always()
     needs: setup
-    runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
+        os: ${{ fromJson(needs.setup.outputs.os) }}
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
+
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - name: Resolve Next.js version
@@ -312,6 +326,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # we do have per OS runs, but we don't need to run on windows to merge reports
+        os: ${{ fromJson(needs.setup.outputs.os) }}
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     runs-on: ubuntu-latest
@@ -338,6 +354,6 @@ jobs:
       - name: Upload HTML report
         uses: actions/upload-artifact@v5
         with:
-          name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
+          name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}-${{ matrix.os }}
           path: playwright-report
           retention-days: 14
