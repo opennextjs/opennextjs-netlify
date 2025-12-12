@@ -13,11 +13,11 @@
       "dependencies": {
         "next": [
           {
-            "versionConstraint": ">=15.2.0",
+            "versionConstraint": ">=15.2.6",
             "canaryOnly": true
           },
           {
-            "versionConstraint": ">=15.5.0"
+            "versionConstraint": ">=15.5.7"
           }
         ]
       }

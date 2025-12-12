@@ -54,16 +54,16 @@
   "devDependencies": {
     "@fastly/http-compute-js": "1.1.5",
     "@netlify/blobs": "^10.4.2",
-    "@netlify/build": "^35.5.2",
-    "@netlify/config": "^24.1.1",
-    "@netlify/edge-bundler": "^14.9.0",
+    "@netlify/build": "^35.5.4",
+    "@netlify/config": "^24.2.0",
+    "@netlify/edge-bundler": "^14.9.1",
     "@netlify/edge-functions": "^3.0.2",
-    "@netlify/edge-functions-bootstrap": "^2.17.1",
+    "@netlify/edge-functions-bootstrap": "^3.1.0",
     "@netlify/eslint-config-node": "^7.0.1",
     "@netlify/functions": "^5.1.0",
     "@netlify/otel": "^5.0.1",
-    "@netlify/serverless-functions-api": "^2.7.2",
-    "@netlify/zip-it-and-ship-it": "^14.1.14",
+    "@netlify/serverless-functions-api": "^2.8.0",
+    "@netlify/zip-it-and-ship-it": "^14.1.15",
     "@opentelemetry/api": "^1.8.0",
     "@playwright/test": "^1.43.1",
     "@types/adm-zip": "^0.5.7",
@@ -83,7 +83,7 @@
     "memfs": "^4.9.2",
     "mock-require": "^3.0.3",
     "msw": "^2.0.7",
-    "netlify-cli": "23.12.2",
+    "netlify-cli": "23.12.3",
     "next": "^15.0.0-canary.28",
     "next-with-cache-handler-v2": "npm:next@15.3.0-canary.13",
     "next-with-cache-handler-v3": "npm:next@16.0.0-beta.0",
@@ -100,8 +100,8 @@
     "vitest": "^3.0.0"
   },
   "overrides": {
-    "react": "19.0.0-rc.0",
-    "react-dom": "19.0.0-rc.0"
+    "react": "19.2.1",
+    "react-dom": "19.2.1"
   },
   "clean-package": {
     "indent": 2,
