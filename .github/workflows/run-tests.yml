@@ -126,7 +126,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
-          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
+          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r '.dependencies["netlify-cli"].version')"
           npx netlify login
       - name: Get installed Playwright version
         id: playwright-version
@@ -300,7 +300,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
-          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
+          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r '.dependencies["netlify-cli"].version')"
           npx netlify login
       - name: "Smoke tests"
         run: npm run test:ci:smoke
