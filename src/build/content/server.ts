@@ -177,7 +177,6 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
  * @returns
  */
 async function recreateNodeModuleSymlinks(src: string, dest: string, org?: string): Promise<void> {
-  console.log('recreateNodeModuleSymlinks', { src, dest, org })
   const dirents = await readdir(join(src, org || ''), { withFileTypes: true })
 
   await Promise.all(
