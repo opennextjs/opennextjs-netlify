@@ -106,6 +106,10 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
     delete globalThis[Symbol.for('next-patch')]
   }
 
+  // due to changes in https://github.com/vercel/next.js/pull/86591 , this global is specific to instance of application and we to clean it up
+  // from any previous function invocations that might have run in the same process
+  delete globalThis[Symbol.for('next.server.manifests')]
+
   ctx.cwd = await mkdtemp(join(tmpdir(), 'opennextjs-netlify-'))
   vi.spyOn(process, 'cwd').mockReturnValue(ctx.cwd)
 
