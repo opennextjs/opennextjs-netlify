@@ -110,7 +110,9 @@ export class PluginContext {
       //      because parts of application would be outside of "standalone" directory
       //    - if it's not marked as external it will be included in next.js produced chunks
 
-      const depth = toPosixPath(this.relativeAppDir).split(posixSep).length
+      const depth =
+        this.relativeAppDir === '' ? 0 : toPosixPath(this.relativeAppDir).split(posixSep).length
+
       const computedOutputFileTracingRoot = resolve(
         this.requiredServerFiles.appDir,
         ...Array.from<string>({ length: depth }).fill('..'),
