@@ -42,28 +42,27 @@ jobs:
               versionsToTest,
               runOnWindows
             }
-
       - name: Set Next.js versions to test
         id: set-matrix
         uses: actions/github-script@v8
         with:
           script: |
-            const { versionsToTest, runOnWindows} = ${{ steps.check-labels.outputs.result }} ?? {}
+            const { versionsToTest, runOnWindows } = ${{ steps.check-labels.outputs.result }} ?? {}
 
             if ('${{ github.event_name }}' === 'workflow_dispatch') {
               core.setOutput('matrix', '${{ github.event.inputs.versions }}');
             } else if ('${{ github.event_name }}' === 'schedule' || versionsToTest === 'all') {
               core.setOutput('matrix', '["latest", "canary", "14.2.15", "13.5.1"]');
-            } else if ()versionsToTest === 'latest-and-canary') {
+            } else if (versionsToTest === 'latest-and-canary') {
               core.setOutput('matrix', '["latest", "canary"]');
             } else {
-              core.setOutput('matrix', '["latest"]');}
+              core.setOutput('matrix', '["latest"]');
             }
 
             if (runOnWindows) {
-              core.setOutput('os', '[''ubuntu-latest', 'windows-2025']');
+              core.setOutput('os', '["ubuntu-latest", "windows-2025"]');
             } else {
-              core.setOutput('os', '[''ubuntu-latest']');
+              core.setOutput('os', '["ubuntu-latest"]');
             }
 
   e2e:
