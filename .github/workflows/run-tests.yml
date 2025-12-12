@@ -110,6 +110,13 @@ jobs:
           cache: "npm"
           cache-dependency-path: "**/package-lock.json"
       - uses: oven-sh/setup-bun@v2
+      - name: Prefer npm global on windows
+        if: runner.os == 'Windows'
+        # On Windows by default PATH prefers corepack bundled with Node.js
+        # This prepends npm global to PATH to ensure that npm installed global corepack is used instead
+        run: |
+          echo "$(npm config get prefix)" >> "$GITHUB_PATH"
+        shell: bash
       - name: setup pnpm/yarn
         run: |
           npm install -g corepack
@@ -293,6 +300,13 @@ jobs:
           node-version: ${{ steps.decide-node-version.outputs.version }}
           cache: "npm"
           cache-dependency-path: "**/package-lock.json"
+      - name: Prefer npm global on windows
+        if: runner.os == 'Windows'
+        # On Windows by default PATH prefers corepack bundled with Node.js
+        # This prepends npm global to PATH to ensure that npm installed global corepack is used instead
+        run: |
+          echo "$(npm config get prefix)" >> "$GITHUB_PATH"
+        shell: bash
       - name: setup pnpm/yarn
         run: corepack enable
         shell: bash
