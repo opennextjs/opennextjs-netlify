@@ -68,21 +68,13 @@ jobs:
 
   e2e:
     needs: setup
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJson(needs.setup.outputs.os) }}
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         shard: [1, 2, 3, 4, 5]
-        exclude:
-          - os: windows-2025
-            version: "13.5.1"
-          - os: windows-2025
-            version: "14.2.35"
-          - os: windows-2025
-            version: "15.5.9"
 
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - name: Resolve Next.js version
@@ -112,6 +104,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: setup pnpm/yarn
         run: |
+          npm install -g corepack
           corepack enable
         shell: bash
       - name: Install Deno
@@ -126,7 +119,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
-          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r '.dependencies["netlify-cli"].version')"
+          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
           npx netlify login
       - name: Get installed Playwright version
         id: playwright-version
@@ -152,7 +145,7 @@ jobs:
         uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: blob-report-${{matrix.version}}-${{ matrix.shard }}-${{ matrix.os }}
+          name: blob-report-${{matrix.version}}-${{ matrix.shard }}
           path: blob-report
           retention-days: 1
 
@@ -249,14 +242,11 @@ jobs:
   smoke:
     if: always()
     needs: setup
-
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJson(needs.setup.outputs.os) }}
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
-
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - name: Resolve Next.js version
@@ -300,7 +290,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           # Control netlify-cli as a regular dev dep but expose it globally for test fixtures to use
-          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r '.dependencies["netlify-cli"].version')"
+          npm install -g "netlify-cli@$(npm list --json --depth=0 netlify-cli | jq -r ".dependencies[\"netlify-cli\"].version")"
           npx netlify login
       - name: "Smoke tests"
         run: npm run test:ci:smoke
@@ -316,8 +306,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # we do have per OS runs, but we don't need to run on windows to merge reports
-        os: ${{ fromJson(needs.setup.outputs.os) }}
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
 
     runs-on: ubuntu-latest
@@ -344,6 +332,6 @@ jobs:
       - name: Upload HTML report
         uses: actions/upload-artifact@v5
         with:
-          name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}-${{ matrix.os }}
+          name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
           path: playwright-report
           retention-days: 14
