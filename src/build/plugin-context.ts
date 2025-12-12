@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join, relative, resolve, sep } from 'node:path'
-import { join as posixJoin, relative as posixRelative, sep as posixSep } from 'node:path/posix'
+import { join as posixJoin, relative as posixRelative } from 'node:path/posix'
 import { fileURLToPath } from 'node:url'
 
 import type {
@@ -19,8 +19,6 @@ import type {
   RoutesManifest,
 } from 'next-with-cache-handler-v2/dist/build/index.js'
 import { satisfies } from 'semver'
-
-const toPosixPath = (path: string) => path.split(sep).join(posixSep)
 
 const MODULE_DIR = fileURLToPath(new URL('.', import.meta.url))
 const PLUGIN_DIR = join(MODULE_DIR, '../..')
@@ -100,7 +98,7 @@ export class PluginContext {
     }
 
     if (!this.relativeAppDir.includes('..')) {
-      // For newer Next.js versions this is not written to the output directly anymore, but we can use appDir and relativeAppDir to compute it.
+      // For newer Next.js versions outputFileTracingRoot is not written to the output directly anymore, but we can use appDir and relativeAppDir to compute it.
       // This assumes that relative app dir will never contain '..' segments. Some monorepos support workspaces outside of the monorepo root (verified with pnpm)
       // However Next.js itself have some limits on it:
       //  - turbopack by default would throw "Module not found: Can't resolve '<name_of_package_outside_of_root>'"
@@ -110,8 +108,7 @@ export class PluginContext {
       //      because parts of application would be outside of "standalone" directory
       //    - if it's not marked as external it will be included in next.js produced chunks
 
-      const depth =
-        this.relativeAppDir === '' ? 0 : toPosixPath(this.relativeAppDir).split(posixSep).length
+      const depth = this.relativeAppDir === '' ? 0 : this.relativeAppDir.split(sep).length
 
       const computedOutputFileTracingRoot = resolve(
         this.requiredServerFiles.appDir,
