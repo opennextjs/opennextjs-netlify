@@ -150,7 +150,7 @@ jobs:
         run: echo "PATH=$(pnpm store path --silent)" >> ${GITHUB_OUTPUT}
 
       - name: cache pnpm deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ steps.pnpm-store.outputs.PATH }}
           key: pnpm-store-${{ hashFiles('next.js/pnpm-lock.yaml') }}
@@ -162,7 +162,7 @@ jobs:
         run: echo "PATH=$(npm config get cache)" >> ${GITHUB_OUTPUT}
 
       - name: cache npm deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ steps.npm-cache.outputs.PATH }}
           key: node-cache-${{ hashFiles('opennextjs-netlify/package-lock.json') }}
