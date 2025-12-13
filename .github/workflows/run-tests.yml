@@ -163,7 +163,7 @@ jobs:
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           NODE_OPTIONS: --import file://${{ github.workspace }}/tools/fetch-retry.mjs
       - name: Upload blob report to GitHub Actions Artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: blob-report-${{matrix.version}}-${{ matrix.shard }}
@@ -339,7 +339,7 @@ jobs:
         run: npm ci
 
       - name: Download blob reports from GitHub Actions Artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: all-blob-reports
           pattern: blob-report-${{ matrix.version }}-*
@@ -351,7 +351,7 @@ jobs:
           npx playwright merge-reports --reporter json ./all-blob-reports > merged_reports.json
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
           path: playwright-report
