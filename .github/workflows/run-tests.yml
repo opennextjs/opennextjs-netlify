@@ -10,6 +10,9 @@ on:
         description: "The versions of Next.js to test against (quoted and comma separated)"
         required: false
         default: "latest"
+      runOnWindows:
+        description: "Run tests on Windows"
+        type: boolean
 
 jobs:
   setup:
@@ -48,16 +51,34 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const { versionsToTest, runOnWindows } = ${{ steps.check-labels.outputs.result }} ?? {}
+            // steps.check-labels.outputs.result will be not defined on non-PR events, so we create
+            // either a JSON string or an empty string first and later will check if string is empty
+            // and either parse JSON string or use a default empty object
+            const checkLabelsResult = '${{ steps.check-labels.outputs.result }}';
+            let { versionsToTest, runOnWindows } = checkLabelsResult ? JSON.parse(checkLabelsResult) : {}
 
             if ('${{ github.event_name }}' === 'workflow_dispatch') {
-              core.setOutput('matrix', '${{ github.event.inputs.versions }}');
+              // attempt some massaging of input to cover potential variants of inputs
+              // - `["latest", "canary"]`
+              // - `latest, canary`
+              // - `"latest", "canary"`
+              // - `'latest','canary'`
+              // Will strip `[]'"` and whitespaces first, then split by comma
+              const normalizedVersionsInputArray = `${{ github.event.inputs.versions }}`
+                .replaceAll(/["'\[\]\s]+/g, "")
+                .split(',')
+              
+              core.setOutput('matrix', JSON.stringify(normalizedVersionsInputArray));
             } else if ('${{ github.event_name }}' === 'schedule' || versionsToTest === 'all') {
               core.setOutput('matrix', '["latest", "canary", "15.5.9", "14.2.35", "13.5.1"]');
             } else if (versionsToTest === 'latest-and-canary') {
               core.setOutput('matrix', '["latest", "canary"]');
             } else {
               core.setOutput('matrix', '["latest"]');
+            }
+
+            if ('${{ github.event_name }}' === 'workflow_dispatch' && "${{ github.event.inputs.runOnWindows }}" == "true") {
+              runOnWindows = true
             }
 
             if (runOnWindows) {
