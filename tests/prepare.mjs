@@ -23,6 +23,7 @@ const e2eOnlyFixtures = new Set([
   'after',
   'cli-before-regional-blobs-support',
   'dist-dir',
+  'dynamic-cms',
   'middleware-i18n-excluded-paths',
   'middleware-node-runtime-specific',
   'middleware-static-asset-matcher',
