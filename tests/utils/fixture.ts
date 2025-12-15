@@ -147,16 +147,6 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
       } catch (error) {
         console.log(`Fixture '${fixture}' has failed to cleanup at '${ctx.cwd}'`, error)
       }
-      if (ctx.functionDist) {
-        try {
-          await rm(ctx.functionDist, { recursive: true, force: true })
-        } catch (error) {
-          console.log(
-            `Fixture's '${fixture}' bundled serverless function has failed to cleanup at '${ctx.cwd}'`,
-            error,
-          )
-        }
-      }
     })
   }
 
