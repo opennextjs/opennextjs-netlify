@@ -73,7 +73,7 @@
     "adm-zip": "^0.5.16",
     "cheerio": "^1.0.0-rc.12",
     "clean-package": "^2.2.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.27.0",
     "execa": "^8.0.1",
     "fast-glob": "^3.3.2",
     "fs-monkey": "^1.0.6",
