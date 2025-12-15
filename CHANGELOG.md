@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.15.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.1...v5.15.2) (2025-12-15)
+
+
+### Bug Fixes
+
+* compatability for next@16.1.0-canary.19 ([#3300](https://github.com/opennextjs/opennextjs-netlify/issues/3300)) ([d293833](https://github.com/opennextjs/opennextjs-netlify/commit/d293833ed1960acc500be38d7c9889198afae339))
+* de-duplicate blob operation spans ([#3279](https://github.com/opennextjs/opennextjs-netlify/issues/3279)) ([e05bef9](https://github.com/opennextjs/opennextjs-netlify/commit/e05bef98983f4dfc1d7aca04f1d21c518cabc7f9))
+* handle node_modules in standalone's dist dir ([#3282](https://github.com/opennextjs/opennextjs-netlify/issues/3282)) ([5bd9d85](https://github.com/opennextjs/opennextjs-netlify/commit/5bd9d85da3ebcc039678186aeef50b2bf08f0ba8))
+
 ## [5.15.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.0...v5.15.1) (2025-11-27)
 
 
