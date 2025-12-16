@@ -1,8 +1,13 @@
 import fs from 'node:fs'
+import { execaCommand } from 'execa'
 import { afterEach } from 'vitest'
 import { type FixtureTestContext } from './utils/contexts'
 
 export async function afterTestCleanup({ cleanup }: FixtureTestContext) {
+  await execaCommand('df -h', {
+    stdio: 'inherit',
+  })
+
   if ('reset' in fs) {
     ;(fs as any).reset()
   }
