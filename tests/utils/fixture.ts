@@ -9,6 +9,7 @@ import { execaCommand } from 'execa'
 import getPort from 'get-port'
 import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, parse, relative } from 'node:path'
@@ -36,6 +37,12 @@ import { hasDefaultTurbopackBuilds, setNextVersionInFixture } from './next-versi
 const bootstrapURL = await getBootstrapURL()
 const actualCwd = await vi.importActual<typeof import('process')>('process').then((p) => p.cwd())
 const eszipHelper = join(actualCwd, 'tools/deno/eszip.ts')
+
+const require = createRequire(import.meta.url)
+const mod = require('module')
+
+const originalRequire = mod.prototype.require
+const originalResolveFilename = mod._resolveFilename
 
 async function installDependencies(cwd: string) {
   const NEXT_VERSION = process.env.NEXT_VERSION ?? 'latest'
@@ -110,6 +117,30 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
   // from any previous function invocations that might have run in the same process
   delete globalThis[Symbol.for('next.server.manifests')]
 
+  // require hook leaves modified "require" and "require.resolve" modified - we restore here to original
+  // https://github.com/vercel/next.js/blob/812c26ab8741f68fbd6e2fe095510e0f03eac4c5/packages/next/src/server/require-hook.ts
+  mod.prototype.require = originalRequire
+  mod._resolveFilename = originalResolveFilename
+
+  // node environment baseline defines global WebSocket getter that requires compiled 'ws' package from first function modules
+  // we need to reset the getter to not have it attempt to import 'ws' package from unrelated functions that might have already been deleted
+  // https://github.com/vercel/next.js/blob/812c26ab8741f68fbd6e2fe095510e0f03eac4c5/packages/next/src/server/node-environment-baseline.ts#L11-L27
+  // note that some next versions didn't have setter, so we can't just do "globalThis.WebSocket = undefined" as that would throw
+  // "Cannot set property WebSocket of #<Object> which has only a getter" errors
+  Object.defineProperty(globalThis, 'WebSocket', {
+    get() {
+      return undefined
+    },
+    set(value) {
+      Object.defineProperty(globalThis, 'WebSocket', {
+        configurable: true,
+        writable: true,
+        value,
+      })
+    },
+    configurable: true,
+  })
+
   ctx.cwd = await mkdtemp(join(tmpdir(), 'opennextjs-netlify-'))
   vi.spyOn(process, 'cwd').mockReturnValue(ctx.cwd)
 
@@ -146,6 +177,16 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
         await rm(ctx.cwd, { recursive: true, force: true })
       } catch (error) {
         console.log(`Fixture '${fixture}' has failed to cleanup at '${ctx.cwd}'`, error)
+      }
+      if (ctx.functionDist) {
+        try {
+          await rm(ctx.functionDist, { recursive: true, force: true })
+        } catch (error) {
+          console.log(
+            `Fixture's '${fixture}' bundled serverless function has failed to cleanup at '${ctx.cwd}'`,
+            error,
+          )
+        }
       }
     })
   }

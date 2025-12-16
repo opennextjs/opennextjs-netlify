@@ -16,4 +16,5 @@ export interface FixtureTestContext extends TestContext {
   edgeFunctionPort: number
   edgeFunctionOutput: WriteStream
   cleanup?: (() => Promise<void>)[]
+  skipAutoCleanup?: boolean
 }
