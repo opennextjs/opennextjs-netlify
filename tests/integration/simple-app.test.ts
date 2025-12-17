@@ -108,6 +108,8 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
       '/api/cached-permanent',
       '/api/cached-revalidate',
+      '/app-redirect/dest',
+      '/app-redirect/prerendered',
       '/config-redirect',
       '/config-redirect/dest',
       '/config-rewrite',
@@ -444,6 +446,31 @@ test.skipIf(hasDefaultTurbopackBuilds())<FixtureTestContext>(
     expect(parsedBody.bundledCJSModule.isBundled).toEqual(true)
   },
 )
+
+// below version check is not exact (not located exactly when, but Next.js had a bug for prerender pages that should redirect would not work correctly)
+// currently only know that 13.5.1 and 14.2.35 doesn't have correct response (either not a 307 or completely missing 'location' header), while 15.5.9 has 307 response with location header
+test.skipIf(nextVersionSatisfies('<15.0.0'))<FixtureTestContext>(
+  `app router page that uses next/navigation#redirect works when page is prerendered`,
+  async (ctx) => {
+    await createFixture('simple', ctx)
+    await runPlugin(ctx)
+
+    const response = await invokeFunction(ctx, { url: `/app-redirect/prerendered` })
+
+    expect(response.statusCode).toBe(307)
+    expect(response.headers['location']).toBe('/app-redirect/dest')
+  },
+)
+
+test<FixtureTestContext>(`app router page that uses next/navigation#redirect works when page is NOT prerendered`, async (ctx) => {
+  await createFixture('simple', ctx)
+  await runPlugin(ctx)
+
+  const response = await invokeFunction(ctx, { url: `/app-redirect/non-prerendered` })
+
+  expect(response.statusCode).toBe(307)
+  expect(response.headers['location']).toBe('/app-redirect/dest')
+})
 
 describe('next patching', async () => {
   const { cp: originalCp, appendFile } = (await vi.importActual(
