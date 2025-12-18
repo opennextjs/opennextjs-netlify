@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.2...v5.15.3) (2025-12-18)
+
+
+### Bug Fixes
+
+* handle malformed location header when using next/navigation redirect API  ([#3332](https://github.com/opennextjs/opennextjs-netlify/issues/3332)) ([a541feb](https://github.com/opennextjs/opennextjs-netlify/commit/a541feb5d1d61a2f480d96dc0648cb918e12f829))
+
 ## [5.15.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.1...v5.15.2) (2025-12-15)
 
 
