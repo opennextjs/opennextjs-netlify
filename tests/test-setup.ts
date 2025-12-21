@@ -14,5 +14,7 @@ export async function afterTestCleanup({ cleanup }: FixtureTestContext) {
 
 // cleanup after each test as a fallback if someone forgot to call it
 afterEach<FixtureTestContext>(async (ctx) => {
-  await afterTestCleanup(ctx)
+  if (ctx.skipAutoCleanup !== true) {
+    await afterTestCleanup(ctx)
+  }
 })

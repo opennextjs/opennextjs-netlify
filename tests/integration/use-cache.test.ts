@@ -165,6 +165,10 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
     vi.stubEnv('NETLIFY_PURGE_API_TOKEN', 'fake-token')
     await startMockBlobStore(ctx as FixtureTestContext)
 
+    // we use same fixture for all the tests, which normally cleans up after each test
+    // but here we want to control cleanup ourselves and only do that after all test suites did run
+    ctx.skipAutoCleanup = true
+
     await createFixture('use-cache', ctx)
     await runPlugin(ctx)
   })

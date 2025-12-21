@@ -5,6 +5,7 @@ import type { Context } from '@netlify/functions'
 import type { Span } from '@netlify/otel/opentelemetry'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
+import { augmentNextResponse } from '../augment-next-response.js'
 import { getRunConfig, setRunConfig } from '../config.js'
 import {
   adjustDateHeader,
@@ -13,7 +14,6 @@ import {
   setCacheTagsHeaders,
   setVaryHeaders,
 } from '../headers.js'
-import { nextResponseProxy } from '../revalidate.js'
 import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
 import { getLogger, type RequestContext } from './request-context.cjs'
@@ -97,7 +97,7 @@ export default async (
 
     disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
 
-    const resProxy = nextResponseProxy(res, requestContext)
+    const resProxy = augmentNextResponse(res, requestContext)
 
     // We don't await this here, because it won't resolve until the response is finished.
     const nextHandlerPromise = nextHandler(req, resProxy).catch((error) => {

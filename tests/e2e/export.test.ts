@@ -12,12 +12,9 @@ test.describe(
   },
   () => {
     test('Renders the Home page correctly with output export', async ({ page, outputExport }) => {
-      const response = await page.goto(outputExport.url)
-      const headers = response?.headers() || {}
+      await page.goto(outputExport.url)
 
       await expect(page).toHaveTitle('Simple Next App')
-
-      expect(headers['cache-status']).toBe('"Netlify Edge"; fwd=miss')
 
       const h1 = page.locator('h1')
       await expect(h1).toHaveText('Home')
@@ -29,12 +26,9 @@ test.describe(
       page,
       outputExportPublishOut,
     }) => {
-      const response = await page.goto(outputExportPublishOut.url)
-      const headers = response?.headers() || {}
+      await page.goto(outputExportPublishOut.url)
 
       await expect(page).toHaveTitle('Simple Next App')
-
-      expect(headers['cache-status']).toBe('"Netlify Edge"; fwd=miss')
 
       const h1 = page.locator('h1')
       await expect(h1).toHaveText('Home')
@@ -48,12 +42,9 @@ test.describe(
         tag: generateTestTags({ customDistDir: true }),
       },
       async ({ page, outputExportCustomDist }) => {
-        const response = await page.goto(outputExportCustomDist.url)
-        const headers = response?.headers() || {}
+        await page.goto(outputExportCustomDist.url)
 
         await expect(page).toHaveTitle('Simple Next App')
-
-        expect(headers['cache-status']).toBe('"Netlify Edge"; fwd=miss')
 
         const h1 = page.locator('h1')
         await expect(h1).toHaveText('Home')

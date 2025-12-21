@@ -232,9 +232,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
           // if we don't get cacheControls, but we still get revalidate, it should mean we are before
           // https://github.com/vercel/next.js/pull/76207
           try {
-            const { normalizePagePath } = await import(
-              'next/dist/shared/lib/page-path/normalize-page-path.js'
-            )
+            const { normalizePagePath } =
+              await import('next/dist/shared/lib/page-path/normalize-page-path.js')
 
             prerenderManifest.routes[key] = {
               experimentalPPR: undefined,
@@ -248,9 +247,8 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
             // depending on Next.js version - prerender manifest might not be mutable
             // https://github.com/vercel/next.js/pull/64313
             // if it's not mutable we will try to use SharedRevalidateTimings ( https://github.com/vercel/next.js/pull/64370) instead
-            const { SharedRevalidateTimings } = await import(
-              'next/dist/server/lib/incremental-cache/shared-revalidate-timings.js'
-            )
+            const { SharedRevalidateTimings } =
+              await import('next/dist/server/lib/incremental-cache/shared-revalidate-timings.js')
             const sharedRevalidateTimings = new SharedRevalidateTimings(prerenderManifest)
             sharedRevalidateTimings.set(key, revalidate)
           }

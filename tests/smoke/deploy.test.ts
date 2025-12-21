@@ -49,6 +49,17 @@ if (nextVersionSatisfies('>=16.0.0')) {
     const body = await response.json()
     expect(body).toEqual({ proxy: true })
   })
+
+  test('pnpm monorepo with proxy / node middleware with setup using base directory instead of package path', async () => {
+    // proxy ~= node middleware
+    const fixture = await selfCleaningFixtureFactories.pnpmMonorepoBaseProxy()
+
+    const response = await fetch(fixture.url)
+    expect(response.status).toBe(200)
+
+    const body = await response.json()
+    expect(body).toEqual({ proxy: true })
+  })
 }
 
 test('yarn@3 monorepo with pnpm linker', async () => {

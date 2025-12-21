@@ -711,5 +711,5 @@ test("requests with x-middleware-subrequest don't skip middleware (GHSA-f82v-jwr
   expect(response.headers.get('x-test-used-middleware')).toBe('true')
 
   // ensure we are testing version before the fix for self hosted
-  expect(response.headers.get('x-test-used-next-version')).toBe('15.2.2')
+  expect(response.headers.get('x-test-used-next-version')).toBe('15.1.11')
 })

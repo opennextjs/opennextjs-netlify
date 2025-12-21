@@ -1,5 +1,49 @@
 # Changelog
 
+## [5.15.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.2...v5.15.3) (2025-12-18)
+
+
+### Bug Fixes
+
+* handle malformed location header when using next/navigation redirect API  ([#3332](https://github.com/opennextjs/opennextjs-netlify/issues/3332)) ([a541feb](https://github.com/opennextjs/opennextjs-netlify/commit/a541feb5d1d61a2f480d96dc0648cb918e12f829))
+
+## [5.15.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.1...v5.15.2) (2025-12-15)
+
+
+### Bug Fixes
+
+* compatability for next@16.1.0-canary.19 ([#3300](https://github.com/opennextjs/opennextjs-netlify/issues/3300)) ([d293833](https://github.com/opennextjs/opennextjs-netlify/commit/d293833ed1960acc500be38d7c9889198afae339))
+* de-duplicate blob operation spans ([#3279](https://github.com/opennextjs/opennextjs-netlify/issues/3279)) ([e05bef9](https://github.com/opennextjs/opennextjs-netlify/commit/e05bef98983f4dfc1d7aca04f1d21c518cabc7f9))
+* handle node_modules in standalone's dist dir ([#3282](https://github.com/opennextjs/opennextjs-netlify/issues/3282)) ([5bd9d85](https://github.com/opennextjs/opennextjs-netlify/commit/5bd9d85da3ebcc039678186aeef50b2bf08f0ba8))
+
+## [5.15.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.0...v5.15.1) (2025-11-27)
+
+
+### Bug Fixes
+
+* handle cacheComponents case not producing prerendered .rsc files ([#3275](https://github.com/opennextjs/opennextjs-netlify/issues/3275)) ([80db8f4](https://github.com/opennextjs/opennextjs-netlify/commit/80db8f4025ce751bad1bc56ee10a70766497c207))
+
+## [5.15.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.7...v5.15.0) (2025-11-25)
+
+
+### Features
+
+* support skew protection token ([#3269](https://github.com/opennextjs/opennextjs-netlify/issues/3269)) ([90c8bd7](https://github.com/opennextjs/opennextjs-netlify/commit/90c8bd70f6e463c6d67fc83c30e6a28ee77c3db9))
+
+## [5.14.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.6...v5.14.7) (2025-11-19)
+
+
+### Bug Fixes
+
+* incorrect path of middleware nft in setups using base directory ([#3262](https://github.com/opennextjs/opennextjs-netlify/issues/3262)) ([48753bc](https://github.com/opennextjs/opennextjs-netlify/commit/48753bcaaa4a98654de034b6e4e7ecf9daeded82))
+
+## [5.14.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.5...v5.14.6) (2025-11-18)
+
+
+### Bug Fixes
+
+* api routes module parsing for recent Next.js releases ([#3257](https://github.com/opennextjs/opennextjs-netlify/issues/3257)) ([1d1288a](https://github.com/opennextjs/opennextjs-netlify/commit/1d1288aff7fe4513afa941b60a216037e8e406a0))
+
 ## [5.14.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.14.4...v5.14.5) (2025-11-03)
 
 

@@ -63,10 +63,10 @@ export function shouldEnableSkewProtection(ctx: PluginContext) {
     }
   }
 
-  if (
-    (!process.env.DEPLOY_ID || process.env.DEPLOY_ID === '0') &&
-    optInOptions.has(enabledOrDisabledReason)
-  ) {
+  // For compatibility with old environments, fall back to the raw deploy ID.
+  const token = process.env.NETLIFY_SKEW_PROTECTION_TOKEN || process.env.DEPLOY_ID
+
+  if ((!token || token === '0') && optInOptions.has(enabledOrDisabledReason)) {
     // We can't proceed without a valid DEPLOY_ID, because Next.js does inline deploy ID at build time
     // This should only be the case for CLI deploys
     return {
@@ -78,17 +78,19 @@ export function shouldEnableSkewProtection(ctx: PluginContext) {
           : // this is silent disablement to avoid spam logs for users opted in via feature flag
             // that don't explicitly opt in via env var
             EnabledOrDisabledReason.OPT_OUT_NO_VALID_DEPLOY_ID,
+      token,
     }
   }
 
   return {
     enabled: optInOptions.has(enabledOrDisabledReason),
     enabledOrDisabledReason,
+    token: token as string,
   }
 }
 
 export const setSkewProtection = async (ctx: PluginContext, span: Span) => {
-  const { enabled, enabledOrDisabledReason } = shouldEnableSkewProtection(ctx)
+  const { enabled, enabledOrDisabledReason, token } = shouldEnableSkewProtection(ctx)
 
   span.setAttribute('skewProtection', enabledOrDisabledReason)
 
@@ -109,7 +111,7 @@ export const setSkewProtection = async (ctx: PluginContext, span: Span) => {
     console.log('Setting up Next.js Skew Protection.')
   }
 
-  process.env.NEXT_DEPLOYMENT_ID = process.env.DEPLOY_ID
+  process.env.NEXT_DEPLOYMENT_ID = token
 
   await mkdir(dirname(ctx.skewProtectionConfigPath), {
     recursive: true,

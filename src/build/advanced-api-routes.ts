@@ -197,6 +197,24 @@ const extractConfigFromFile = async (apiFilePath: string, appDir: string): Promi
   if (!fileContent.includes('config')) {
     return {}
   }
+
+  try {
+    // https://github.com/vercel/next.js/pull/85787 introduced need to manually install SWC bindings
+    // before usage. There are certain cases where Next.js will do that automatically, but to ensure
+    // it works for all cases, we do install it here as well. If bindings are already installed, this is a no-op.
+    const installBindingsModule = findModuleFromBase({
+      paths: [appDir],
+      candidates: ['next/dist/build/swc/install-bindings'],
+    })
+    if (installBindingsModule) {
+      // eslint-disable-next-line import/no-dynamic-require, n/global-require, @typescript-eslint/no-var-requires
+      const { installBindings } = require(installBindingsModule)
+      await installBindings()
+    }
+  } catch {
+    // nothing actionable can be done in case of exceptions
+  }
+
   const ast = await parseModule(apiFilePath, fileContent)
 
   try {

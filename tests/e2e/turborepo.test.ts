@@ -107,6 +107,15 @@ test.describe('[PNPM] Package manager', () => {
     const date3 = await page.getByTestId('date-now').textContent()
     expect(date3).not.toBe(date2)
   })
+
+  test('transitive external dependencies are supported', async ({ page, turborepo }) => {
+    const pageResponse = await page.goto(new URL('/transitive-external-deps', turborepo.url).href)
+
+    expect(pageResponse?.status()).toBe(200)
+
+    await expect(page.getByTestId('dep-a-version')).toHaveText('3.10.1')
+    await expect(page.getByTestId('dep-b-version')).toHaveText('4.17.21')
+  })
 })
 
 test.describe('[NPM] Package manager', () => {
@@ -227,5 +236,16 @@ test.describe('[NPM] Package manager', () => {
       '.env.production': 'defined in .env.production',
       '.env.production.local': 'defined in .env.production.local',
     })
+  })
+
+  test('transitive external dependencies are supported', async ({ page, turborepoNPM }) => {
+    const pageResponse = await page.goto(
+      new URL('/transitive-external-deps', turborepoNPM.url).href,
+    )
+
+    expect(pageResponse?.status()).toBe(200)
+
+    await expect(page.getByTestId('dep-a-version')).toHaveText('3.10.1')
+    await expect(page.getByTestId('dep-b-version')).toHaveText('4.17.21')
   })
 })

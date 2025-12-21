@@ -38,11 +38,12 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
           ? memoizedValue
           : {}
 
-        span?.setAttributes({ key, blobKey, previousEtag })
+        span?.setAttributes({ key })
 
         const result = await store.getWithMetadata(blobKey, {
           type: 'json',
           etag: previousEtag,
+          span,
         })
 
         const shouldReuseMemoizedBlob = result?.etag && previousEtag === result?.etag
@@ -61,12 +62,6 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
           inMemoryCache.set(key, blob)
         }
 
-        span?.setAttributes({
-          etag: result?.etag,
-          reusingPreviouslyFetchedBlob: shouldReuseMemoizedBlob,
-          status: blob ? (shouldReuseMemoizedBlob ? 'Hit, no change' : 'Hit') : 'Miss',
-        })
-
         return blob
       })
       inMemoryCache.set(key, getPromise)
@@ -79,8 +74,8 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
 
       const blobKey = await encodeBlobKey(key)
       return withActiveSpan(tracer, otelSpanTitle, async (span) => {
-        span?.setAttributes({ key, blobKey })
-        const writeResult = await store.setJSON(blobKey, value)
+        span?.setAttributes({ key })
+        const writeResult = await store.setJSON(blobKey, value, { span })
         if (writeResult?.etag) {
           inMemoryCache.set(key, {
             data: value,
