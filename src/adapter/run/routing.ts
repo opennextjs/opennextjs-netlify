@@ -7,6 +7,7 @@ import { SugaredTracer } from '@opentelemetry/api/experimental'
 
 import type { NetlifyAdapterContext } from '../build/types.js'
 
+import { determineFreshness } from './headers.js'
 import { getIsrResponse } from './isr.js'
 
 const routingPhases = ['entry', 'filesystem', 'rewrite', 'hit', 'error'] as const
@@ -198,15 +199,76 @@ async function match(
 
               let handled = false
               if (matchedType === 'isr') {
-                const isrResponse = await getIsrResponse(currentRequest, outputs)
-                if (isrResponse) {
-                  const isrSource = isrResponse.headers.get('x-isr-source')
+                const start = Date.now()
+                const isrResult = await getIsrResponse(currentRequest, outputs)
+                if (isrResult) {
+                  const isrSource = isrResult.response.headers.get('x-isr-source')
+                  const isrFreshness = determineFreshness(isrResult.response.headers)
+                  isrResult.response.headers.set('x-isr-freshness', isrFreshness)
                   log(
-                    `Serving ISR response for: ${pathname} -> ${currentRequest.url} from ${isrSource}`,
+                    `Serving ISR response for: ${pathname} -> ${currentRequest.url} from ${isrSource} (${isrFreshness})`,
                   )
-                  maybeResponse = {
-                    ...maybeResponse,
-                    response: isrResponse,
+
+                  if (isrResult.postponedState && isrResult.response.body) {
+                    log('there is PPR here')
+                    const resumeRequest = new Request(currentRequest, {
+                      ...currentRequest,
+                      headers: {
+                        ...currentRequest.headers,
+                        'x-ppr-resume': isrResult.postponedState,
+                      },
+                    })
+
+                    const resumeResponsePromise = context.next(resumeRequest)
+
+                    const mergedBody = new ReadableStream({
+                      async start(controller) {
+                        const shellReader = isrResult.response.body.getReader()
+                        while (true) {
+                          const { done, value } = await shellReader.read()
+                          if (done) {
+                            break
+                          }
+                          controller.enqueue(value)
+                        }
+                        controller.enqueue(
+                          new TextEncoder().encode(
+                            `\n<!-- POSTPONED INCOMING!! ${Date.now() - start}ms -->\n`,
+                          ),
+                        )
+                        const resumeResponse = await resumeResponsePromise
+                        const resumeReader = resumeResponse.body.getReader()
+                        while (true) {
+                          const { done, value } = await resumeReader.read()
+                          if (done) {
+                            break
+                          }
+                          controller.enqueue(value)
+                        }
+                        controller.enqueue(
+                          new TextEncoder().encode(
+                            `\n<!-- POSTPONED Attached!! ${Date.now() - start}ms -->\n`,
+                          ),
+                        )
+                        controller.close()
+                      },
+                    })
+
+                    maybeResponse = {
+                      ...maybeResponse,
+                      response: new Response(mergedBody, {
+                        ...isrResult.response,
+                        headers: {
+                          ...isrResult.response.headers,
+                          'x-ppr-merged': '1',
+                        },
+                      }),
+                    }
+                  } else {
+                    maybeResponse = {
+                      ...maybeResponse,
+                      response: isrResult.response,
+                    }
                   }
                   handled = true
                 }
@@ -645,6 +707,16 @@ export async function runNextRouting(
         },
         status: maybeResponse.status ?? finalResponse.status ?? 200,
       })
+    }
+
+    {
+      // this is just for backward compat for tests - it should not have impact on anything because this edge function is not cacheable
+      const adapterCdnCacheControl = response.headers.get('adapter-cdn-cache-control')
+      if (adapterCdnCacheControl) {
+        // TODO: if stale
+        response.headers.set('netlify-cdn-cache-control', adapterCdnCacheControl)
+        response.headers.delete('adapter-cdn-cache-control')
+      }
     }
 
     log('Serving response', response.status)

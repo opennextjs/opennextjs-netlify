@@ -25,6 +25,10 @@ export type ISRCacheEntry = {
    * considered stale and should be revalidated
    */
   revalidate?: Revalidate
+  /**
+   * postponedState is the PPR state when it postponed and is used for resuming
+   */
+  postponedState?: string
 }
 
 export type ISRDef = {

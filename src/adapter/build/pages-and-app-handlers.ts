@@ -36,6 +36,32 @@ function normalizeIndex(path: string): string {
   )
 }
 
+const ONE_YEAR = 60 * 60 * 24 * 365
+
+// copied from Next.js packages/next/src/server/lib/cache-control.ts
+function getCacheControlHeader({
+  revalidate,
+  expire,
+}: {
+  revalidate: number | false
+  expire: number | undefined
+}): string {
+  const swrHeader =
+    typeof revalidate === 'number' && expire !== undefined && revalidate < expire
+      ? `, stale-while-revalidate=${expire - revalidate}`
+      : ''
+
+  if (revalidate === 0) {
+    return 'private, no-cache, no-store, max-age=0, must-revalidate'
+  }
+
+  if (typeof revalidate === 'number') {
+    return `s-maxage=${revalidate}${swrHeader}`
+  }
+
+  return `s-maxage=${ONE_YEAR}${swrHeader}`
+}
+
 export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
   netlifyAdapterContext: NetlifyAdapterContext,
@@ -67,6 +93,9 @@ export async function onBuildComplete(
     }
   }
 
+  const ONE_YEAR_AGO_DATE = new Date(Date.now() - ONE_YEAR * 1000).toUTCString()
+  const NOW_DATE = new Date().toUTCString()
+
   for (const prerender of nextAdapterContext.outputs.prerenders) {
     const normalizedPathname = normalizeIndex(prerender.pathname)
     const normalizedParentOutputId = normalizeIndex(prerender.parentOutputId)
@@ -90,19 +119,39 @@ export async function onBuildComplete(
       }
 
       if (prerender.fallback) {
-        isrGroup.fallback = {
-          content: await readFile(prerender.fallback.filePath, 'utf-8'),
-          status: prerender.fallback.initialStatus,
-          headers: prerender.fallback.initialHeaders
-            ? Object.fromEntries(
-                Object.entries(prerender.fallback.initialHeaders).map(([key, value]) => [
-                  key,
-                  Array.isArray(value) ? value.join(',') : value,
-                ]),
-              )
-            : undefined,
-          expiration: prerender.fallback.initialExpiration,
-          revalidate: prerender.fallback.initialRevalidate,
+        const normalizedHeaders = prerender.fallback.initialHeaders
+          ? Object.fromEntries(
+              Object.entries(prerender.fallback.initialHeaders).map(([key, value]) => [
+                key,
+                Array.isArray(value) ? value.join(',') : value,
+              ]),
+            )
+          : {}
+
+        normalizedHeaders['cache-control'] = 'public, max-age=0, must-revalidate'
+        normalizedHeaders['adapter-cdn-cache-control'] = getCacheControlHeader({
+          revalidate: prerender.fallback.initialRevalidate ?? false,
+          expire: prerender.fallback.initialExpiration,
+        })
+        normalizedHeaders.date = prerender.fallback.initialRevalidate ? ONE_YEAR_AGO_DATE : NOW_DATE
+
+        try {
+          isrGroup.fallback = {
+            content: await readFile(prerender.fallback.filePath, 'utf-8'),
+            status: prerender.fallback.initialStatus,
+            headers: normalizedHeaders,
+            expiration: prerender.fallback.initialExpiration,
+            revalidate: prerender.fallback.initialRevalidate,
+            postponedState: prerender.fallback.postponedState,
+          }
+        } catch (error) {
+          const meaningfulError = new Error(
+            `Failed to create fallback for:\n${JSON.stringify(prerender, null, 2)}`,
+            {
+              cause: error,
+            },
+          )
+          console.error(meaningfulError)
         }
       }
 

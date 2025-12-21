@@ -9,6 +9,7 @@ import type { Context } from '@netlify/functions'
 import { getTracer, withActiveSpan } from '../../run/handlers/tracer.cjs'
 import type { NetlifyAdapterContext } from '../build/types.js'
 
+import { generateAdapterCacheControl } from './headers.js'
 import {
   generateIsrCacheKey,
   matchIsrDefinitionFromIsrGroup,
@@ -55,21 +56,6 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
 
     return originalStoreHeader.call(this, firstLine, headers)
   }
-}
-
-const getHeaderValueArray = (header: string): string[] => {
-  return header
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean)
-}
-
-const omitHeaderValues = (header: string, values: string[]): string => {
-  const headerValues = getHeaderValueArray(header)
-  const filteredValues = headerValues.filter(
-    (value) => !values.some((val) => value.startsWith(val)),
-  )
-  return filteredValues.join(', ')
 }
 
 /**
@@ -130,6 +116,13 @@ async function runNextHandler(
     },
   })
 
+  const postponed = request.headers.get('x-ppr-resume')
+  if (postponed) {
+    console.log('setting postponed meta', postponed)
+    addRequestMeta(req, 'postponed', postponed)
+    request.headers.delete('x-ppr-resume')
+  }
+
   addRequestMeta(req, 'relativeProjectDir', '.')
 
   disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
@@ -157,37 +150,8 @@ async function runNextHandler(
 
   const response = await toComputeResponse(res)
 
-  {
-    // move cache-control to cdn-cache-control
-    const cacheControl = response.headers.get('cache-control')
-    if (
-      cacheControl &&
-      ['GET', 'HEAD'].includes(request.method) &&
-      !response.headers.has('cdn-cache-control') &&
-      !response.headers.has('netlify-cdn-cache-control')
-    ) {
-      // handle CDN Cache Control on ISR and App Router page responses
-      const browserCacheControl = omitHeaderValues(cacheControl, [
-        's-maxage',
-        'stale-while-revalidate',
-      ])
-      const cdnCacheControl =
-        // if we are serving already stale response, instruct edge to not attempt to cache that response
-        response.headers.get('x-nextjs-cache') === 'STALE'
-          ? 'public, max-age=0, must-revalidate, durable'
-          : [
-              ...getHeaderValueArray(cacheControl).map((value) =>
-                value === 'stale-while-revalidate' ? 'stale-while-revalidate=31536000' : value,
-              ),
-              'durable',
-            ].join(', ')
-
-      response.headers.set(
-        'cache-control',
-        browserCacheControl || 'public, max-age=0, must-revalidate',
-      )
-      response.headers.set('should-be-netlify-cdn-cache-control', cdnCacheControl)
-    }
+  if (['GET', 'HEAD'].includes(request.method)) {
+    generateAdapterCacheControl(response.headers)
   }
 
   {
@@ -201,6 +165,8 @@ async function runNextHandler(
       // response.headers.delete('x-nextjs-cache')
     }
   }
+
+  debugger
 
   return response
 }

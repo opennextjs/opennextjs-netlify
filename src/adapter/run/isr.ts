@@ -10,10 +10,13 @@ function cacheEntryToResponse(entry: ISRCacheEntry, source: 'fallback' | 'blobs'
   headers.set('x-isr-expiration', String(entry.expiration ?? 'undefined'))
   headers.set('x-isr-source', source)
 
-  return new Response(entry.content, {
-    status: entry.status ?? 200,
-    headers,
-  })
+  return {
+    response: new Response(entry.content, {
+      status: entry.status ?? 200,
+      headers,
+    }),
+    postponedState: entry.postponedState,
+  }
 }
 
 export async function getIsrResponse(
