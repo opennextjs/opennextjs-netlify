@@ -358,3 +358,7 @@ jobs:
           name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
           path: playwright-report
           retention-days: 14
+
+      - name: Report summary
+        run: |
+          npx playwright merge-reports --reporter list ./all-blob-reports
