@@ -46,6 +46,7 @@ export function generateNextRoutingJsonConfig(
 
   return {
     buildId: nextAdapterContext.buildId,
+    // TODO: check i18n type error
     // i18n: nextAdapterContext.config.i18n,
     basePath: nextAdapterContext.config.basePath,
     routes: {
