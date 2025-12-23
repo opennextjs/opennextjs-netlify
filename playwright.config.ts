@@ -14,6 +14,7 @@ export default defineConfig({
   /* Limit the number of workers on CI, use default locally */
   workers: process.env.CI ? 3 : undefined,
   globalSetup: './tests/test-setup-e2e.ts',
+  globalTeardown: './tests/test-teardown-e2e.ts',
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: process.env.CI ? [['blob'], ['list']] : [['list']],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
