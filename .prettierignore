@@ -14,4 +14,4 @@ custom-dist-dir
 pnpm.lock
 # to avoid needing extra permissions to format files
 .github/workflows
-src/adapter/run/vendor
+src/adapter/vendor
