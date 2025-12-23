@@ -1,6 +1,6 @@
-import type NextHandlerFunc from 'next-with-adapters/dist/build/templates/middleware'
+import type MiddlewareModule from 'next-with-adapters/dist/build/templates/middleware.js'
 
-type NextHandler = typeof NextHandlerFunc
+type NextHandler = (typeof MiddlewareModule)['default']
 
 type RequestData = Parameters<NextHandler>[0]['request']
 

@@ -5,6 +5,15 @@ import { fileURLToPath } from 'node:url'
 
 import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
 import type { Context } from '@netlify/functions'
+import type {
+  RevalidateFn,
+  RouterServerContext,
+} from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
+import {
+  NEXT_REQUEST_META,
+  type NextIncomingMessage,
+  type RequestMeta,
+} from 'next-with-adapters/dist/server/request-meta.js'
 
 import { getTracer, withActiveSpan } from '../../run/handlers/tracer.cjs'
 import type { NetlifyAdapterContext } from '../build/types.js'
@@ -23,16 +32,21 @@ globalThis.AsyncLocalStorage = AsyncLocalStorage
 
 const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
 
-const anyGlobalThis = globalThis as any
-
-if (!anyGlobalThis[RouterServerContextSymbol]) {
-  anyGlobalThis[RouterServerContextSymbol] = {}
+const globalThisWithRouterServerContext = globalThis as typeof globalThis & {
+  [RouterServerContextSymbol]?: RouterServerContext
 }
 
-anyGlobalThis[RouterServerContextSymbol]['.'] = {
-  revalidate: (...args) => {
-    console.log('revalidate called with args:', ...args)
-  },
+if (!globalThisWithRouterServerContext[RouterServerContextSymbol]) {
+  globalThisWithRouterServerContext[RouterServerContextSymbol] = {}
+}
+
+const revalidate: RevalidateFn = (config) => {
+  console.log('revalidate called with args:', config)
+  return Promise.resolve()
+}
+
+globalThisWithRouterServerContext[RouterServerContextSymbol]['.'] = {
+  revalidate,
 }
 
 /**
@@ -87,11 +101,15 @@ type NextHandler = (
   },
 ) => Promise<void | null>
 
-function addRequestMeta(req: IncomingMessage, key: string, value: any) {
-  const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
-  const meta = (req as any)[NEXT_REQUEST_META] || {}
+function addRequestMeta<K extends keyof RequestMeta>(
+  req: IncomingMessage,
+  key: K,
+  value: RequestMeta[K],
+) {
+  const typedReq = req as NextIncomingMessage
+  const meta = typedReq[NEXT_REQUEST_META] || {}
   meta[key] = value
-  ;(req as any)[NEXT_REQUEST_META] = meta
+  typedReq[NEXT_REQUEST_META] = meta
   return meta
 }
 
@@ -165,8 +183,6 @@ async function runNextHandler(
       // response.headers.delete('x-nextjs-cache')
     }
   }
-
-  debugger
 
   return response
 }

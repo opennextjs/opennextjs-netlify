@@ -7,16 +7,23 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 
 import { restoreBuildCache, saveBuildCache } from './build/cache.js'
 import { copyPrerenderedContent } from './build/content/prerendered.js'
-import { copyStaticExport, publishStaticDir, unpublishStaticDir } from './build/content/static.js'
+import {
+  copyStaticExport,
+  publishStaticDir,
+  // unpublishStaticDir
+} from './build/content/static.js'
 import { clearStaleEdgeHandlers } from './build/functions/edge.js'
-import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
+import {
+  clearStaleServerHandlers,
+  // createServerHandler
+} from './build/functions/server.js'
 import { PluginContext } from './build/plugin-context.js'
 import { setSkewProtection } from './build/skew-protection.js'
-import {
-  verifyAdvancedAPIRoutes,
-  verifyNetlifyFormsWorkaround,
-  verifyPublishDir,
-} from './build/verification.js'
+// import {
+//   verifyAdvancedAPIRoutes,
+//   verifyNetlifyFormsWorkaround,
+//   verifyPublishDir,
+// } from './build/verification.js'
 
 const skipPlugin =
   process.env.NETLIFY_NEXT_PLUGIN_SKIP === 'true' || process.env.NETLIFY_NEXT_PLUGIN_SKIP === '1'
@@ -122,13 +129,13 @@ export const onSuccess = async () => {
   })
 }
 
-export const onEnd = async (options: NetlifyPluginOptions) => {
-  if (skipPlugin) {
-    console.warn(skipText)
-    return
-  }
+// export const onEnd = async (options: NetlifyPluginOptions) => {
+//   if (skipPlugin) {
+//     console.warn(skipText)
+//     return
+//   }
 
-  await tracer.withActiveSpan('onEnd', async () => {
-    // await unpublishStaticDir(new PluginContext(options))
-  })
-}
+//   await tracer.withActiveSpan('onEnd', async () => {
+//     // await unpublishStaticDir(new PluginContext(options))
+//   })
+// }

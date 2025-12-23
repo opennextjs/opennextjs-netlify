@@ -12,7 +12,9 @@ await rm(OUT_DIR, { force: true, recursive: true })
 
 const repoDirectory = dirname(resolve(fileURLToPath(import.meta.url), '..'))
 
-const entryPointsESM = await glob('src/**/*.ts', { ignore: ['**/*.test.ts'] })
+const entryPointsESM = await glob('src/**/*.ts', {
+  ignore: ['**/*.test.ts', 'src/adapter/run/vendor/**/*'],
+})
 const entryPointsCJS = await glob('src/**/*.cts')
 
 /**
@@ -100,6 +102,10 @@ await Promise.all([
   bundle(entryPointsESM, 'esm', watch),
   ...entryPointsCJS.map((entry) => bundle([entry], 'cjs', watch)),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
+  cp('src/adapter/run/vendor', join(OUT_DIR, 'adapter/run/vendor'), {
+    recursive: true,
+    force: true,
+  }),
 ])
 
 async function ensureNoRegionalBlobsModuleDuplicates() {

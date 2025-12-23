@@ -138,7 +138,7 @@ async function match(
   /** All rules */
   allRoutingRules: RoutingRule[],
   outputs: NetlifyAdapterContext['preparedOutputs'],
-  log: (fmt: string, ...args: any) => void,
+  log: (fmt: string, ...args: unknown[]) => void,
   initialResponse: MaybeResponse,
   asyncLoadMiddleware: () => Promise<(req: Request) => Promise<Response>>,
   tracer: SugaredTracer,
@@ -223,7 +223,8 @@ async function match(
 
                     const mergedBody = new ReadableStream({
                       async start(controller) {
-                        const shellReader = isrResult.response.body.getReader()
+                        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                        const shellReader = isrResult.response.body!.getReader()
                         while (true) {
                           const { done, value } = await shellReader.read()
                           if (done) {
@@ -237,7 +238,8 @@ async function match(
                           ),
                         )
                         const resumeResponse = await resumeResponsePromise
-                        const resumeReader = resumeResponse.body.getReader()
+                        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+                        const resumeReader = resumeResponse.body!.getReader()
                         while (true) {
                           const { done, value } = await resumeReader.read()
                           if (done) {
@@ -597,7 +599,7 @@ export async function runNextRouting(
   const tracer = new SugaredTracer(trace.getTracer('next-routing', '0.0.1'))
   const { pathname } = new URL(request.url)
 
-  return tracer.withActiveSpan(`next_routing ${request.method} ${pathname}`, async (span) => {
+  return tracer.withActiveSpan(`next_routing ${request.method} ${pathname}`, async () => {
     const stdoutPrefix = request.url.includes('.well-known')
       ? undefined
       : `[${
@@ -608,7 +610,7 @@ export async function runNextRouting(
         }]`
 
     const spanCounter = new WeakMap<Span, number>()
-    const log = (fmt: string, ...args: any) => {
+    const log = (fmt: string, ...args: unknown[]) => {
       const formatted = format(fmt, ...args)
       if (stdoutPrefix) {
         console.log(stdoutPrefix, formatted)

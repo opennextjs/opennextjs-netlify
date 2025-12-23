@@ -60,6 +60,7 @@ export function escapeStringRegexp(str: string): string {
 
 export async function generateRoutingRules(
   nextAdapterContext: OnBuildCompleteContext,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   netlifyAdapterContext: NetlifyAdapterContext,
 ) {
   // const escapedBuildId = escapeStringRegexp(nextAdapterContext.buildId)
@@ -332,7 +333,8 @@ export async function generateRoutingRules(
     // server actions name meta routes
 
     ...(hasMiddleware
-      ? (nextAdapterContext.outputs.middleware!.config.matchers?.map((matcher, index) => {
+      ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        (nextAdapterContext.outputs.middleware!.config.matchers?.map((matcher, index) => {
           return {
             // originally: middleware route
             description: `Middleware (matcher #${index})`,

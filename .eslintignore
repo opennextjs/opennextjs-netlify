@@ -3,3 +3,4 @@ demo/
 tests/
 edge-runtime
 tools/deno
+src/adapter/run/vendor

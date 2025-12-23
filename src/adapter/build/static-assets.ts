@@ -20,7 +20,6 @@ export async function onBuildComplete(
           '_next',
           'data',
           nextAdapterContext.buildId,
-          // eslint-disable-next-line unicorn/no-nested-ternary
           `${distPathname === '/' ? 'index' : distPathname.endsWith('/') ? distPathname.slice(0, -1) : distPathname}.json`,
         )
         await mkdir(dirname(dataFilePath), { recursive: true })
