@@ -3,3 +3,4 @@ export type { RouteHas, Route, MiddlewareContext, MiddlewareResult, ResolveRoute
 export type { I18nConfig, I18nDomain } from './i18n';
 export { detectLocale, detectDomainLocale, normalizeLocalePath, getAcceptLanguageLocale, getCookieLocale, } from './i18n';
 export { responseToMiddlewareResult } from './middleware';
+export { type RequestTracker, RequestTrackerAsyncLocalStorage, debugLog } from "./debug";

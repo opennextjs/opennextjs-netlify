@@ -97,10 +97,14 @@ export async function onBuildComplete(
     const routingBuildTimeConfig = ${JSON.stringify(routing, null, 2)}
     const preparedOutputs = ${JSON.stringify(netlifyAdapterContext.preparedOutputs, null, 2)}
 
-    const asyncLoadMiddleware = () => ${netlifyAdapterContext.preparedOutputs.middleware ? `import('./next_middleware.js').then(mod => mod.default)` : `Promise.reject(new Error('No middleware output'))`}
-
+    const middlewareConfig = ${
+      netlifyAdapterContext.preparedOutputs.middleware
+        ? `{ enabled: true, load: () => import('./next_middleware.js').then(mod => mod.default), matchers: [${(nextAdapterContext.outputs.middleware?.config.matchers ?? []).map((matcher) => `new RegExp(${JSON.stringify(matcher.sourceRegex)})`).join(', ')}] }`
+        : `{ enabled: false }`
+    }
+    
     export default async function handler(request, context) {
-      return runNextRouting(request, context, routingBuildTimeConfig, preparedOutputs)
+      return runNextRouting(request, context, routingBuildTimeConfig, preparedOutputs, middlewareConfig)
     }
 
     export const config = ${JSON.stringify({

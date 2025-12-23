@@ -1,7 +1,7 @@
 // import type { Context } from '@netlify/edge-functions'
 
-import { InternalHeaders } from './lib/headers.ts'
-import { logger, LogLevel } from './lib/logging.ts'
+// import { InternalHeaders } from './lib/headers.ts'
+// import { logger, LogLevel } from './lib/logging.ts'
 import { buildNextRequest } from './lib/next-request.ts'
 import type { NextHandler, RequestData } from './lib/types.ts'
 // import { buildResponse } from './lib/response.ts'
@@ -20,14 +20,14 @@ export async function handleMiddleware(
   nextHandler: NextHandler,
   nextConfig: RequestData['nextConfig'],
 ) {
-  const url = new URL(request.url)
+  // const url = new URL(request.url)
 
-  const reqLogger = logger
-    .withLogLevel(
-      request.headers.has(InternalHeaders.NFDebugLogging) ? LogLevel.Debug : LogLevel.Log,
-    )
-    .withFields({ url_path: url.pathname })
-    .withRequestID(request.headers.get(InternalHeaders.NFRequestID))
+  // const reqLogger = logger
+  //   .withLogLevel(
+  //     request.headers.has(InternalHeaders.NFDebugLogging) ? LogLevel.Debug : LogLevel.Log,
+  //   )
+  //   .withFields({ url_path: url.pathname })
+  //   .withRequestID(request.headers.get(InternalHeaders.NFRequestID))
 
   const nextRequest = buildNextRequest(request, nextConfig)
   try {

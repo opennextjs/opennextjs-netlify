@@ -15,7 +15,9 @@ const repoDirectory = dirname(resolve(fileURLToPath(import.meta.url), '..'))
 const entryPointsESM = await glob('src/**/*.ts', {
   ignore: ['**/*.test.ts', 'src/adapter/vendor/**/*'],
 })
-const entryPointsCJS = await glob('src/**/*.cts')
+const entryPointsCJS = await glob('src/**/*.cts', {
+  ignore: ['**/*.test.ts', 'src/adapter/vendor/**/*'],
+})
 
 /**
  *

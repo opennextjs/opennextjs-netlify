@@ -267,20 +267,6 @@ function checkDynamicRoutes(
 
 export async function resolveRoutes(
   params: ResolveRoutesParams
-): Promise<ResolveRoutesResult & { logs: string }> {
-  const requestTracker: RequestTracker = {
-    logs: '',
-  }
-  const result = await RequestTrackerAsyncLocalStorage.run(requestTracker, () => resolveRoutesImpl(params)) // Initialize store
-
-  return {
-    ...result,
-    logs: requestTracker.logs,
-  }
-}
-
-export async function resolveRoutesImpl(
-  params: ResolveRoutesParams
 ): Promise<ResolveRoutesResult> {
   const {
     url: initialUrl,
@@ -453,7 +439,7 @@ export async function resolveRoutesImpl(
     requestBody,
   })
 
-  debugLog(`middlewareResult`, { middlewareResult })
+  debugLog(`middlewareResult wat`, { middlewareResult })
 
   // Check if middleware sent the response body
   if (middlewareResult.bodySent) {
@@ -467,8 +453,8 @@ export async function resolveRoutesImpl(
 
   // Handle middleware redirect
   if (middlewareResult.redirect) {
-    currentHeaders.set('Location', middlewareResult.redirect.url.toString())
     return {
+      redirect: middlewareResult.redirect,
       resolvedHeaders: currentHeaders,
       status: middlewareResult.redirect.status,
     }
