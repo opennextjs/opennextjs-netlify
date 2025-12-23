@@ -53,7 +53,21 @@ export function generateNextRoutingJsonConfig(
       beforeFiles: nextAdapterContext.routes.rewrites.beforeFiles,
       afterFiles: nextAdapterContext.routes.rewrites.afterFiles,
       dynamicRoutes: nextAdapterContext.routes.dynamicRoutes,
-      onMatch: nextAdapterContext.routes.headers,
+      onMatch: [
+        // Next.js assets contain a hash or entropy in their filenames, so they
+        // are guaranteed to be unique and cacheable indefinitely.
+        {
+          sourceRegex: join(
+            '/',
+            nextAdapterContext.config.basePath || '',
+            `_next/static/(?:[^/]+/pages|pages|chunks|runtime|css|image|media|${nextAdapterContext.buildId})/.+`,
+          ),
+          headers: {
+            'cache-control': 'public, max-age=31536000, immutable',
+          },
+        },
+        ...nextAdapterContext.routes.headers,
+      ],
       fallback: nextAdapterContext.routes.rewrites.fallback,
     },
     shouldNormalizeNextData,

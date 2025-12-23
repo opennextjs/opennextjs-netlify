@@ -35,13 +35,15 @@ export async function runNextRouting(
     headers: request.headers,
   } satisfies ResolveRoutesParams
 
-  const result = await resolveRoutes(routingConfig)
+  let { logs, ...result } = await resolveRoutes(routingConfig)
 
   let response: Response | undefined
 
   function debugLog(...args: unknown[]) {
-    result.logs += `${format(...args)}\n\n`
+    logs += `${format(...args)}\n\n`
   }
+
+  debugLog('Routing result', { result })
 
   if (result.matchedPathname) {
     const newUrl = new URL(result.matchedPathname, request.url)
@@ -133,16 +135,38 @@ export async function runNextRouting(
     response = Response.redirect(result.redirect.url, result.redirect.status)
   }
 
-  if (!response) {
+  if (response) {
+    if (result.resolvedHeaders) {
+      for (const [key, value] of Object.entries(result.resolvedHeaders)) {
+        // TODO: why are those here?
+        if (
+          [
+            'accept',
+            'connection',
+            'host',
+            'user-agent',
+            'x-forwarded-for',
+            'x-nf-blobs-info',
+            'x-nf-deploy-context',
+            'x-nf-deploy-id',
+            'x-nf-request-id',
+          ].includes(key.toLowerCase())
+        ) {
+          continue
+        }
+        response.headers.set(key, value)
+      }
+    }
+  } else {
     response = Response.json({ info: 'NOT YET HANDLED RESULT TYPE', ...result })
   }
 
   if (url.searchParams.has('debug_routing') || request.headers.has('x-debug-routing')) {
-    return Response.json(result)
+    return Response.json({ ...result, response, logs })
   }
 
-  if (result.logs) {
-    console.log('Routing logs:\n', result.logs)
+  if (logs) {
+    console.log('Routing logs:\n', logs)
   }
 
   return response
