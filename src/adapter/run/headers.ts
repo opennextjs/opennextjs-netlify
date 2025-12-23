@@ -93,7 +93,7 @@ export function determineFreshness(headers: Headers) {
   const age = (now - date) / 1000
 
   if (age <= settings.maxAge) {
-    return 'fresh'
+    return 'hit'
   }
 
   if (typeof settings.staleWhileRevalidate !== 'number') {
