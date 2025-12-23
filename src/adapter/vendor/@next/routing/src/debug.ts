@@ -10,6 +10,6 @@ export const RequestTrackerAsyncLocalStorage = new AsyncLocalStorage<RequestTrac
 export function debugLog(...args: unknown[]) {
   const store = RequestTrackerAsyncLocalStorage.getStore()
   if (store) {
-    store.logs += format(...args) + '\n\n'
+    store.logs += `${format(...args)}\n\n`
   }
 }

@@ -151,11 +151,11 @@ function matchesPathname(
 ): string | undefined {
   for (const candidate of pathnames) {
     if (pathname === candidate) {
-      debugLog(`[patch matching] matched path`, { candidate })
+      debugLog(`[path matching] matched path`, { candidate })
       return candidate
     }
   }
-  debugLog(`[patch matching] not matched path`, { pathname })
+  debugLog(`[path matching] not matched path`, { pathname })
   return undefined
 }
 

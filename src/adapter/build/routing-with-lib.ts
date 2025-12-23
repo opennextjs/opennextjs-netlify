@@ -21,9 +21,8 @@ const ROUTING_FUNCTION_DIR = join(
 
 type RoutingJsonConfig = Omit<RoutingPreparedConfig, 'invokeMiddleware'>
 
-export function generateRoutingRules(
+export function generateNextRoutingJsonConfig(
   nextAdapterContext: OnBuildCompleteContext,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   netlifyAdapterContext: NetlifyAdapterContext,
 ): RoutingJsonConfig {
   const pathnames = [
@@ -66,7 +65,7 @@ export async function onBuildComplete(
   nextAdapterContext: OnBuildCompleteContext,
   netlifyAdapterContext: NetlifyAdapterContext,
 ) {
-  const routing = await generateRoutingRules(nextAdapterContext, netlifyAdapterContext)
+  const routing = await generateNextRoutingJsonConfig(nextAdapterContext, netlifyAdapterContext)
 
   // for dev/debugging purposes only
   await writeFile('./routes.json', JSON.stringify(routing, null, 2))
@@ -81,11 +80,12 @@ export async function onBuildComplete(
     import { runNextRouting } from "./dist/adapter/run/routing-with-lib.js";
 
     const routingBuildTimeConfig = ${JSON.stringify(routing, null, 2)}
+    const preparedOutputs = ${JSON.stringify(netlifyAdapterContext.preparedOutputs, null, 2)}
 
     const asyncLoadMiddleware = () => ${netlifyAdapterContext.preparedOutputs.middleware ? `import('./next_middleware.js').then(mod => mod.default)` : `Promise.reject(new Error('No middleware output'))`}
 
     export default async function handler(request, context) {
-      return runNextRouting(request, context, routingBuildTimeConfig)
+      return runNextRouting(request, context, routingBuildTimeConfig, preparedOutputs)
     }
 
     export const config = ${JSON.stringify({
