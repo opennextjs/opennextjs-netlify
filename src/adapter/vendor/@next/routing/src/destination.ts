@@ -1,3 +1,5 @@
+import { debugLog } from './debug'
+
 /**
  * Replaces $1, $2, etc. and $name placeholders in the destination string
  * with matches from the regex and has conditions
@@ -67,7 +69,7 @@ export function applyDestination(currentUrl: URL, destination: string): URL {
       newUrl.searchParams.set(key, value)
     }
   }
-
+  debugLog('applyDestination', { currentUrl, destination, newUrl })
   return newUrl
 }
 

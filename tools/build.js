@@ -42,7 +42,10 @@ async function bundle(entryPoints, format, watch) {
         name: 'mark-runtime-modules-as-external',
         setup(pluginBuild) {
           pluginBuild.onResolve({ filter: /^\..*\.c?js$/ }, (args) => {
-            if (args.importer.includes(join(repoDirectory, 'src'))) {
+            if (
+              args.importer.includes(join(repoDirectory, 'src')) &&
+              !args.path.includes(join('vendor', '@next', 'routing'))
+            ) {
               return { path: args.path, external: true }
             }
           })
@@ -63,6 +66,8 @@ async function bundle(entryPoints, format, watch) {
         var { createRequire } = await import("node:module");
         return createRequire(import.meta.url);
       })();
+      var __filename = ''
+      var __dirname = ''
     `,
     }
   } else {
@@ -102,10 +107,6 @@ await Promise.all([
   bundle(entryPointsESM, 'esm', watch),
   ...entryPointsCJS.map((entry) => bundle([entry], 'cjs', watch)),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
-  cp('src/adapter/vendor', join(OUT_DIR, 'adapter/vendor'), {
-    recursive: true,
-    force: true,
-  }),
 ])
 
 async function ensureNoRegionalBlobsModuleDuplicates() {

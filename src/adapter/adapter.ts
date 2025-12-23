@@ -12,7 +12,7 @@ import {
 import { onBuildComplete as onBuildCompleteForMiddleware } from './build/middleware.js'
 import { createNetlifyAdapterContext } from './build/netlify-adapter-context.js'
 import { onBuildComplete as onBuildCompleteForPagesAndAppHandlers } from './build/pages-and-app-handlers.js'
-import { onBuildComplete as onBuildCompleteForRouting } from './build/routing.js'
+import { onBuildComplete as onBuildCompleteForRouting } from './build/routing-with-lib.js'
 import { onBuildComplete as onBuildCompleteForStaticAssets } from './build/static-assets.js'
 
 const adapter: NextAdapter = {

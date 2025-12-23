@@ -9,7 +9,7 @@ import {
 } from './destination'
 import { normalizeNextDataUrl, denormalizeNextDataUrl } from './next-data'
 import { detectLocale, detectDomainLocale, normalizeLocalePath } from './i18n'
-
+import { debugLog, RequestTracker, RequestTrackerAsyncLocalStorage } from './debug'
 /**
  * Attempts to match a route against the current URL and conditions
  */
@@ -151,9 +151,11 @@ function matchesPathname(
 ): string | undefined {
   for (const candidate of pathnames) {
     if (pathname === candidate) {
+      debugLog(`[patch matching] matched path`, { candidate })
       return candidate
     }
   }
+  debugLog(`[patch matching] not matched path`, { pathname })
   return undefined
 }
 
@@ -265,6 +267,20 @@ function checkDynamicRoutes(
 
 export async function resolveRoutes(
   params: ResolveRoutesParams
+): Promise<ResolveRoutesResult & { logs: string }> {
+  const requestTracker: RequestTracker = {
+    logs: '',
+  }
+  const result = await RequestTrackerAsyncLocalStorage.run(requestTracker, () => resolveRoutesImpl(params)) // Initialize store
+
+  return {
+    ...result,
+    logs: requestTracker.logs,
+  }
+}
+
+export async function resolveRoutesImpl(
+  params: ResolveRoutesParams
 ): Promise<ResolveRoutesResult> {
   const {
     url: initialUrl,
@@ -284,6 +300,8 @@ export async function resolveRoutes(
   let currentStatus: number | undefined
   const initialOrigin = initialUrl.origin
 
+  debugLog(`Entry`, { currentUrl, currentHeaders, currentStatus, initialOrigin })
+
   // Check if the original URL is a data URL and normalize if so
   let isDataUrl = false
   if (shouldNormalizeNextData) {
@@ -292,10 +310,12 @@ export async function resolveRoutes(
 
     if (isDataUrl) {
       currentUrl = normalizeNextDataUrl(currentUrl, basePath, buildId)
+      debugLog(`Normalized Next data URL`, { currentUrl })
     }
   }
 
   // Handle i18n locale detection and redirects
+  // TODO: add debug logs once i18n is configured
   if (i18n && !isDataUrl) {
     const pathname = currentUrl.pathname.startsWith(basePath)
       ? currentUrl.pathname.slice(basePath.length) || '/'
@@ -396,6 +416,8 @@ export async function resolveRoutes(
     initialOrigin
   )
 
+  debugLog(`beforeMiddlewareResult`, { beforeMiddlewareResult })
+
   if (beforeMiddlewareResult.status) {
     currentStatus = beforeMiddlewareResult.status
   }
@@ -421,6 +443,7 @@ export async function resolveRoutes(
   // Denormalize before invoking middleware if this was originally a data URL
   if (isDataUrl && shouldNormalizeNextData) {
     currentUrl = denormalizeNextDataUrl(currentUrl, basePath, buildId)
+    debugLog(`denormalized next data url`, { currentUrl })
   }
 
   // Invoke middleware
@@ -429,6 +452,8 @@ export async function resolveRoutes(
     headers: currentHeaders,
     requestBody,
   })
+
+  debugLog(`middlewareResult`, { middlewareResult })
 
   // Check if middleware sent the response body
   if (middlewareResult.bodySent) {
@@ -466,6 +491,8 @@ export async function resolveRoutes(
   // Normalize again after middleware if this was originally a data URL
   if (isDataUrl && shouldNormalizeNextData) {
     currentUrl = normalizeNextDataUrl(currentUrl, basePath, buildId)
+
+    debugLog(`normalize next data url`, { currentUrl })
   }
 
   // Process beforeFiles routes
@@ -475,6 +502,8 @@ export async function resolveRoutes(
     currentHeaders,
     initialOrigin
   )
+
+  debugLog(`beforeFilesResult`, { beforeFilesResult })
 
   if (beforeFilesResult.status) {
     currentStatus = beforeFilesResult.status
@@ -501,6 +530,7 @@ export async function resolveRoutes(
   // Denormalize before checking pathnames if this was originally a data URL
   if (isDataUrl && shouldNormalizeNextData) {
     currentUrl = denormalizeNextDataUrl(currentUrl, basePath, buildId)
+    debugLog(`denormalize next data url`, { currentUrl })
   }
 
   // Check if pathname matches any provided pathnames (pathnames are in denormalized form)
@@ -550,9 +580,11 @@ export async function resolveRoutes(
   // Normalize again before processing afterFiles if this was originally a data URL
   if (isDataUrl && shouldNormalizeNextData) {
     currentUrl = normalizeNextDataUrl(currentUrl, basePath, buildId)
+    debugLog(`normalize next data url`, { currentUrl })
   }
 
   // Process afterFiles routes
+  debugLog(`processing afterFiles routes`)
   for (const route of routes.afterFiles) {
     const match = matchRoute(route, currentUrl, currentHeaders)
 
@@ -657,10 +689,13 @@ export async function resolveRoutes(
   }
 
   // Check dynamic routes
+  debugLog(`processing dynamic routes`)
   for (const route of routes.dynamicRoutes) {
     const match = matchDynamicRoute(currentUrl.pathname, route)
 
     if (match.matched) {
+      debugLog(`dynamic route matched`, { currentUrl, match, route })
+
       // Check has/missing conditions
       const hasResult = checkHasConditions(
         route.has,
@@ -672,8 +707,12 @@ export async function resolveRoutes(
         currentUrl,
         currentHeaders
       )
+      
 
       if (hasResult.matched && missingMatched) {
+        if (route.destination) {
+          currentUrl = applyDestination(currentUrl, route.destination)
+        }
         // Check if the current pathname is in the provided pathnames list
         matchedPath = matchesPathname(currentUrl.pathname, pathnames)
         if (matchedPath) {
@@ -693,6 +732,7 @@ export async function resolveRoutes(
   }
 
   // Process fallback routes
+  debugLog(`processing fallback routes`)
   for (const route of routes.fallback) {
     const match = matchRoute(route, currentUrl, currentHeaders)
 
@@ -797,6 +837,7 @@ export async function resolveRoutes(
   }
 
   // No match found
+  debugLog(`no match found`)
   return {
     resolvedHeaders: currentHeaders,
     status: currentStatus,
