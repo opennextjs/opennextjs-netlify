@@ -50,8 +50,13 @@ export function denormalizeNextDataUrl(
       pathWithoutBase = pathname.slice(basePath.length)
     }
 
+    let pathWithoutBaseAndTrailingSlash = pathWithoutBase
+    if (pathWithoutBase.endsWith('/')) {
+      pathWithoutBaseAndTrailingSlash = pathWithoutBase.slice(0, -1)
+    }
+
     // Add the /_next/data/${buildId}/ prefix and .json extension
-    pathname = `${basePath}/_next/data/${buildId}${pathWithoutBase}.json`
+    pathname = `${basePath}/_next/data/${buildId}${pathWithoutBaseAndTrailingSlash}.json`
     newUrl.pathname = pathname
   }
 

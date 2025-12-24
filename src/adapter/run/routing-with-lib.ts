@@ -192,32 +192,31 @@ export async function runNextRouting(
       response = Response.redirect(result.redirect.url, result.redirect.status)
     }
 
-    if (!response && result.status)
-      if (response) {
-        if (result.resolvedHeaders) {
-          for (const [key, value] of Object.entries(result.resolvedHeaders)) {
-            // TODO: why are those here? those are request headers, but they are mixed with response headers
-            if (
-              [
-                'accept',
-                'connection',
-                'host',
-                'user-agent',
-                'x-forwarded-for',
-                'x-nf-blobs-info',
-                'x-nf-deploy-context',
-                'x-nf-deploy-id',
-                'x-nf-request-id',
-              ].includes(key.toLowerCase())
-            ) {
-              continue
-            }
-            response.headers.set(key, value)
+    if (response) {
+      if (result.resolvedHeaders) {
+        for (const [key, value] of result.resolvedHeaders.entries()) {
+          // TODO: why are those here? those are request headers, but they are mixed with response headers
+          if (
+            [
+              'accept',
+              'connection',
+              'host',
+              'user-agent',
+              'x-forwarded-for',
+              'x-nf-blobs-info',
+              'x-nf-deploy-context',
+              'x-nf-deploy-id',
+              'x-nf-request-id',
+            ].includes(key.toLowerCase())
+          ) {
+            continue
           }
+          response.headers.set(key, value)
         }
-      } else {
-        response = Response.json({ info: 'NOT YET HANDLED RESULT TYPE', ...result })
       }
+    } else {
+      response = Response.json({ info: 'NOT YET HANDLED RESULT TYPE', ...result })
+    }
 
     if (url.searchParams.has('debug_routing') || request.headers.has('x-debug-routing')) {
       return Response.json({ ...result, response, logs: requestTracker.logs })
