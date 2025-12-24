@@ -184,16 +184,22 @@ export async function runNextRouting(
       }
 
       if (!response) {
+        debugLog('invoking output', { pathname: result.matchedPathname })
         response = await context.next(adjustedRequest)
       }
     }
 
     if (!response && result.redirect) {
-      response = Response.redirect(result.redirect.url, result.redirect.status)
+      debugLog('preparing redirect')
+      response = new Response(null, {
+        status: result.redirect.status,
+        headers: { location: result.redirect.url.toString() },
+      })
     }
 
     if (response) {
       if (result.resolvedHeaders) {
+        debugLog('Applying response headers')
         for (const [key, value] of result.resolvedHeaders.entries()) {
           // TODO: why are those here? those are request headers, but they are mixed with response headers
           if (
