@@ -99,7 +99,7 @@ export const test = base.extend<
           expect(
             response.headers()['cache-control'],
             `_next/static asset (${response.url()}) should have immutable cache control`,
-          ).toContain('public,max-age=31536000,immutable')
+          ).toMatch(/public,\s*max-age=31536000,\s*immutable/)
         }
       })
 
