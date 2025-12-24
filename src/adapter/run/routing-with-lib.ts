@@ -8,7 +8,7 @@ import {
   resolveRoutes,
   responseToMiddlewareResult,
 } from '../vendor/@next/routing/dist/index.js'
-import type { ResolveRoutesParams } from '../vendor/@next/routing/dist/types.js'
+import type { ResolveRoutesParams } from '../vendor/@next/routing/dist/types.d.ts'
 
 import { determineFreshness } from './headers.js'
 import { getIsrResponse } from './isr.js'
