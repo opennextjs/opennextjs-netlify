@@ -47,7 +47,8 @@ export function generateNextRoutingJsonConfig(
   return {
     buildId: nextAdapterContext.buildId,
     // TODO: check i18n type error
-    // i18n: nextAdapterContext.config.i18n,
+    // @ts-expect-error something something about readonly
+    i18n: nextAdapterContext.config.i18n ?? undefined,
     basePath: nextAdapterContext.config.basePath,
     routes: {
       beforeMiddleware: nextAdapterContext.routes.redirects,
