@@ -49,7 +49,7 @@ export function matchIsrGroupFromOutputs(
 ) {
   const { pathname } = new URL(request.url)
 
-  const endpoint = outputs.endpoints[pathname.toLowerCase()]
+  const endpoint = outputs.endpoints[pathname]
   if (!endpoint || endpoint.type !== 'isr') {
     return
   }
