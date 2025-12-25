@@ -1,4 +1,5 @@
-import { rm } from 'fs/promises'
+import { rm } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 
 import type { NetlifyPluginOptions } from '@netlify/build'
 import { trace } from '@opentelemetry/api'
@@ -7,23 +8,22 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 import { restoreBuildCache, saveBuildCache } from './build/cache.js'
 import { copyPrerenderedContent } from './build/content/prerendered.js'
 import {
-  copyStaticAssets,
-  copyStaticContent,
   copyStaticExport,
   publishStaticDir,
-  setHeadersConfig,
-  unpublishStaticDir,
+  // unpublishStaticDir
 } from './build/content/static.js'
-import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/edge.js'
-import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
-import { setImageConfig } from './build/image-cdn.js'
+import { clearStaleEdgeHandlers } from './build/functions/edge.js'
+import {
+  clearStaleServerHandlers,
+  // createServerHandler
+} from './build/functions/server.js'
 import { PluginContext } from './build/plugin-context.js'
 import { setSkewProtection } from './build/skew-protection.js'
-import {
-  verifyAdvancedAPIRoutes,
-  verifyNetlifyFormsWorkaround,
-  verifyPublishDir,
-} from './build/verification.js'
+// import {
+//   verifyAdvancedAPIRoutes,
+//   verifyNetlifyFormsWorkaround,
+//   verifyPublishDir,
+// } from './build/verification.js'
 
 const skipPlugin =
   process.env.NETLIFY_NEXT_PLUGIN_SKIP === 'true' || process.env.NETLIFY_NEXT_PLUGIN_SKIP === '1'
@@ -51,8 +51,6 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
   }
 
   await tracer.withActiveSpan('onPreBuild', async (span) => {
-    // Enable Next.js standalone mode at build time
-    process.env.NEXT_PRIVATE_STANDALONE = 'true'
     const ctx = new PluginContext(options)
     if (options.constants.IS_LOCAL) {
       // Only clear directory if we are running locally as then we might have stale functions from previous
@@ -65,6 +63,11 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     }
     await setSkewProtection(ctx, span)
   })
+
+  // We will have a build plugin that will contain the adapter, we will still use some build plugin features
+  // for operations that are more idiomatic to do in build plugin rather than adapter due to helpers we can
+  // use in a build plugin context.
+  process.env.NEXT_ADAPTER_PATH = fileURLToPath(import.meta.resolve(`./adapter/adapter.js`))
 }
 
 export const onBuild = async (options: NetlifyPluginOptions) => {
@@ -76,7 +79,7 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
   await tracer.withActiveSpan('onBuild', async (span) => {
     const ctx = new PluginContext(options)
 
-    verifyPublishDir(ctx)
+    // verifyPublishDir(ctx)
 
     span.setAttribute('next.buildConfig', JSON.stringify(ctx.buildConfig))
 
@@ -87,20 +90,15 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
 
     // static exports only need to be uploaded to the CDN and setup /_next/image handler
     if (ctx.buildConfig.output === 'export') {
-      return Promise.all([copyStaticExport(ctx), setHeadersConfig(ctx), setImageConfig(ctx)])
+      return Promise.all([copyStaticExport(ctx)])
     }
 
-    await verifyAdvancedAPIRoutes(ctx)
-    await verifyNetlifyFormsWorkaround(ctx)
+    // await verifyAdvancedAPIRoutes(ctx)
+    // await verifyNetlifyFormsWorkaround(ctx)
 
     await Promise.all([
-      copyStaticAssets(ctx),
-      copyStaticContent(ctx),
-      copyPrerenderedContent(ctx),
-      createServerHandler(ctx),
-      createEdgeHandlers(ctx),
-      setHeadersConfig(ctx),
-      setImageConfig(ctx),
+      copyPrerenderedContent(ctx), // maybe this
+      // createServerHandler(ctx), // not this while we use standalone
     ])
   })
 }
@@ -131,13 +129,13 @@ export const onSuccess = async () => {
   })
 }
 
-export const onEnd = async (options: NetlifyPluginOptions) => {
-  if (skipPlugin) {
-    console.warn(skipText)
-    return
-  }
+// export const onEnd = async (options: NetlifyPluginOptions) => {
+//   if (skipPlugin) {
+//     console.warn(skipText)
+//     return
+//   }
 
-  await tracer.withActiveSpan('onEnd', async () => {
-    await unpublishStaticDir(new PluginContext(options))
-  })
-}
+//   await tracer.withActiveSpan('onEnd', async () => {
+//     // await unpublishStaticDir(new PluginContext(options))
+//   })
+// }

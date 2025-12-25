@@ -78,5 +78,14 @@ export default defineConfig({
   },
   esbuild: {
     include: ['**/*.ts', '**/*.cts'],
+    // https://github.com/vitest-dev/vitest/issues/6953, workaround for import.meta.resolve not being supported in vitest/esbuild
+    // that currently seems only fixed in prerelease version of vitest@4
+    footer: `
+    if (typeof __vite_ssr_import_meta__ !== 'undefined') {
+      __vite_ssr_import_meta__.resolve = (path) => {
+        return 'file://' + require.resolve(path.replace('.js', '.ts'));
+      }
+    }
+    `,
   },
 })
