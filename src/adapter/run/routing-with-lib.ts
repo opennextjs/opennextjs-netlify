@@ -184,7 +184,7 @@ export async function runNextRouting(
       }
 
       if (!response) {
-        debugLog('invoking output', { pathname: result.matchedPathname })
+        debugLog('invoking output', { pathname: result.matchedPathname, adjustedRequest })
         response = await context.next(adjustedRequest)
       }
     }
@@ -197,31 +197,34 @@ export async function runNextRouting(
       })
     }
 
-    if (response) {
-      if (result.resolvedHeaders) {
-        debugLog('Applying response headers')
-        for (const [key, value] of result.resolvedHeaders.entries()) {
-          // TODO: why are those here? those are request headers, but they are mixed with response headers
-          if (
-            [
-              'accept',
-              'connection',
-              'host',
-              'user-agent',
-              'x-forwarded-for',
-              'x-nf-blobs-info',
-              'x-nf-deploy-context',
-              'x-nf-deploy-id',
-              'x-nf-request-id',
-            ].includes(key.toLowerCase())
-          ) {
-            continue
-          }
-          response.headers.set(key, value)
+    if (response && result.resolvedHeaders) {
+      debugLog('Applying response headers')
+      for (const [key, value] of result.resolvedHeaders.entries()) {
+        // TODO: why are those here? those are request headers, but they are mixed with response headers
+        if (
+          [
+            'accept',
+            'connection',
+            'host',
+            'user-agent',
+            'x-forwarded-for',
+            'x-nf-blobs-info',
+            'x-nf-deploy-context',
+            'x-nf-deploy-id',
+            'x-nf-request-id',
+          ].includes(key.toLowerCase())
+        ) {
+          continue
         }
+        response.headers.set(key, value)
       }
-    } else {
-      response = Response.json({ info: 'NOT YET HANDLED RESULT TYPE', ...result })
+    }
+
+    if (!response && !result.status) {
+      // no match found, we just let thing through as there might be non-Next.js route to handle
+      debugLog('No next.js route matched, doing pass-through for any non-nextjs route handling', {
+        result,
+      })
     }
 
     if (url.searchParams.has('debug_routing') || request.headers.has('x-debug-routing')) {
