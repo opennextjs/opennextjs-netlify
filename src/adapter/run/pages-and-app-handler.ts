@@ -30,6 +30,12 @@ import {
 
 globalThis.AsyncLocalStorage = AsyncLocalStorage
 
+type AdapterRequestContext = {
+  revalidate: RevalidateFn
+}
+
+const AdapterRequestContextAsyncLocalStorage = new AsyncLocalStorage<AdapterRequestContext>()
+
 const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
 
 const globalThisWithRouterServerContext = globalThis as typeof globalThis & {
@@ -40,13 +46,19 @@ if (!globalThisWithRouterServerContext[RouterServerContextSymbol]) {
   globalThisWithRouterServerContext[RouterServerContextSymbol] = {}
 }
 
+const noOpWaitUntil = (promise: Promise<unknown>): void => {
+  // no-op
+}
 const revalidate: RevalidateFn = (config) => {
+  const waitUntil = Netlify.context?.waitUntil ?? noOpWaitUntil
   console.log('revalidate called with args:', config)
   return Promise.resolve()
 }
 
 globalThisWithRouterServerContext[RouterServerContextSymbol]['.'] = {
-  revalidate,
+  get revalidate(): RevalidateFn | undefined {
+    return AdapterRequestContextAsyncLocalStorage.getStore()?.revalidate
+  },
 }
 
 /**
@@ -193,116 +205,141 @@ export async function runHandler(
   outputs: Pick<NetlifyAdapterContext['preparedOutputs'], 'endpoints' | 'isrGroups'>,
   require: NodeJS.Require,
 ): Promise<Response> {
-  const tracer = getTracer()
-
-  return withActiveSpan(tracer, 'Adapter Handler', async (span) => {
-    const url = new URL(request.url)
-
-    console.log('Incoming request', request.url)
-    span?.setAttribute('next.match.pathname', url.pathname)
-
-    let matchType = 'miss'
-    let matchOutput: string | undefined
-
-    const endpoint = outputs.endpoints[url.pathname]
-
-    if (endpoint) {
-      matchType = endpoint.type
-      matchOutput = endpoint.id
-    }
-
-    span?.setAttributes({
-      'next.match.pathname': url.pathname,
-      'next.match.type': matchType,
-      'next.match.output': matchOutput,
-    })
-
-    if (!endpoint) {
-      span?.setAttribute(
-        'next.unexpected',
-        'We should not execute handler without matching endpoint',
+  const adapterRequestContext: AdapterRequestContext = {
+    revalidate: (config) => {
+      console.log('revalidate called with args:', config)
+      const promise = runHandler(
+        new Request(new URL(config.urlPath, request.url)),
+        context,
+        outputs,
+        require,
       )
-      return new Response('Not Found', { status: 404 })
-    }
+        .catch((error) => {
+          console.error('revalidate failed:', error)
+        })
+        .then(() => {
+          // we don't care about return - just making it void
+        })
 
-    // eslint-disable-next-line import/no-dynamic-require
-    const mod = await require(`./${endpoint.entry}`)
-    const nextHandler: NextHandler = mod.handler
+      context.waitUntil(promise)
 
-    if (typeof nextHandler !== 'function') {
-      span?.setAttribute('next.unexpected', 'nextHandler is not a function')
-    }
+      return promise
+    },
+  }
 
-    if (endpoint.type === 'isr') {
-      const isrDefs = matchIsrGroupFromOutputs(request, outputs)
+  return AdapterRequestContextAsyncLocalStorage.run(adapterRequestContext, async () => {
+    const tracer = getTracer()
 
-      if (!isrDefs) {
-        span?.setAttribute('next.unexpected', "can't find ISR group for pathname")
-        throw new Error("can't find ISR group for pathname")
+    return withActiveSpan(tracer, 'Adapter Handler', async (span) => {
+      const url = new URL(request.url)
+
+      console.log('Incoming request', request.url)
+      span?.setAttribute('next.match.pathname', url.pathname)
+
+      let matchType = 'miss'
+      let matchOutput: string | undefined
+
+      const endpoint = outputs.endpoints[url.pathname]
+
+      if (endpoint) {
+        matchType = endpoint.type
+        matchOutput = endpoint.id
       }
 
-      const isrDef = matchIsrDefinitionFromIsrGroup(request, isrDefs)
-
-      if (!isrDef) {
-        span?.setAttribute('next.unexpected', "can't find ISR definition for pathname")
-        throw new Error("can't find ISR definition for pathname")
-      }
-
-      // const handlerRequest = new Request(isrUrl, request)
-      const isrRequest = requestToIsrRequest(request, isrDef)
-
-      let resolveInitialPromiseToStore: (response: Response) => void = () => {
-        // no-op
-      }
-      const promise = new Promise<Response>((resolve) => {
-        resolveInitialPromiseToStore = resolve
+      span?.setAttributes({
+        'next.match.pathname': url.pathname,
+        'next.match.type': matchType,
+        'next.match.output': matchOutput,
       })
 
-      const response = await runNextHandler(isrRequest, context, nextHandler, async () => {
-        // first let's make sure we have current response ready
-        const isrResponseToStore = await promise
+      if (!endpoint) {
+        span?.setAttribute(
+          'next.unexpected',
+          'We should not execute handler without matching endpoint',
+        )
+        return new Response('Not Found', { status: 404 })
+      }
 
-        const groupUpdate = {
-          [generateIsrCacheKey(isrRequest, isrDef)]: await responseToCacheEntry(isrResponseToStore),
+      // eslint-disable-next-line import/no-dynamic-require
+      const mod = await require(`./${endpoint.entry}`)
+      const nextHandler: NextHandler = mod.handler
+
+      if (typeof nextHandler !== 'function') {
+        span?.setAttribute('next.unexpected', 'nextHandler is not a function')
+      }
+
+      if (endpoint.type === 'isr') {
+        const isrDefs = matchIsrGroupFromOutputs(request, outputs)
+
+        if (!isrDefs) {
+          span?.setAttribute('next.unexpected', "can't find ISR group for pathname")
+          throw new Error("can't find ISR group for pathname")
         }
 
-        console.log('handle remaining ISR work in background')
+        const isrDef = matchIsrDefinitionFromIsrGroup(request, isrDefs)
 
-        await Promise.all(
-          isrDefs.map(async (def) => {
-            if (def === isrDef) {
-              // we already did the current on
-              return
-            }
+        if (!isrDef) {
+          span?.setAttribute('next.unexpected', "can't find ISR definition for pathname")
+          throw new Error("can't find ISR definition for pathname")
+        }
 
-            const newUrl = new URL(isrRequest.url)
-            newUrl.pathname = def.pathname
+        // const handlerRequest = new Request(isrUrl, request)
+        const isrRequest = requestToIsrRequest(request, isrDef)
 
-            const newRequest = new Request(newUrl, isrRequest)
-            const newResponse = await runNextHandler(newRequest, context, nextHandler)
+        let resolveInitialPromiseToStore: (response: Response) => void = () => {
+          // no-op
+        }
+        const promise = new Promise<Response>((resolve) => {
+          resolveInitialPromiseToStore = resolve
+        })
 
-            const cacheKey = generateIsrCacheKey(newRequest, def)
-            groupUpdate[cacheKey] = await responseToCacheEntry(newResponse)
-          }),
-        )
+        const response = await runNextHandler(isrRequest, context, nextHandler, async () => {
+          // first let's make sure we have current response ready
+          const isrResponseToStore = await promise
 
-        console.log('we now should have all responses for the group', groupUpdate)
-        await storeIsrGroupUpdate(groupUpdate)
-      })
+          const groupUpdate = {
+            [generateIsrCacheKey(isrRequest, isrDef)]:
+              await responseToCacheEntry(isrResponseToStore),
+          }
 
-      if (!response.body) {
-        throw new Error('ISR response has no body')
+          console.log('handle remaining ISR work in background')
+
+          await Promise.all(
+            isrDefs.map(async (def) => {
+              if (def === isrDef) {
+                // we already did the current on
+                return
+              }
+
+              const newUrl = new URL(isrRequest.url)
+              newUrl.pathname = def.pathname
+
+              const newRequest = new Request(newUrl, isrRequest)
+              const newResponse = await runNextHandler(newRequest, context, nextHandler)
+
+              const cacheKey = generateIsrCacheKey(newRequest, def)
+              groupUpdate[cacheKey] = await responseToCacheEntry(newResponse)
+            }),
+          )
+
+          console.log('we now should have all responses for the group', groupUpdate)
+          await storeIsrGroupUpdate(groupUpdate)
+        })
+
+        if (!response.body) {
+          throw new Error('ISR response has no body')
+        }
+
+        const [body1, body2] = response.body.tee()
+        const returnedResponse = new Response(body1, response)
+        const isrResponseToStore = new Response(body2, response)
+
+        resolveInitialPromiseToStore(isrResponseToStore)
+
+        return returnedResponse
       }
 
-      const [body1, body2] = response.body.tee()
-      const returnedResponse = new Response(body1, response)
-      const isrResponseToStore = new Response(body2, response)
-
-      resolveInitialPromiseToStore(isrResponseToStore)
-
-      return returnedResponse
-    }
-
-    return await runNextHandler(request, context, nextHandler)
+      return await runNextHandler(request, context, nextHandler)
+    })
   })
 }
