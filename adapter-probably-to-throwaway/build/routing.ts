@@ -10,8 +10,11 @@ import {
   GENERATOR,
   NETLIFY_FRAMEWORKS_API_EDGE_FUNCTIONS,
   PLUGIN_DIR,
-} from './constants.js'
-import type { NetlifyAdapterContext, OnBuildCompleteContext } from './types.js'
+} from '../../src/adapter/build/constants.js'
+import type {
+  NetlifyAdapterContext,
+  OnBuildCompleteContext,
+} from '../../src/adapter/build/types.js'
 
 export function convertRedirectToRoutingRule(
   redirect: Pick<

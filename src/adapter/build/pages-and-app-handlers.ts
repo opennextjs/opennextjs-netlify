@@ -137,7 +137,10 @@ export async function onBuildComplete(
 
         try {
           isrGroup.fallback = {
-            content: await readFile(prerender.fallback.filePath, 'utf-8'),
+            content:
+              'filePath' in prerender.fallback
+                ? await readFile(prerender.fallback.filePath, 'utf-8')
+                : undefined,
             status: prerender.fallback.initialStatus,
             headers: normalizedHeaders,
             expiration: prerender.fallback.initialExpiration,

@@ -4,7 +4,7 @@ type Revalidate = number | false
 
 export type ISRCacheEntry = {
   /** body of initial response */
-  content: string
+  content?: string
   /**
    * initialStatus is the status code that should be applied
    * when serving the fallback

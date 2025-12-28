@@ -31,48 +31,13 @@ export function generateNextRoutingJsonConfig(
     ...Object.keys(netlifyAdapterContext.preparedOutputs.endpoints),
   ]
 
-  const hasMiddleware = Boolean(nextAdapterContext.outputs.middleware)
-  const hasPages =
-    nextAdapterContext.outputs.pages.length !== 0 ||
-    nextAdapterContext.outputs.pagesApi.length !== 0
-
-  const shouldNormalizeNextData =
-    hasMiddleware &&
-    hasPages &&
-    !(
-      nextAdapterContext.config.skipMiddlewareUrlNormalize ||
-      nextAdapterContext.config.skipProxyUrlNormalize
-    )
-
   return {
     buildId: nextAdapterContext.buildId,
     // TODO: check i18n type error
     // @ts-expect-error something something about readonly
     i18n: nextAdapterContext.config.i18n ?? undefined,
     basePath: nextAdapterContext.config.basePath,
-    routes: {
-      beforeMiddleware: nextAdapterContext.routes.redirects,
-      beforeFiles: nextAdapterContext.routes.rewrites.beforeFiles,
-      afterFiles: nextAdapterContext.routes.rewrites.afterFiles,
-      dynamicRoutes: nextAdapterContext.routes.dynamicRoutes,
-      onMatch: [
-        // Next.js assets contain a hash or entropy in their filenames, so they
-        // are guaranteed to be unique and cacheable indefinitely.
-        {
-          sourceRegex: join(
-            '/',
-            nextAdapterContext.config.basePath || '',
-            `_next/static/(?:[^/]+/pages|pages|chunks|runtime|css|image|media|${nextAdapterContext.buildId})/.+`,
-          ),
-          headers: {
-            'cache-control': 'public, max-age=31536000, immutable',
-          },
-        },
-        ...nextAdapterContext.routes.headers,
-      ],
-      fallback: nextAdapterContext.routes.rewrites.fallback,
-    },
-    shouldNormalizeNextData,
+    routes: nextAdapterContext.routing,
     pathnames,
   }
 }

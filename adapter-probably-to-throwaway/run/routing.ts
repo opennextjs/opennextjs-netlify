@@ -5,10 +5,10 @@ import type { Context } from '@netlify/edge-functions'
 import { type Span, SpanStatusCode, trace } from '@opentelemetry/api'
 import { SugaredTracer } from '@opentelemetry/api/experimental'
 
-import type { NetlifyAdapterContext } from '../build/types.js'
+import type { NetlifyAdapterContext } from '../../src/adapter/build/types.js'
 
-import { determineFreshness } from './headers.js'
-import { getIsrResponse } from './isr.js'
+import { determineFreshness } from '../../src/adapter/run/headers.js'
+import { getIsrResponse } from '../../src/adapter/run/isr.js'
 
 const routingPhases = ['entry', 'filesystem', 'rewrite', 'hit', 'error'] as const
 const routingPhasesWithoutHitOrError = routingPhases.filter(
