@@ -678,7 +678,8 @@ export async function resolveRoutes(
   // Check dynamic routes
   debugLog(`processing dynamic routes`)
   for (const route of routes.dynamicRoutes) {
-    const match = matchDynamicRoute(currentUrl.pathname, route)
+    // const match = matchDynamicRoute(currentUrl.pathname, route)
+    const match = matchRoute(route, currentUrl, currentHeaders)
 
     if (match.matched) {
       debugLog(`dynamic route matched`, { currentUrl, match, route })
@@ -696,8 +697,8 @@ export async function resolveRoutes(
       )
 
       if (hasResult.matched && missingMatched) {
-        if (route.destination) {
-          currentUrl = applyDestination(currentUrl, route.destination)
+        if (match.destination) {
+          currentUrl = applyDestination(currentUrl, match.destination)
         }
         // Check if the current pathname is in the provided pathnames list
         matchedPath = matchesPathname(currentUrl.pathname, pathnames)
@@ -708,7 +709,7 @@ export async function resolveRoutes(
           )
           return {
             matchedPathname: matchedPath,
-            routeMatches: match.params,
+            // routeMatches: match.params,
             resolvedHeaders: finalHeaders,
             status: currentStatus,
           }
