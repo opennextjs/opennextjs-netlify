@@ -709,7 +709,7 @@ export async function resolveRoutes(
           )
           return {
             matchedPathname: matchedPath,
-            // routeMatches: match.params,
+            routeMatches: match.regexMatches?.groups,
             resolvedHeaders: finalHeaders,
             status: currentStatus,
           }
