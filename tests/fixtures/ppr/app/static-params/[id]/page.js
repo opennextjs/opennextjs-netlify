@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { connection } from 'next/server'
 
 export async function generateStaticParams() {
-  return [{ dynamic: '1' }, { dynamic: '2' }]
+  return [{ id: '1' }, { id: '2' }]
 }
 
 async function getData(params) {
@@ -31,14 +31,15 @@ async function Content(params) {
   )
 }
 
-export default async function DynamicPage({ params }) {
-  const { dynamic } = await params
+// This is a dynamic page (segment) where all params are statically generated
+export default async function DynamicPageWithStaticParams({ params }) {
+  const { id } = await params
 
   return (
     <main>
-      <h1>Dynamic Page: {dynamic}</h1>
+      <h1>Dynamic Page (static params): {id}</h1>
       <Suspense fallback={<div>loading...</div>}>
-        <Content id={dynamic} />
+        <Content id={id} />
       </Suspense>
     </main>
   )

@@ -269,6 +269,8 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
             const value = await buildAppCacheValue(
               join(ctx.publishDir, 'server/app', key),
               shouldUseAppPageKind,
+              // shells always have `renderingMode === 'PARTIALLY_STATIC'`
+              false,
             )
 
             await writeCacheEntry(key, value, Date.now(), ctx)
