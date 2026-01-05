@@ -3,6 +3,12 @@ on:
   push:
     branches:
       - v4
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to publish from"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,28 +24,41 @@ jobs:
         with:
           target-branch: v4
       - uses: actions/checkout@v6
-        if: ${{ steps.release.outputs.releases_created }}
+        if: ${{ steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
+      - name: Checkout tag for manual publish
+        if: github.event_name == 'workflow_dispatch'
+        run: git checkout ${{ github.event.inputs.tag }}
       - uses: actions/setup-node@v6
         with:
           node-version: "18"
           cache: "npm"
           check-latest: true
           registry-url: "https://registry.npmjs.org"
-        if: ${{ steps.release.outputs.releases_created }}
+        if: ${{ steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
       - uses: denoland/setup-deno@v1
         with:
           deno-version: v1.x
-        if: ${{ steps.release.outputs.releases_created }}
+        if: ${{ steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
       - name: Install dependencies
         run: CI=1 npm ci
-        if: ${{ steps.release.outputs.releases_created }}
-      - run: npm publish packages/runtime/ --provenance --tag v4
-        if: ${{ steps.release.outputs['packages/runtime--version'] }}
+        if: ${{ steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
+      - run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            npm publish packages/runtime/ --provenance --tag latest-4 || true
+          else
+            npm publish packages/runtime/ --provenance --tag latest-4
+          fi
+        if: ${{ steps.release.outputs['packages/runtime--version'] || github.event_name == 'workflow_dispatch' }}
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-      - run: npm publish packages/next/ --provenance
+      - run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            npm publish packages/next/ --provenance || true
+          else
+            npm publish packages/next/ --provenance
+          fi
         # the packages/next is not next-runtime, it's @netlify/next which is enhanced middleware
         # so we don't specify a non-latest tag because this package is no longer developed in the v5 line / main branch
-        if: ${{ steps.release.outputs['packages/next--version'] }}
+        if: ${{ steps.release.outputs['packages/next--version'] || github.event_name == 'workflow_dispatch' }}
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
