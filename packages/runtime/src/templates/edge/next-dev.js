@@ -41,8 +41,8 @@ const handler = async (req, context) => {
     middleware = isFunction(nextMiddleware.middleware)
       ? nextMiddleware.middleware
       : isFunction(nextMiddleware.default)
-      ? nextMiddleware.default
-      : undefined
+        ? nextMiddleware.default
+        : undefined
 
     if (!middleware) {
       throw new Error('The middleware must export a `middleware` or a `default` function')

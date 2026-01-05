@@ -31,7 +31,7 @@
   },
   "config": {
     "eslint": "--cache --format=codeframe --max-warnings=0 \"{packages,test,.github}/**/*.{ts,js,md,html}\" \"*.{ts,js,md,html}\" \".*.{ts,js,md,html}\"",
-    "prettier": "--loglevel=warn \"{packages,test,.github}/**/*.{ts,js,md,yml,json,html}\" \"*.{ts,js,yml,json,html}\" \".*.{ts,js,yml,json,html}\" \"!package-lock.json\""
+    "prettier": "\"{packages,test,.github}/**/*.{ts,js,md,yml,json,html}\" \"*.{ts,js,yml,json,html}\" \".*.{ts,js,yml,json,html}\" \"!package-lock.json\""
   },
   "repository": {
     "type": "git",
@@ -85,7 +85,7 @@
     "outdent": "^0.8.0",
     "pathe": "^1.1.0",
     "playwright-chromium": "1.40.1",
-    "prettier": "^2.1.2",
+    "prettier": "^3.7.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "rimraf": "^3.0.2",

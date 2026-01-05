@@ -225,8 +225,8 @@ export const moveStaticPages = async ({
     console.log(
       yellowBright(outdent`
         Skipped moving ${matchedPages.size} ${
-        matchedPages.size === 1 ? 'file because it matches' : 'files because they match'
-      } middleware, so cannot be deployed to the CDN and will be served from the origin instead.
+          matchedPages.size === 1 ? 'file because it matches' : 'files because they match'
+        } middleware, so cannot be deployed to the CDN and will be served from the origin instead.
         This is fine, but we're letting you know because it may not be what you expect.
       `),
     )

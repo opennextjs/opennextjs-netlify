@@ -131,8 +131,8 @@ export const checkZipSize = async (
   console.log(
     yellowBright(outdent`
       The function zip ${blueBright(relative(process.cwd(), file))} size is ${prettyBytes(
-      fileSize,
-    )}, which is larger than the recommended maximum size of ${prettyBytes(warningSize)}.
+        fileSize,
+      )}, which is larger than the recommended maximum size of ${prettyBytes(warningSize)}.
       This will fail the build if the unzipped size is bigger than the maximum size of ${prettyBytes(maxSize)}.
       There are a few reasons this could happen. You may have accidentally bundled a large dependency, or you might have a
       large number of pre-rendered pages included.
