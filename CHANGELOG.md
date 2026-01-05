@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.3...v5.15.4) (2026-01-05)
+
+
+### Bug Fixes
+
+* handle PPR shells for fully dynamic segments on Next.js 16.1.0+ ([#3349](https://github.com/opennextjs/opennextjs-netlify/issues/3349)) ([be30cf5](https://github.com/opennextjs/opennextjs-netlify/commit/be30cf50a5be67929bd0f8a3cd6a794d95434243))
+
 ## [5.15.3](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.2...v5.15.3) (2025-12-18)
 
 
