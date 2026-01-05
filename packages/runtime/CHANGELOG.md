@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.41.4](https://github.com/opennextjs/opennextjs-netlify/compare/plugin-nextjs-v4.41.3...plugin-nextjs-v4.41.4) (2026-01-05)
+
+
+### Bug Fixes
+
+* don't follow redirects for rewrites ([#2423](https://github.com/opennextjs/opennextjs-netlify/issues/2423)) ([e59c617](https://github.com/opennextjs/opennextjs-netlify/commit/e59c617b29db7647e81dcdaf7788644521dc6636))
+* use modern import attributes syntax for JSON imports ([#3352](https://github.com/opennextjs/opennextjs-netlify/issues/3352)) ([672cdcd](https://github.com/opennextjs/opennextjs-netlify/commit/672cdcd9019b896129cf5834da1f6c10cec9373b))
+
 ## [4.41.3](https://github.com/netlify/next-runtime/compare/plugin-nextjs-v4.41.2...plugin-nextjs-v4.41.3) (2023-12-08)
 
 
