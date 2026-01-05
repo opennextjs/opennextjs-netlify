@@ -57,7 +57,7 @@ jobs:
           NETLIFY_SITE_ID: 1d5a5c76-d445-4ae5-b694-b0d3f2e2c395
           # RUN_SKIPPED_TESTS: true
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v6
         # upload test results
         if: ${{ always() }}
         name: Upload test results
