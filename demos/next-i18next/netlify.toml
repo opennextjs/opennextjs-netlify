@@ -3,6 +3,10 @@ command = "next build"
 publish = ".next"
 ignore = "if [ $CACHED_COMMIT_REF == $COMMIT_REF ]; then (exit 1); else git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF ../..; fi;"
 
+[build.environment]
+# Use Node 18 for build - required for Netlify build plugins
+NODE_VERSION = "18"
+
 [[plugins]]
 package = "@netlify/plugin-nextjs"
 

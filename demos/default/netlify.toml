@@ -9,7 +9,7 @@ ignore = "if [ $CACHED_COMMIT_REF == $COMMIT_REF ]; then (exit 1); else git diff
 CYPRESS_CACHE_FOLDER = "../node_modules/.CypressBinary"
 # set TERM variable for terminal output
 TERM = "xterm"
-NODE_VERSION = "16.15.1"
+NODE_VERSION = "18"
 NEXT_SPLIT_API_ROUTES = "true"
 NEXT_BUNDLE_BASED_ON_NFT_FILES = "true"
 

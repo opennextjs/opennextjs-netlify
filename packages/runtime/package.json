@@ -55,7 +55,7 @@
     "publish:test": "cd .. && npm ci && npm test",
     "clean": "rimraf lib dist-types",
     "build": "run-s build:*",
-    "build:vendor": "rimraf src/templates/vendor && deno vendor src/templates/vendor.ts --output=src/templates/vendor && node patch-import-map.mjs && patch src/templates/vendor/deno.land/x/html_rewriter@v0.1.0-pre.17/index.ts html_rewriter.patch",
+    "build:vendor": "rimraf src/templates/vendor && curl -fsSL https://deno.land/x/install/install.sh | DENO_INSTALL=./.deno sh -s v1.46.3 && DENO_NO_PACKAGE_JSON=1 ./.deno/bin/deno vendor src/templates/vendor.ts --output=src/templates/vendor && node patch-import-map.mjs && patch src/templates/vendor/deno.land/x/html_rewriter@v0.1.0-pre.17/index.ts html_rewriter.patch",
     "build:tsc": "tsc",
     "watch": "tsc --watch",
     "prepare": "npm run build"

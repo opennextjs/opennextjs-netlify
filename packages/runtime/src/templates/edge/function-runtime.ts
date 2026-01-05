@@ -2,7 +2,7 @@ import type { Context } from 'https://edge.netlify.com'
 // Available at build time
 import { _DEFINITION as edgeFunctionDefinition, default as edgeFunction } from './bundle.js'
 import { buildNextRequest, buildResponse, redirectTrailingSlash } from '../edge-shared/utils.ts'
-import nextConfig from '../edge-shared/nextConfig.json' assert { type: 'json' }
+import nextConfig from '../edge-shared/nextConfig.json' with { type: 'json' }
 
 const handler = async (req: Request, context: Context) => {
   const url = new URL(req.url)

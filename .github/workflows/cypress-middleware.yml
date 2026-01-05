@@ -3,8 +3,6 @@ on:
   pull_request:
     types: [opened, synchronize]
   push:
-    branches:
-      - main
     paths:
       - 'demos/middleware/**/*.{js,jsx,ts,tsx}'
       - 'cypress/e2e/middleware/**/*.{ts,js}'
