@@ -2,6 +2,10 @@
 command = "next build"
 publish = ".next"
 
+[build.environment]
+# Use Node 18 for build - required for Netlify build plugins
+NODE_VERSION = "18"
+
 [[plugins]]
 package = "@netlify/plugin-nextjs"
 

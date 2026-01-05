@@ -5,6 +5,10 @@ command = "npm run build"
 # See https://docs.netlify.com/configure-builds/monorepos/#build-multiple-sites-from-a-monorepo
 publish = "apps/web/.next"
 
+[build.environment]
+# Use Node 18 for build - required for Netlify build plugins
+NODE_VERSION = "18"
+
 [dev]
 command = "npm run dev"
 
