@@ -384,6 +384,7 @@ test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=1
 test<FixtureTestContext>('rewrites to external addresses dont use compression', async (ctx) => {
   await createFixture('simple', ctx)
   await runPlugin(ctx)
+
   const page = await invokeFunction(ctx, {
     url: '/rewrite-no-basepath',
     headers: { 'accept-encoding': 'gzip' },
@@ -399,17 +400,19 @@ test.skipIf(
 )<FixtureTestContext>('Test that a simple next app with PPR is working', async (ctx) => {
   await createFixture('ppr', ctx)
   await runPlugin(ctx)
-  // check if the blob entries where successful set on the build plugin
+
+  // check if the blob entries were successfully set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
   expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
     [
-      '/1',
-      '/2',
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-      isExperimentalPPRHardDeprecated() ? undefined : '/[dynamic]',
+      isExperimentalPPRHardDeprecated() ? undefined : '/static-params/[id]',
       shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+      '/dynamic-params/[id]',
       '/index',
+      '/static-params/1',
+      '/static-params/2',
       '404.html',
       '500.html',
     ].filter(Boolean),
@@ -420,13 +423,18 @@ test.skipIf(
   expect(home.statusCode).toBe(200)
   expect(load(home.body)('h1').text()).toBe('Home')
 
-  const dynamicPrerendered = await invokeFunction(ctx, { url: '/1' })
-  expect(dynamicPrerendered.statusCode).toBe(200)
-  expect(load(dynamicPrerendered.body)('h1').text()).toBe('Dynamic Page: 1')
+  const res1 = await invokeFunction(ctx, { url: '/static-params/1' })
+  expect(res1.statusCode).toBe(200)
+  expect(load(res1.body)('h1').text()).toBe('Dynamic Page (static params): 1')
 
-  const dynamicNotPrerendered = await invokeFunction(ctx, { url: '/3' })
-  expect(dynamicNotPrerendered.statusCode).toBe(200)
-  expect(load(dynamicNotPrerendered.body)('h1').text()).toBe('Dynamic Page: 3')
+  const res2 = await invokeFunction(ctx, { url: '/static-params/3' })
+  expect(res2.statusCode).toBe(200)
+  expect(load(res2.body)('h1').text()).toBe('Dynamic Page (static params): 3')
+
+  const res3 = await invokeFunction(ctx, { url: '/dynamic-params/123' })
+  expect(res3.statusCode).toBe(200)
+  // on this page, the `await params` is in a Suspense boundary
+  expect(load(res3.body)('body').text()).toContain('loading...')
 })
 
 // setup for this test only works with webpack builds due to usage of ` __non_webpack_require__` to avoid bundling a file
