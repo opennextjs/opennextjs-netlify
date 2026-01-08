@@ -37,7 +37,8 @@ if (!('getAll' in Headers.prototype)) {
 }
 //  Next uses blob: urls to refer to local assets, so we need to intercept these
 const _fetch = globalThis.fetch
-const fetch /* type {typeof globalThis.fetch} */ = async (url, init) => {
+/* type {typeof globalThis.fetch} */
+globalThis.fetch = async function fetch (url, init) {
   try {
     if (url instanceof URL && url.href?.startsWith('blob:')) {
       const key = url.href.slice(5)
@@ -74,4 +75,4 @@ if (typeof require === 'undefined') {
 
 // Next edge runtime uses "self" as a function-scoped global-like object, but some of the older polyfills expect it to equal globalThis
 // See https://nextjs.org/docs/basic-features/supported-browsers-features#polyfills
-const self = { ...globalThis, fetch }
+globalThis.self = { ...globalThis, fetch }
