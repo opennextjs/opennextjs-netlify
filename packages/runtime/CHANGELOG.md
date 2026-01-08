@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.41.5](https://github.com/opennextjs/opennextjs-netlify/compare/plugin-nextjs-v4.41.4...plugin-nextjs-v4.41.5) (2026-01-08)
+
+
+### Bug Fixes
+
+* **v4:** make `fetch` and `self` both be reassignable instead of `const` ([#3360](https://github.com/opennextjs/opennextjs-netlify/issues/3360)) ([b4f2906](https://github.com/opennextjs/opennextjs-netlify/commit/b4f2906cad4aad4b31a720073c5be3adfe12d256))
+
 ## [4.41.4](https://github.com/opennextjs/opennextjs-netlify/compare/plugin-nextjs-v4.41.3...plugin-nextjs-v4.41.4) (2026-01-05)
 
 
