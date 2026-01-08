@@ -37,7 +37,8 @@ if (!('getAll' in Headers.prototype)) {
 }
 //  Next uses blob: urls to refer to local assets, so we need to intercept these
 const _fetch = globalThis.fetch
-const fetch /* type {typeof globalThis.fetch} */ = async (url, init) => {
+/* type {typeof globalThis.fetch} */
+async function fetch (url, init) {
   try {
     if (url instanceof URL && url.href?.startsWith('blob:')) {
       const key = url.href.slice(5)
