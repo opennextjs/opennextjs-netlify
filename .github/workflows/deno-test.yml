@@ -19,7 +19,7 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: 2.6.3
+          deno-version: 2.6.4
 
       - name: 'Install dependencies'
         run: npm ci
