@@ -224,8 +224,8 @@ export const setCacheControlHeaders = (
   if (
     typeof requestContext.routeHandlerRevalidate !== 'undefined' &&
     ['GET', 'HEAD'].includes(request.method) &&
-    !headers.has('cdn-cache-control') &&
-    !headers.has('netlify-cdn-cache-control')
+    (headers.has('x-nextjs-cache') ||
+      (!headers.has('cdn-cache-control') && !headers.has('netlify-cdn-cache-control')))
   ) {
     // handle CDN Cache Control on Route Handler responses
     setCacheControlFromRequestContext(headers, requestContext.routeHandlerRevalidate)
@@ -257,26 +257,34 @@ export const setCacheControlHeaders = (
   if (
     cacheControl !== null &&
     ['GET', 'HEAD'].includes(request.method) &&
-    !headers.has('cdn-cache-control') &&
-    !headers.has('netlify-cdn-cache-control')
+    (headers.has('x-nextjs-cache') ||
+      (!headers.has('cdn-cache-control') && !headers.has('netlify-cdn-cache-control')))
   ) {
     // handle CDN Cache Control on ISR and App Router page responses
     const browserCacheControl = omitHeaderValues(cacheControl, [
       's-maxage',
       'stale-while-revalidate',
     ])
+
+    // before https://github.com/vercel/next.js/pull/86554 Next.js was using only cache-control,
+    // after that it will prefer cdn-cache-control, in particular for stale-while-revalidate directive
+    // so we need to handle both headers here
+    const cacheControlForCdnFromNext = headers.get('cdn-cache-control') ?? cacheControl
+
     const cdnCacheControl =
       // if we are serving already stale response, instruct edge to not attempt to cache that response
       headers.get('x-nextjs-cache') === 'STALE'
         ? 'public, max-age=0, must-revalidate, durable'
         : [
-            ...getHeaderValueArray(cacheControl).map((value) =>
+            ...getHeaderValueArray(cacheControlForCdnFromNext).map((value) =>
               value === 'stale-while-revalidate' ? 'stale-while-revalidate=31536000' : value,
             ),
             'durable',
           ].join(', ')
 
     headers.set('cache-control', browserCacheControl || 'public, max-age=0, must-revalidate')
+    // if cdn-cache-control is set by Next.js we need to remove it to avoid confusion, as we will be using netlify-cdn-cache-control
+    headers.delete('cdn-cache-control')
     headers.set('netlify-cdn-cache-control', cdnCacheControl)
     return
   }

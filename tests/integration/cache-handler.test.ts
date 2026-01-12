@@ -98,7 +98,7 @@ describe('page router', () => {
       expect.objectContaining({
         'cache-status': '"Next.js"; hit',
         'netlify-cdn-cache-control': nextVersionSatisfies('>=15.0.0-canary.187')
-          ? `s-maxage=5, stale-while-revalidate=${31536000 - 5}, durable`
+          ? expect.stringMatching(/(s-maxage|max-age)=5, stale-while-revalidate=31535995, durable/)
           : 's-maxage=5, stale-while-revalidate=31536000, durable',
       }),
     )
@@ -255,7 +255,7 @@ describe('app router', () => {
       expect.objectContaining({
         'cache-status': '"Next.js"; hit',
         'netlify-cdn-cache-control': nextVersionSatisfies('>=15.0.0-canary.187')
-          ? 's-maxage=31536000, durable'
+          ? expect.stringMatching(/(s-maxage|max-age)=31536000, durable/)
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
       }),
     )

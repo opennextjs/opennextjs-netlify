@@ -527,7 +527,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
         // ensure prefetch respond with RSC data
         expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
         expect(prefetchResponse.headers()['debug-netlify-cdn-cache-control']).toMatch(
-          /s-maxage=31536000/,
+          /(max-age|s-maxage)=31536000/,
         )
 
         const htmlResponse = await page.goto(
@@ -537,7 +537,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
         // ensure we get HTML response
         expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
         expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(
-          /s-maxage=31536000/,
+          /(max-age|s-maxage)=31536000/,
         )
       })
 
@@ -560,7 +560,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
         // ensure prefetch respond with RSC data
         expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
         expect(prefetchResponse.headers()['debug-netlify-cdn-cache-control']).toMatch(
-          /s-maxage=31536000/,
+          /(max-age|s-maxage)=31536000/,
         )
 
         const htmlResponse = await page.goto(
@@ -570,7 +570,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
         // ensure we get HTML response
         expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
         expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(
-          /s-maxage=31536000/,
+          /(max-age|s-maxage)=31536000/,
         )
       })
     })

@@ -90,9 +90,9 @@ test.describe('app router on-demand revalidation (pre Next 16 APIs)', () => {
       const headers1 = response1?.headers() || {}
       expect(response1?.status()).toBe(200)
       expect(headers1['x-nextjs-cache']).toBeUndefined()
-      expect(headers1['debug-netlify-cdn-cache-control']).toBe(
+      expect(headers1['debug-netlify-cdn-cache-control']).toMatch(
         nextVersionSatisfies('>=15.0.0-canary.187')
-          ? 's-maxage=31536000, durable'
+          ? /(max-age|s-maxage)=31536000, durable/
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
       )
 
@@ -120,9 +120,9 @@ test.describe('app router on-demand revalidation (pre Next 16 APIs)', () => {
         // as we reuse cached response
         expect(headers2['cache-status']).toMatch(/"Next.js"; hit/m)
       }
-      expect(headers2['debug-netlify-cdn-cache-control']).toBe(
+      expect(headers2['debug-netlify-cdn-cache-control']).toMatch(
         nextVersionSatisfies('>=15.0.0-canary.187')
-          ? 's-maxage=31536000, durable'
+          ? /(max-age|s-maxage)=31536000, durable/
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
       )
 
@@ -152,9 +152,9 @@ test.describe('app router on-demand revalidation (pre Next 16 APIs)', () => {
       const headers3 = response3?.headers() || {}
       expect(response3?.status()).toBe(200)
       expect(headers3?.['x-nextjs-cache']).toBeUndefined()
-      expect(headers3['debug-netlify-cdn-cache-control']).toBe(
+      expect(headers3['debug-netlify-cdn-cache-control']).toMatch(
         nextVersionSatisfies('>=15.0.0-canary.187')
-          ? 's-maxage=31536000, durable'
+          ? /(max-age|s-maxage)=31536000, durable/
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
       )
 
@@ -181,9 +181,9 @@ test.describe('app router on-demand revalidation (pre Next 16 APIs)', () => {
         // as we reuse cached response
         expect(headers4['cache-status']).toMatch(/"Next.js"; hit/m)
       }
-      expect(headers4['debug-netlify-cdn-cache-control']).toBe(
+      expect(headers4['debug-netlify-cdn-cache-control']).toMatch(
         nextVersionSatisfies('>=15.0.0-canary.187')
-          ? 's-maxage=31536000, durable'
+          ? /(max-age|s-maxage)=31536000, durable/
           : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
       )
 
@@ -269,7 +269,9 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
             const headers1 = response1?.headers() || {}
             expect(response1?.status()).toBe(200)
             expect(headers1['x-nextjs-cache']).toBeUndefined()
-            expect(headers1['debug-netlify-cdn-cache-control']).toBe('s-maxage=31536000, durable')
+            expect(headers1['debug-netlify-cdn-cache-control']).toMatch(
+              /(max-age|s-maxage)=31536000, durable/,
+            )
 
             const date1 = await page.getByTestId('date-now').textContent()
 
@@ -298,7 +300,9 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
               // as we reuse cached response
               expect(headers2['cache-status']).toMatch(/"Next.js"; hit/m)
             }
-            expect(headers2['debug-netlify-cdn-cache-control']).toBe('s-maxage=31536000, durable')
+            expect(headers2['debug-netlify-cdn-cache-control']).toMatch(
+              /(max-age|s-maxage)=31536000, durable/,
+            )
 
             // the page is cached
             const date2 = await page.getByTestId('date-now').textContent()
@@ -367,7 +371,9 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
               // as we reuse cached response
               expect(headers4['cache-status']).toMatch(/"Next.js"; hit/m)
             }
-            expect(headers4['debug-netlify-cdn-cache-control']).toBe('s-maxage=31536000, durable')
+            expect(headers4['debug-netlify-cdn-cache-control']).toMatch(
+              /(max-age|s-maxage)=31536000, durable/,
+            )
 
             // the page is cached
             const date4 = await page.getByTestId('date-now').textContent()
@@ -401,7 +407,9 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
             const headers5 = response5?.headers() || {}
             expect(response5?.status()).toBe(200)
             expect(headers5?.['x-nextjs-cache']).toBeUndefined()
-            expect(headers5['debug-netlify-cdn-cache-control']).toBe('s-maxage=31536000, durable')
+            expect(headers5['debug-netlify-cdn-cache-control']).toMatch(
+              /(max-age|s-maxage)=31536000, durable/,
+            )
 
             // the page has now an updated date
             const date5 = await page.getByTestId('date-now').textContent()
@@ -446,7 +454,9 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
           const headers1 = response1?.headers() || {}
           expect(response1?.status()).toBe(200)
           expect(headers1['x-nextjs-cache']).toBeUndefined()
-          expect(headers1['debug-netlify-cdn-cache-control']).toBe('s-maxage=31536000, durable')
+          expect(headers1['debug-netlify-cdn-cache-control']).toMatch(
+            /(max-age|s-maxage)=31536000, durable/,
+          )
 
           const date1 = await page.getByTestId('date-now').textContent()
 
@@ -475,7 +485,9 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
             // as we reuse cached response
             expect(headers2['cache-status']).toMatch(/"Next.js"; hit/m)
           }
-          expect(headers2['debug-netlify-cdn-cache-control']).toBe('s-maxage=31536000, durable')
+          expect(headers2['debug-netlify-cdn-cache-control']).toMatch(
+            /(max-age|s-maxage)=31536000, durable/,
+          )
 
           // the page is cached
           const date2 = await page.getByTestId('date-now').textContent()

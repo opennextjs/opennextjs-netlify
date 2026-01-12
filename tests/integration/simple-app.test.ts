@@ -373,8 +373,8 @@ test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=1
   await new Promise((res) => setTimeout(res, 1_000))
 
   const secondTimeCachedResponse = await invokeFunction(ctx, { url: '/api/cached-revalidate' })
-  expect(secondTimeCachedResponse.headers['netlify-cdn-cache-control']).toBe(
-    's-maxage=15, stale-while-revalidate=31536000, durable',
+  expect(secondTimeCachedResponse.headers['netlify-cdn-cache-control']).toMatch(
+    /(max-age|s-maxage)=15, stale-while-revalidate=31536000, durable/,
   )
 })
 
