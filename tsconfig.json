@@ -5,11 +5,17 @@
     "moduleResolution": "NodeNext",
     "resolveJsonModule": true,
     "outDir": "./dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*"],
-  "exclude": ["tests/**/*", "src/**/*.test.ts", "edge-runtime/**", "tests/netlify-deploy.ts"]
+  "exclude": [
+    "tests/**/*",
+    "src/**/*.test.ts",
+    "edge-runtime/**",
+    "tests/netlify-deploy.ts",
+    "src/adapter/vendor/**/*"
+  ]
 }

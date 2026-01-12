@@ -12,8 +12,12 @@ await rm(OUT_DIR, { force: true, recursive: true })
 
 const repoDirectory = dirname(resolve(fileURLToPath(import.meta.url), '..'))
 
-const entryPointsESM = await glob('src/**/*.ts', { ignore: ['**/*.test.ts'] })
-const entryPointsCJS = await glob('src/**/*.cts')
+const entryPointsESM = await glob('src/**/*.ts', {
+  ignore: ['**/*.test.ts', 'src/adapter/vendor/**/*'],
+})
+const entryPointsCJS = await glob('src/**/*.cts', {
+  ignore: ['**/*.test.ts', 'src/adapter/vendor/**/*'],
+})
 
 /**
  *
@@ -40,7 +44,10 @@ async function bundle(entryPoints, format, watch) {
         name: 'mark-runtime-modules-as-external',
         setup(pluginBuild) {
           pluginBuild.onResolve({ filter: /^\..*\.c?js$/ }, (args) => {
-            if (args.importer.includes(join(repoDirectory, 'src'))) {
+            if (
+              args.importer.includes(join(repoDirectory, 'src')) &&
+              !args.path.includes(join('vendor', '@next', 'routing'))
+            ) {
               return { path: args.path, external: true }
             }
           })
@@ -61,6 +68,8 @@ async function bundle(entryPoints, format, watch) {
         var { createRequire } = await import("node:module");
         return createRequire(import.meta.url);
       })();
+      var __filename = ''
+      var __dirname = ''
     `,
     }
   } else {

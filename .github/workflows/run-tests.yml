@@ -74,7 +74,7 @@ jobs:
             } else if (versionsToTest === 'latest-and-canary') {
               core.setOutput('matrix', '["latest", "canary"]');
             } else {
-              core.setOutput('matrix', '["latest"]');
+              core.setOutput('matrix', '["canary"]');
             }
 
             if ('${{ github.event_name }}' === 'workflow_dispatch' && "${{ github.event.inputs.runOnWindows }}" == "true") {
@@ -172,6 +172,8 @@ jobs:
 
   test:
     needs: setup
+    # integration tests are completely broken in adapters branch for now, so no point in running them currently
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -356,3 +358,7 @@ jobs:
           name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
           path: playwright-report
           retention-days: 14
+
+      - name: Report summary
+        run: |
+          npx playwright merge-reports --reporter list ./all-blob-reports

@@ -3,7 +3,7 @@ import { execaCommand } from 'execa'
 import fg from 'fast-glob'
 import { exec } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import process from 'node:process'
@@ -27,6 +27,7 @@ export interface DeployResult {
 type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun' | 'berry'
 
 interface E2EConfig {
+  fixtureName: string
   packageManger?: PackageManager
   packagePath?: string
   cwd?: string
@@ -67,11 +68,46 @@ interface E2EConfig {
   env?: Record<string, string>
 }
 
+function getNetlifyCLIExecutable() {
+  return `node ${fileURLToPath(new URL(`../../node_modules/.bin/netlify`, import.meta.url))}`
+}
+
+const describeE2EFixture = (
+  fixtureDir: string,
+  config: Omit<E2EConfig, 'fixtureName'> = {},
+): { fixtureDir: string; config: Omit<E2EConfig, 'fixtureName'> } => ({ fixtureDir, config })
+
 /**
  * Copies a fixture to a temp folder on the system and runs the tests inside.
- * @param fixture name of the folder inside the fixtures folder
+ * @param fixtureDir name of the folder inside the fixtures folder
  */
-export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) => {
+export const createE2EFixture = async (
+  fixtureDir: string,
+  config: E2EConfig,
+): Promise<{
+  cleanup: (failure: boolean) => Promise<void> | void
+  isolatedFixtureRoot: string
+  deployID: string
+  url: string
+}> => {
+  const persistentFixtureResultLocation = process.env.NEXT_RUNTIME_E2E_FIXTURES_INFO_DIR
+    ? join(process.env.NEXT_RUNTIME_E2E_FIXTURES_INFO_DIR, `${config.fixtureName}.json`)
+    : null
+
+  if (persistentFixtureResultLocation) {
+    if (existsSync(persistentFixtureResultLocation)) {
+      console.log('Reusing existing deployed fixture')
+      const fixtureResult = JSON.parse(await readFile(persistentFixtureResultLocation, 'utf-8'))
+      return {
+        cleanup: () => {
+          /* no cleanup as we are reusing existing deploy */
+        },
+        // rest of fields are serializable to json
+        ...fixtureResult,
+      }
+    }
+  }
+
   const isolatedFixtureRoot = await mkdtemp(join(tmpdir(), 'opennextjs-netlify-'))
   let deployID: string
   let logs: string
@@ -85,7 +121,12 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
     }
 
     if (!failure) {
-      return cleanup(isolatedFixtureRoot, deployID)
+      // we only delete deploy if we are not sharing it via NEXT_RUNTIME_E2E_FIXTURES_INFO_DIR
+      // we will delete deploys at the end of test runs (or let them be automatically deleted via deploy retention)
+      return cleanup(
+        isolatedFixtureRoot,
+        process.env.NEXT_RUNTIME_E2E_FIXTURES_INFO_DIR ? undefined : deployID,
+      )
     }
     console.log('\n\n\n🪵  Deploy logs:')
     console.log(logs)
@@ -97,7 +138,7 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
   try {
     const [packageName] = await Promise.all([
       buildAndPackRuntime(config, isolatedFixtureRoot),
-      copyFixture(fixture, isolatedFixtureRoot, config),
+      copyFixture(fixtureDir, isolatedFixtureRoot, config),
     ])
 
     await setNextVersionInFixture(isolatedFixtureRoot, NEXT_VERSION)
@@ -112,11 +153,17 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
     console.log(`🌍 Deployed site is live: ${result.url}`)
     deployID = result.deployID
     logs = result.logs
-    return {
+    const fixtureObject = {
       cleanup: _cleanup,
+      isolatedFixtureRoot,
       deployID: result.deployID,
       url: result.url,
     }
+    if (persistentFixtureResultLocation) {
+      await writeFile(persistentFixtureResultLocation, JSON.stringify(fixtureObject))
+    }
+
+    return fixtureObject
   } catch (error) {
     await _cleanup(true)
     throw error
@@ -279,7 +326,9 @@ async function installRuntime(
 
 async function verifyFixture(isolatedFixtureRoot: string, { expectedCliVersion }: E2EConfig) {
   if (expectedCliVersion) {
-    const { stdout } = await execaCommand('npx netlify --version', { cwd: isolatedFixtureRoot })
+    const { stdout } = await execaCommand(`${getNetlifyCLIExecutable()} --version`, {
+      cwd: isolatedFixtureRoot,
+    })
 
     const match = stdout.match(/netlify-cli\/(?<version>\S+)/)
 
@@ -308,7 +357,7 @@ export async function deploySiteWithCLI(
   console.log(`🚀 Building and deploying site...`)
 
   const outputFile = 'deploy-output.txt'
-  let cmd = `npx netlify deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
+  let cmd = `${getNetlifyCLIExecutable()} deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
 
   if (packagePath) {
     cmd += ` --filter ${packagePath}`
@@ -393,7 +442,7 @@ export async function deploySiteWithBuildbot(
   // poll for status
   while (true) {
     const { stdout } = await execaCommand(
-      `npx netlify api getDeploy --data=${JSON.stringify({ deploy_id })}`,
+      `${getNetlifyCLIExecutable()} api getDeploy --data=${JSON.stringify({ deploy_id })}`,
     )
     const { state } = JSON.parse(stdout)
 
@@ -427,7 +476,7 @@ export async function deleteDeploy(deployID?: string): Promise<void> {
     return
   }
 
-  const cmd = `npx netlify api deleteDeploy --data='{"deploy_id":"${deployID}"}'`
+  const cmd = `${getNetlifyCLIExecutable()} api deleteDeploy --data='{"deploy_id":"${deployID}"}'`
   // execa mangles around with the json so let's use exec here
   return new Promise<void>((resolve, reject) => exec(cmd, (err) => (err ? reject(err) : resolve())))
 }
@@ -446,7 +495,7 @@ export function getBuildFixtureVariantCommand(variantName: string) {
 }
 
 export async function createSite(siteConfig?: { name: string }) {
-  const cmd = `npx netlify api createSiteInTeam --data=${JSON.stringify({
+  const cmd = `${getNetlifyCLIExecutable()} api createSiteInTeam --data=${JSON.stringify({
     account_slug: 'netlify-integration-testing',
     body: siteConfig ?? {},
   })}`
@@ -464,92 +513,120 @@ export async function createSite(siteConfig?: { name: string }) {
 }
 
 export async function deleteSite(siteId: string) {
-  const cmd = `npx netlify api deleteSite --data=${JSON.stringify({ site_id: siteId })}`
+  const cmd = `${getNetlifyCLIExecutable()} api deleteSite --data=${JSON.stringify({ site_id: siteId })}`
   await execaCommand(cmd)
 }
 
 export async function publishDeploy(siteId: string, deployID: string) {
-  const cmd = `npx netlify api restoreSiteDeploy --data=${JSON.stringify({ site_id: siteId, deploy_id: deployID })}`
+  const cmd = `${getNetlifyCLIExecutable()} api restoreSiteDeploy --data=${JSON.stringify({ site_id: siteId, deploy_id: deployID })}`
   await execaCommand(cmd)
 }
 
-export const fixtureFactories = {
-  simple: () => createE2EFixture('simple'),
+export async function globalE2EFixtureSetup() {
+  console.log('Setup reusable e2e fixtures directory')
+  // this will allow us to reuse fixtures even if worker restarted or was deployed by another worker
+  const E2EFixturePersistentDir = await mkdtemp(join(tmpdir(), 'opennextjs-netlify-e2e-fixtures-'))
+  process.env.NEXT_RUNTIME_E2E_FIXTURES_INFO_DIR = E2EFixturePersistentDir
+}
+
+export async function globalE2EFixtureTeardown() {
+  const fixturesInfoDir = process.env.NEXT_RUNTIME_E2E_FIXTURES_INFO_DIR
+  if (!fixturesInfoDir) {
+    return
+  }
+  console.log('🧹 Cleaning up deployed reusable fixtures')
+
+  const fixtureInfoFiles = await fg.glob('*.json', {
+    cwd: fixturesInfoDir,
+  })
+
+  for (const fixtureInfoFile of fixtureInfoFiles) {
+    const fixtureInfo = JSON.parse(
+      await readFile(join(fixturesInfoDir, fixtureInfoFile), 'utf-8'),
+    ) as { deployID: string }
+
+    console.log('Deleting deploy', fixtureInfo)
+    await deleteDeploy(fixtureInfo.deployID)
+  }
+}
+
+export const fixtureDescriptions = {
+  simple: () => describeE2EFixture('simple'),
   helloWorldTurbopack: () =>
-    createE2EFixture('hello-world-turbopack', {
+    describeE2EFixture('hello-world-turbopack', {
       buildCommand: 'next build --turbopack',
     }),
-  outputExport: () => createE2EFixture('output-export'),
-  ouputExportPublishOut: () =>
-    createE2EFixture('output-export', {
+  outputExport: () => describeE2EFixture('output-export'),
+  outputExportPublishOut: () =>
+    describeE2EFixture('output-export', {
       publishDirectory: 'out',
     }),
   outputExportCustomDist: () =>
-    createE2EFixture('output-export-custom-dist', {
+    describeE2EFixture('output-export-custom-dist', {
       publishDirectory: 'custom-dist',
     }),
   distDir: () =>
-    createE2EFixture('dist-dir', {
+    describeE2EFixture('dist-dir', {
       publishDirectory: 'cool/output',
     }),
-  yarn: () => createE2EFixture('simple', { packageManger: 'yarn' }),
-  pnpm: () => createE2EFixture('pnpm', { packageManger: 'pnpm' }),
-  bun: () => createE2EFixture('simple', { packageManger: 'bun' }),
-  middleware: () => createE2EFixture('middleware'),
+  yarn: () => describeE2EFixture('simple', { packageManger: 'yarn' }),
+  pnpm: () => describeE2EFixture('pnpm', { packageManger: 'pnpm' }),
+  bun: () => describeE2EFixture('simple', { packageManger: 'bun' }),
+  middleware: () => describeE2EFixture('middleware'),
   middlewareNode: () =>
-    createE2EFixture('middleware', {
+    describeE2EFixture('middleware', {
       buildCommand: getBuildFixtureVariantCommand('node-middleware'),
       publishDirectory: '.next-node-middleware',
     }),
-  middlewareNodeRuntimeSpecific: () => createE2EFixture('middleware-node-runtime-specific'),
+  middlewareNodeRuntimeSpecific: () => describeE2EFixture('middleware-node-runtime-specific'),
   middlewareNodeRuntimeSpecificPnpm: () =>
-    createE2EFixture('middleware-node-runtime-specific', {
+    describeE2EFixture('middleware-node-runtime-specific', {
       packageManger: 'pnpm',
     }),
-  middlewareI18n: () => createE2EFixture('middleware-i18n'),
+  middlewareI18n: () => describeE2EFixture('middleware-i18n'),
   middlewareI18nNode: () =>
-    createE2EFixture('middleware-i18n', {
+    describeE2EFixture('middleware-i18n', {
       buildCommand: getBuildFixtureVariantCommand('node-middleware'),
       publishDirectory: '.next-node-middleware',
     }),
-  middlewareI18nExcludedPaths: () => createE2EFixture('middleware-i18n-excluded-paths'),
+  middlewareI18nExcludedPaths: () => describeE2EFixture('middleware-i18n-excluded-paths'),
   middlewareI18nExcludedPathsNode: () =>
-    createE2EFixture('middleware-i18n-excluded-paths', {
+    describeE2EFixture('middleware-i18n-excluded-paths', {
       buildCommand: getBuildFixtureVariantCommand('node-middleware'),
       publishDirectory: '.next-node-middleware',
     }),
-  middlewareOg: () => createE2EFixture('middleware-og'),
-  middlewarePages: () => createE2EFixture('middleware-pages'),
+  middlewareOg: () => describeE2EFixture('middleware-og'),
+  middlewarePages: () => describeE2EFixture('middleware-pages'),
   middlewarePagesNode: () =>
-    createE2EFixture('middleware-pages', {
+    describeE2EFixture('middleware-pages', {
       buildCommand: getBuildFixtureVariantCommand('node-middleware'),
       publishDirectory: '.next-node-middleware',
     }),
-  middlewareStaticAssetMatcher: () => createE2EFixture('middleware-static-asset-matcher'),
+  middlewareStaticAssetMatcher: () => describeE2EFixture('middleware-static-asset-matcher'),
   middlewareStaticAssetMatcherNode: () =>
-    createE2EFixture('middleware-static-asset-matcher', {
+    describeE2EFixture('middleware-static-asset-matcher', {
       buildCommand: getBuildFixtureVariantCommand('node-middleware'),
       publishDirectory: '.next-node-middleware',
     }),
-  middlewareSubrequestVuln: () => createE2EFixture('middleware-subrequest-vuln'),
-  pageRouter: () => createE2EFixture('page-router'),
-  pageRouterBasePathI18n: () => createE2EFixture('page-router-base-path-i18n'),
+  middlewareSubrequestVuln: () => describeE2EFixture('middleware-subrequest-vuln'),
+  pageRouter: () => describeE2EFixture('page-router'),
+  pageRouterBasePathI18n: () => describeE2EFixture('page-router-base-path-i18n'),
   turborepo: () =>
-    createE2EFixture('turborepo', {
+    describeE2EFixture('turborepo', {
       packageManger: 'pnpm',
       packagePath: 'apps/page-router',
       buildCommand: 'turbo build --filter page-router',
     }),
   turborepoNPM: () =>
-    createE2EFixture('turborepo-npm', {
+    describeE2EFixture('turborepo-npm', {
       packageManger: 'npm',
       packagePath: 'apps/page-router',
       buildCommand: 'turbo build --filter page-router',
     }),
-  serverComponents: () => createE2EFixture('server-components'),
-  next16TagRevalidation: () => createE2EFixture('next-16-tag-revalidation'),
+  serverComponents: () => describeE2EFixture('server-components'),
+  next16TagRevalidation: () => describeE2EFixture('next-16-tag-revalidation'),
   nxIntegrated: () =>
-    createE2EFixture('nx-integrated', {
+    describeE2EFixture('nx-integrated', {
       packagePath: 'apps/next-app',
       buildCommand: 'nx run next-app:build',
       publishDirectory: 'dist/apps/next-app/.next',
@@ -558,7 +635,7 @@ export const fixtureFactories = {
       },
     }),
   nxIntegratedDistDir: () =>
-    createE2EFixture('nx-integrated', {
+    describeE2EFixture('nx-integrated', {
       packagePath: 'apps/custom-dist-dir',
       buildCommand: 'nx run custom-dist-dir:build',
       publishDirectory: 'dist/apps/custom-dist-dir/dist',
@@ -567,11 +644,11 @@ export const fixtureFactories = {
       },
     }),
   cliBeforeRegionalBlobsSupport: () =>
-    createE2EFixture('cli-before-regional-blobs-support', {
+    describeE2EFixture('cli-before-regional-blobs-support', {
       expectedCliVersion: '17.21.1',
     }),
   yarnMonorepoWithPnpmLinker: () =>
-    createE2EFixture('yarn-monorepo-with-pnpm-linker', {
+    describeE2EFixture('yarn-monorepo-with-pnpm-linker', {
       packageManger: 'berry',
       packagePath: 'apps/site',
       buildCommand: 'yarn build',
@@ -580,7 +657,7 @@ export const fixtureFactories = {
       runtimeInstallationPath: '',
     }),
   npmMonorepoEmptyBaseNoPackagePath: () =>
-    createE2EFixture('npm-monorepo-empty-base', {
+    describeE2EFixture('npm-monorepo-empty-base', {
       cwd: 'apps/site',
       buildCommand: 'npm run build',
       publishDirectory: 'apps/site/.next',
@@ -588,26 +665,26 @@ export const fixtureFactories = {
       generateNetlifyToml: false,
     }),
   npmMonorepoSiteCreatedAtBuild: () =>
-    createE2EFixture('npm-monorepo-site-created-at-build', {
+    describeE2EFixture('npm-monorepo-site-created-at-build', {
       buildCommand: 'npm run build',
       publishDirectory: 'apps/site/.next',
       smoke: true,
       generateNetlifyToml: false,
     }),
   next12_0_3: () =>
-    createE2EFixture('next-12.0.3', {
+    describeE2EFixture('next-12.0.3', {
       buildCommand: 'npm run build',
       publishDirectory: '.next',
       smoke: true,
     }),
   next12_1_0: () =>
-    createE2EFixture('next-12.1.0', {
+    describeE2EFixture('next-12.1.0', {
       buildCommand: 'npm run build',
       publishDirectory: '.next',
       smoke: true,
     }),
   yarnMonorepoMultipleNextVersionsSiteCompatible: () =>
-    createE2EFixture('yarn-monorepo-multiple-next-versions-site-compatible', {
+    describeE2EFixture('yarn-monorepo-multiple-next-versions-site-compatible', {
       buildCommand: 'npm run build',
       publishDirectory: 'apps/site/.next',
       packagePath: 'apps/site',
@@ -618,7 +695,7 @@ export const fixtureFactories = {
       smoke: true,
     }),
   yarnMonorepoMultipleNextVersionsSiteIncompatible: () =>
-    createE2EFixture('yarn-monorepo-multiple-next-versions-site-incompatible', {
+    describeE2EFixture('yarn-monorepo-multiple-next-versions-site-incompatible', {
       buildCommand: 'npm run build',
       publishDirectory: 'apps/site/.next',
       packagePath: 'apps/site',
@@ -629,26 +706,26 @@ export const fixtureFactories = {
       smoke: true,
     }),
   npmNestedSiteMultipleNextVersionsCompatible: () =>
-    createE2EFixture('npm-nested-site-multiple-next-version-site-compatible', {
+    describeE2EFixture('npm-nested-site-multiple-next-version-site-compatible', {
       buildCommand: 'cd apps/site && npm install && npm run build',
       publishDirectory: 'apps/site/.next',
       smoke: true,
     }),
   npmNestedSiteMultipleNextVersionsIncompatible: () =>
-    createE2EFixture('npm-nested-site-multiple-next-version-site-incompatible', {
+    describeE2EFixture('npm-nested-site-multiple-next-version-site-incompatible', {
       buildCommand: 'cd apps/site && npm install && npm run build',
       publishDirectory: 'apps/site/.next',
       smoke: true,
     }),
   npmMonorepoProxy: () =>
-    createE2EFixture('npm-monorepo-proxy', {
+    describeE2EFixture('npm-monorepo-proxy', {
       buildCommand: 'npm run build --workspace @apps/site',
       packagePath: 'apps/site',
       publishDirectory: 'apps/site/.next',
       smoke: true,
     }),
   pnpmMonorepoBaseProxy: () =>
-    createE2EFixture('pnpm-monorepo-base-proxy', {
+    describeE2EFixture('pnpm-monorepo-base-proxy', {
       buildCommand: 'pnpm run build',
       generateNetlifyToml: false,
       packageManger: 'pnpm',
@@ -657,6 +734,23 @@ export const fixtureFactories = {
       smoke: true,
       useBuildbot: true,
     }),
-  dynamicCms: () => createE2EFixture('dynamic-cms'),
-  after: () => createE2EFixture('after'),
+  dynamicCms: () => describeE2EFixture('dynamic-cms'),
+  after: () => describeE2EFixture('after'),
+}
+
+export const fixtureFactories = Object.fromEntries(
+  (
+    Object.entries(fixtureDescriptions) as [
+      keyof typeof fixtureDescriptions,
+      () => ReturnType<typeof describeE2EFixture>,
+    ][]
+  ).map(([fixtureName, getFixtureDescription]) => {
+    const { config: configWithoutFixtureName, fixtureDir } = getFixtureDescription()
+
+    const config = { fixtureName, ...configWithoutFixtureName }
+
+    return [fixtureName, () => createE2EFixture(fixtureDir, config)]
+  }),
+) as {
+  [fixtureName in keyof typeof fixtureDescriptions]: () => ReturnType<typeof createE2EFixture>
 }
