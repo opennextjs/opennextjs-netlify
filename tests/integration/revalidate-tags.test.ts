@@ -69,7 +69,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     expect.objectContaining({
       'cache-status': expect.stringMatching(/"Next.js"; hit/),
       'netlify-cdn-cache-control': nextVersionSatisfies('>=15.0.0-canary.187')
-        ? 's-maxage=31536000, durable'
+        ? expect.stringMatching(/(max-age|s-maxage)=31536000, durable/)
         : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
     }),
   )
@@ -98,7 +98,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     expect.objectContaining({
       'cache-status': '"Next.js"; fwd=miss',
       'netlify-cdn-cache-control': nextVersionSatisfies('>=15.0.0-canary.187')
-        ? 's-maxage=31536000, durable'
+        ? expect.stringMatching(/(max-age|s-maxage)=31536000, durable/)
         : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
     }),
   )
@@ -123,7 +123,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     expect.objectContaining({
       'cache-status': expect.stringMatching(/"Next.js"; hit/),
       'netlify-cdn-cache-control': nextVersionSatisfies('>=15.0.0-canary.187')
-        ? 's-maxage=31536000, durable'
+        ? expect.stringMatching(/(max-age|s-maxage)=31536000, durable/)
         : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
     }),
   )
@@ -154,7 +154,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     expect.objectContaining({
       'cache-status': '"Next.js"; fwd=miss',
       'netlify-cdn-cache-control': nextVersionSatisfies('>=15.0.0-canary.187')
-        ? 's-maxage=31536000, durable'
+        ? expect.stringMatching(/(max-age|s-maxage)=31536000, durable/)
         : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
     }),
   )

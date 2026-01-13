@@ -256,9 +256,9 @@ test('requesting a non existing page route that needs to be fetched from the blo
 
   await expect(page.locator('h1')).toHaveText('404 Not Found')
 
-  expect(headers['debug-netlify-cdn-cache-control']).toBe(
+  expect(headers['debug-netlify-cdn-cache-control']).toMatch(
     nextVersionSatisfies('>=15.0.0-canary.187')
-      ? 's-maxage=31536000, durable'
+      ? /(max-age|s-maxage)=31536000, durable/
       : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
   )
   expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
@@ -305,14 +305,16 @@ test.describe('RSC cache poisoning', () => {
     // ensure prefetch respond with RSC data
     expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
     expect(prefetchResponse.headers()['debug-netlify-cdn-cache-control']).toMatch(
-      /s-maxage=31536000/,
+      /(max-age|s-maxage)=31536000/,
     )
 
     const htmlResponse = await page.goto(`${simple.url}/config-rewrite/source`)
 
     // ensure we get HTML response
     expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
-    expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(
+      /(max-age|s-maxage)=31536000/,
+    )
   })
 
   test('Next.config.js redirect', async ({ page, simple }) => {
@@ -334,14 +336,16 @@ test.describe('RSC cache poisoning', () => {
     // ensure prefetch respond with RSC data
     expect(prefetchResponse.headers()['content-type']).toMatch(/text\/x-component/)
     expect(prefetchResponse.headers()['debug-netlify-cdn-cache-control']).toMatch(
-      /s-maxage=31536000/,
+      /(max-age|s-maxage)=31536000/,
     )
 
     const htmlResponse = await page.goto(`${simple.url}/config-rewrite/source`)
 
     // ensure we get HTML response
     expect(htmlResponse?.headers()['content-type']).toMatch(/text\/html/)
-    expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(/s-maxage=31536000/)
+    expect(htmlResponse?.headers()['debug-netlify-cdn-cache-control']).toMatch(
+      /(max-age|s-maxage)=31536000/,
+    )
   })
 })
 

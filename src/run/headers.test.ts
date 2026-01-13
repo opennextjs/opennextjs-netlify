@@ -409,7 +409,7 @@ describe('headers', () => {
       )
     })
 
-    test('should not set any headers if "cache-control" is set and "cdn-cache-control" is present', () => {
+    test('should not set any headers if "cache-control" is set without x-nextjs-cache and "cdn-cache-control" is present', () => {
       const givenHeaders = {
         'cache-control': 'public, max-age=0, must-revalidate',
         'cdn-cache-control': 'public, max-age=0, must-revalidate',
@@ -423,7 +423,7 @@ describe('headers', () => {
       expect(response.headers.set).toHaveBeenCalledTimes(0)
     })
 
-    test('should not set any headers if "cache-control" is set and "netlify-cdn-cache-control" is present', () => {
+    test('should not set any headers if "cache-control" is set without x-nextjs-cache and "netlify-cdn-cache-control" is present', () => {
       const givenHeaders = {
         'cache-control': 'public, max-age=0, must-revalidate',
         'netlify-cdn-cache-control': 'public, max-age=0, must-revalidate',
@@ -440,6 +440,7 @@ describe('headers', () => {
     test('should set expected headers if "cache-control" is set and "cdn-cache-control" and "netlify-cdn-cache-control" are not present (GET request)', () => {
       const givenHeaders = {
         'cache-control': 'public, max-age=0, must-revalidate',
+        'x-nextjs-cache': 'HIT',
       }
       const request = new Request(defaultUrl)
       const response = new Response(null, { headers: givenHeaders })
@@ -462,6 +463,7 @@ describe('headers', () => {
     test('should set expected headers if "cache-control" is set and "cdn-cache-control" and "netlify-cdn-cache-control" are not present (HEAD request)', () => {
       const givenHeaders = {
         'cache-control': 'public, max-age=0, must-revalidate',
+        'x-nextjs-cache': 'HIT',
       }
       const request = new Request(defaultUrl, { method: 'HEAD' })
       const response = new Response(null, { headers: givenHeaders })
@@ -497,6 +499,7 @@ describe('headers', () => {
     test('should remove "s-maxage" from "cache-control" header', () => {
       const givenHeaders = {
         'cache-control': 'public, s-maxage=604800',
+        'x-nextjs-cache': 'HIT',
       }
       const request = new Request(defaultUrl)
       const response = new Response(null, { headers: givenHeaders })
@@ -515,6 +518,7 @@ describe('headers', () => {
     test('should remove "stale-while-revalidate" from "cache-control" header', () => {
       const givenHeaders = {
         'cache-control': 'max-age=604800, stale-while-revalidate=86400',
+        'x-nextjs-cache': 'HIT',
       }
       const request = new Request(defaultUrl)
       const response = new Response(null, { headers: givenHeaders })
@@ -533,6 +537,7 @@ describe('headers', () => {
     test('should set default "cache-control" header if it contains only "s-maxage" and "stale-while-revalidate"', () => {
       const givenHeaders = {
         'cache-control': 's-maxage=604800, stale-while-revalidate=86400',
+        'x-nextjs-cache': 'HIT',
       }
       const request = new Request(defaultUrl)
       const response = new Response(null, { headers: givenHeaders })
