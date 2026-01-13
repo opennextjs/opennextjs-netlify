@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.4...v5.15.5) (2026-01-13)
+
+
+### Bug Fixes
+
+* handle Next.js using cdn-cache-control for cacheable responses ([#3364](https://github.com/opennextjs/opennextjs-netlify/issues/3364)) ([55fcb3c](https://github.com/opennextjs/opennextjs-netlify/commit/55fcb3c4a96c96b08a8f117f8e07231b66cd22b3))
+
 ## [5.15.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.3...v5.15.4) (2026-01-05)
 
 
