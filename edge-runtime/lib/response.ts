@@ -82,44 +82,49 @@ export const buildResponse = async ({
       return Response.json(transformed, { ...response, headers })
     }
 
-    // This var will hold the contents of the script tag
-    let buffer = ''
-    // Create an HTMLRewriter that matches the Next data script tag
-    const rewriter = new HTMLRewriter()
+    
+    if (response.dataTransforms.length > 0 || response.elementHandlers.length > 0) {
+      // This var will hold the contents of the script tag
+      let buffer = ''
+      // Create an HTMLRewriter that matches the Next data script tag
+      const rewriter = new HTMLRewriter()
 
-    if (response.dataTransforms.length > 0) {
-      rewriter.on('script[id="__NEXT_DATA__"]', {
-        text(textChunk: TextChunk) {
-          // Grab all the chunks in the Next data script tag
-          buffer += textChunk.text
-          if (textChunk.lastInTextNode) {
-            try {
-              // When we have all the data, try to parse it as JSON
-              const data = JSON.parse(buffer.trim())
-              // Apply all of the transforms to the props
-              const props = response.dataTransforms.reduce(
-                (prev, transform) => transform(prev),
-                data.props,
-              )
-              // Replace the data with the transformed props
-              // With `html: true` the input is treated as raw HTML
-              // @see https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/#global-types
-              textChunk.replace(JSON.stringify({ ...data, props }), { html: true })
-            } catch (err) {
-              console.log('Could not parse', err)
+      if (response.dataTransforms.length > 0) {
+        rewriter.on('script[id="__NEXT_DATA__"]', {
+          text(textChunk: TextChunk) {
+            // Grab all the chunks in the Next data script tag
+            buffer += textChunk.text
+            if (textChunk.lastInTextNode) {
+              try {
+                // When we have all the data, try to parse it as JSON
+                const data = JSON.parse(buffer.trim())
+                // Apply all of the transforms to the props
+                const props = response.dataTransforms.reduce(
+                  (prev, transform) => transform(prev),
+                  data.props,
+                )
+                // Replace the data with the transformed props
+                // With `html: true` the input is treated as raw HTML
+                // @see https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/#global-types
+                textChunk.replace(JSON.stringify({ ...data, props }), { html: true })
+              } catch (err) {
+                console.log('Could not parse', err)
+              }
+            } else {
+              // Remove the chunk after we've appended it to the buffer
+              textChunk.remove()
             }
-          } else {
-            // Remove the chunk after we've appended it to the buffer
-            textChunk.remove()
-          }
-        },
-      })
-    }
+          },
+        })
+      }
 
-    if (response.elementHandlers.length > 0) {
-      response.elementHandlers.forEach(([selector, handlers]) => rewriter.on(selector, handlers))
+      if (response.elementHandlers.length > 0) {
+        response.elementHandlers.forEach(([selector, handlers]) => rewriter.on(selector, handlers))
+      }
+      return rewriter.transform(response.originResponse)
+    } else {
+      return response.originResponse
     }
-    return rewriter.transform(response.originResponse)
   }
 
   const edgeResponse = new Response(result.response.body, result.response)
