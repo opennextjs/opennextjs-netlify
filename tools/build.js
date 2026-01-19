@@ -1,4 +1,4 @@
-import { cp, readFile, rm } from 'node:fs/promises'
+import { cp, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -81,9 +81,9 @@ async function bundle(entryPoints, format, watch) {
   })
 }
 
+const middlewareDir = resolve('edge-runtime')
 async function vendorMiddlewareDenoModules() {
   const vendorSource = resolve('edge-runtime/vendor.ts')
-  const middlewareDir = resolve('edge-runtime')
 
   await vendorDeno({
     vendorSource,
@@ -92,11 +92,26 @@ async function vendorMiddlewareDenoModules() {
   })
 }
 
+async function generateHtmlRewriterWasmModule() {
+  const wasmPath = join(
+    middlewareDir,
+    'vendor/deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm',
+  )
+  const wasmBuffer = await readFile(wasmPath)
+  const wasmBase64 = wasmBuffer.toString('base64')
+
+  const templatePath = join(middlewareDir, 'html-rewriter-wasm.template.ts')
+  const template = await readFile(templatePath, 'utf-8')
+  const moduleContent = template.replace('__HTML_REWRITER_WASM_BASE64__', wasmBase64)
+
+  await writeFile(join(middlewareDir, 'html-rewriter-wasm.ts'), moduleContent)
+}
+
 const args = new Set(process.argv.slice(2))
 const watch = args.has('--watch') || args.has('-w')
 
 await Promise.all([
-  vendorMiddlewareDenoModules(),
+  vendorMiddlewareDenoModules().then(generateHtmlRewriterWasmModule),
   bundle(entryPointsESM, 'esm', watch),
   ...entryPointsCJS.map((entry) => bundle([entry], 'cjs', watch)),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
