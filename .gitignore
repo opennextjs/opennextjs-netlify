@@ -3,6 +3,8 @@ dist/
 .next
 .next-node-middleware
 edge-runtime/vendor
+# html-rewriter-wasm.ts is generated at plugin build time with base64-encoded WASM
+edge-runtime/html-rewriter-wasm.ts
 # deno.json is ephemeral and generated for the purpose of vendoring remote modules in CI
 tools/deno/deno.json
 tools/deno/vendor

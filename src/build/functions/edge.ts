@@ -126,23 +126,8 @@ const writeHandlerFile = async (
     JSON.stringify(minimalNextConfig),
   )
 
-  const htmlRewriterWasm = await readFile(
-    join(
-      ctx.pluginDir,
-      'edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm',
-    ),
-  )
-  const htmlRewriterWasmTemplate = await readFile(
-    join(ctx.pluginDir, 'edge-runtime/html-rewriter-wasm.ts'),
-    'utf8',
-  )
-  await writeFile(
-    join(handlerRuntimeDirectory, 'html-rewriter-wasm.ts'),
-    htmlRewriterWasmTemplate.replace(
-      '__HTML_REWRITER_WASM_PLACEHOLDER__',
-      htmlRewriterWasm.toString('base64'),
-    ),
-  )
+  // Note: html-rewriter-wasm.ts is pre-generated at plugin build time with the
+  // base64-encoded WASM. It's copied automatically by copyRuntime() above.
 
   // Writing the function entry file. It wraps the middleware code with the
   // compatibility layer mentioned above.

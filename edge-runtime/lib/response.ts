@@ -84,6 +84,16 @@ export const buildResponse = async ({
 
     
     if (response.dataTransforms.length > 0 || response.elementHandlers.length > 0) {
+      // Log when HTMLRewriter code path is triggered (controlled by NETLIFY_LOG_HTML_REWRITER env var at runtime)
+      if (Deno.env.get('NETLIFY_LOG_HTML_REWRITER') === 'true') {
+        logger
+          .withFields({
+            dataTransforms_count: response.dataTransforms.length,
+            elementHandlers_count: response.elementHandlers.length,
+          })
+          .log('Using HTMLRewriter for response transformation')
+      }
+
       const { initHtmlRewriter } = await import('../html-rewriter-wasm.ts')
       await initHtmlRewriter()
 
