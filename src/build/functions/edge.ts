@@ -137,14 +137,15 @@ const writeHandlerFile = async (
   // compatibility layer mentioned above.
   await writeFile(
     join(handlerDirectory, `${handlerName}.js`),
-    `
+     `
+    import { decode as _base64Decode } from './edge-runtime/vendor/deno.land/std@0.175.0/encoding/base64.ts';
     import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
     import { handleMiddleware } from './edge-runtime/middleware.ts';
     import handler from './server/${name}.js';
 
-    await htmlRewriterInit({ module_or_path: Uint8Array.from(${JSON.stringify([
-      ...htmlRewriterWasm,
-    ])}) });
+    await htmlRewriterInit({ module_or_path: _base64Decode(${JSON.stringify(
+      htmlRewriterWasm.toString('base64'),
+    )}).buffer });
 
     export default (req, context) => handleMiddleware(req, context, handler);
     `,
