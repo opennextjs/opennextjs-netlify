@@ -132,20 +132,25 @@ const writeHandlerFile = async (
       'edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm',
     ),
   )
+  const htmlRewriterWasmTemplate = await readFile(
+    join(ctx.pluginDir, 'edge-runtime/html-rewriter-wasm.ts'),
+    'utf8',
+  )
+  await writeFile(
+    join(handlerRuntimeDirectory, 'html-rewriter-wasm.ts'),
+    htmlRewriterWasmTemplate.replace(
+      '__HTML_REWRITER_WASM_PLACEHOLDER__',
+      htmlRewriterWasm.toString('base64'),
+    ),
+  )
 
   // Writing the function entry file. It wraps the middleware code with the
   // compatibility layer mentioned above.
   await writeFile(
     join(handlerDirectory, `${handlerName}.js`),
      `
-    import { decode as _base64Decode } from './edge-runtime/vendor/deno.land/std@0.175.0/encoding/base64.ts';
-    import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
     import { handleMiddleware } from './edge-runtime/middleware.ts';
     import handler from './server/${name}.js';
-
-    await htmlRewriterInit({ module_or_path: _base64Decode(${JSON.stringify(
-      htmlRewriterWasm.toString('base64'),
-    )}).buffer });
 
     export default (req, context) => handleMiddleware(req, context, handler);
     `,

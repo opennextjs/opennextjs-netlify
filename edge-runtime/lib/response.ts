@@ -84,6 +84,9 @@ export const buildResponse = async ({
 
     
     if (response.dataTransforms.length > 0 || response.elementHandlers.length > 0) {
+      const { initHtmlRewriter } = await import('../html-rewriter-wasm.ts')
+      await initHtmlRewriter()
+
       // This var will hold the contents of the script tag
       let buffer = ''
       // Create an HTMLRewriter that matches the Next data script tag
