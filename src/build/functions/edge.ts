@@ -126,25 +126,13 @@ const writeHandlerFile = async (
     JSON.stringify(minimalNextConfig),
   )
 
-  const htmlRewriterWasm = await readFile(
-    join(
-      ctx.pluginDir,
-      'edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/pkg/htmlrewriter_bg.wasm',
-    ),
-  )
-
   // Writing the function entry file. It wraps the middleware code with the
   // compatibility layer mentioned above.
   await writeFile(
     join(handlerDirectory, `${handlerName}.js`),
     `
-    import { init as htmlRewriterInit } from './edge-runtime/vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
     import { handleMiddleware } from './edge-runtime/middleware.ts';
     import handler from './server/${name}.js';
-
-    await htmlRewriterInit({ module_or_path: Uint8Array.from(${JSON.stringify([
-      ...htmlRewriterWasm,
-    ])}) });
 
     export default (req, context) => handleMiddleware(req, context, handler);
     `,
