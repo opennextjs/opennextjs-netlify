@@ -157,7 +157,9 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       cacheValue.kind === 'APP_ROUTE'
     ) {
       if (cacheValue.headers?.[NEXT_CACHE_TAGS_HEADER]) {
-        const cacheTags = (cacheValue.headers[NEXT_CACHE_TAGS_HEADER] as string).split(/,|%2c/gi)
+        const cacheTags = (cacheValue.headers[NEXT_CACHE_TAGS_HEADER] as string)
+          .split(/,|%2c/gi)
+          .map(encodeURI)
         requestContext.responseCacheTags = cacheTags
       } else if (
         (cacheValue.kind === 'PAGE' || cacheValue.kind === 'PAGES') &&
