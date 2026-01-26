@@ -2,6 +2,11 @@ import fs from 'node:fs'
 import { afterEach } from 'vitest'
 import { type FixtureTestContext } from './utils/contexts'
 
+if (typeof File === 'undefined') {
+  const { File } = await import('@web-std/file')
+  globalThis.File = File
+}
+
 export async function afterTestCleanup({ cleanup }: FixtureTestContext) {
   if ('reset' in fs) {
     ;(fs as any).reset()
