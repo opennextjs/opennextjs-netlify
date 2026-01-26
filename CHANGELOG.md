@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.5...v5.15.6) (2026-01-26)
+
+
+### Bug Fixes
+
+* lazy-load HTMLRewriter WASM only when needed ([#3373](https://github.com/opennextjs/opennextjs-netlify/issues/3373)) ([23af38d](https://github.com/opennextjs/opennextjs-netlify/commit/23af38de86a3c4ea8d012e6b5d14ab707800750e))
+
 ## [5.15.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.4...v5.15.5) (2026-01-13)
 
 
