@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.6...v5.15.7) (2026-01-26)
+
+
+### Bug Fixes
+
+* encode cache tags provided by Next.js for App Router ([#3384](https://github.com/opennextjs/opennextjs-netlify/issues/3384)) ([f3c9b64](https://github.com/opennextjs/opennextjs-netlify/commit/f3c9b642b06b0878f68bb90a8e41091ef197b9c5))
+
 ## [5.15.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.5...v5.15.6) (2026-01-26)
 
 
