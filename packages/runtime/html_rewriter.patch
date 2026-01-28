@@ -1,4 +1,0 @@
-56c56
-<       fetch(new URL("./vendor/html_rewriter_bg.wasm", import.meta.url).href)
----
->       fetch("https://deno.land/x/html_rewriter@v0.1.0-pre.17/vendor/html_rewriter_bg.wasm")

@@ -1,1 +1,2 @@
 src/templates/vendor
+src/templates/edge-shared/html-rewriter-wasm.ts
