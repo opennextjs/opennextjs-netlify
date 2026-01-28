@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.41.6](https://github.com/opennextjs/opennextjs-netlify/compare/plugin-nextjs-v4.41.5...plugin-nextjs-v4.41.6) (2026-01-28)
+
+
+### Bug Fixes
+
+* lazy-load HTMLRewriter WASM only when needed ([#3390](https://github.com/opennextjs/opennextjs-netlify/issues/3390)) ([f1d2f1a](https://github.com/opennextjs/opennextjs-netlify/commit/f1d2f1a5a286ec7be49f24604c1083076f28de9c))
+
 ## [4.41.5](https://github.com/opennextjs/opennextjs-netlify/compare/plugin-nextjs-v4.41.4...plugin-nextjs-v4.41.5) (2026-01-08)
 
 
