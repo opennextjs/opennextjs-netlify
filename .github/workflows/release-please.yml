@@ -44,18 +44,18 @@ jobs:
         if: ${{ steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
       - run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            npm publish packages/runtime/ --provenance --tag latest-4 || true
+            npm publish packages/runtime/ --tag latest-4 || true
           else
-            npm publish packages/runtime/ --provenance --tag latest-4
+            npm publish packages/runtime/ --tag latest-4
           fi
         if: ${{ steps.release.outputs['packages/runtime--version'] || github.event_name == 'workflow_dispatch' }}
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
       - run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            npm publish packages/next/ --provenance || true
+            npm publish packages/next/ || true
           else
-            npm publish packages/next/ --provenance
+            npm publish packages/next/
           fi
         # the packages/next is not next-runtime, it's @netlify/next which is enhanced middleware
         # so we don't specify a non-latest tag because this package is no longer developed in the v5 line / main branch
