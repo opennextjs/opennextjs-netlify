@@ -42,4 +42,7 @@ module.exports = {
 
   // package with `exports` using shorthand / sugar syntax with single export
   packageExportsSugarRoot: safeRequire('package-exports-sugar'),
+
+  // package containing nested package.json that have `main` field
+  packageWithNestedPackageJsons: safeRequire('package-with-nested-package-jsons'),
 }

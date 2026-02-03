@@ -65,6 +65,8 @@ const expectedVirtualRequireResult = {
   packageInternalModule: '/virtual-root/node_modules/package/internal-module.js',
   packageMainRoot: '/virtual-root/node_modules/package-main/main.js',
   packageMainInternalModule: '/virtual-root/node_modules/package-main/internal-module.js',
+  packageWithNestedPackageJsons:
+    '/virtual-root/node_modules/package-with-nested-package-jsons/dist/compiled/nested/main.js',
 } as RequireResult
 
 Deno.test('Virtual CJS Module loader matches real CJS Module loader', async (t) => {
