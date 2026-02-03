@@ -13,7 +13,7 @@ type RegisteredModule = {
   // lazily parsed json string
   parsedJson?: any
 }
-type ModuleResolutions = (subpath: string) => string
+type ModuleResolutions = (subpath: string, handleExportMap?: boolean) => string
 const registeredModules = new Map<string, RegisteredModule>()
 const memoizedPackageResolvers = new WeakMap<RegisteredModule, ModuleResolutions>()
 
@@ -141,8 +141,8 @@ function getPackageResolver(packageJsonMatchedModule: RegisteredModule) {
       : pkgJson.exports
   }
 
-  const resolveInPackage: ModuleResolutions = (subpath: string) => {
-    if (exports) {
+  const resolveInPackage: ModuleResolutions = (subpath: string, handleExportMap = true) => {
+    if (handleExportMap && exports) {
       const normalizedSubpath = subpath.length === 0 ? '.' : './' + subpath
 
       // https://github.com/nodejs/node/blob/6fd67ec6e3ccbdfcfa0300b9b742040a0607a4bc/lib/internal/modules/esm/resolve.js#L594
@@ -186,8 +186,8 @@ function getPackageResolver(packageJsonMatchedModule: RegisteredModule) {
       throw new Error(`Cannot find module '${normalizedSubpath}'`)
     }
 
-    if (subpath.length === 0 && pkgJson.main) {
-      return pkgJson.main
+    if (subpath.length === 0 && pkgJson.main && typeof pkgJson.main === 'string') {
+      return pkgJson.main as string
     }
 
     return subpath
@@ -309,7 +309,19 @@ export function registerCJSModules(baseUrl: URL, modules: Map<string, string>) {
             relativeTarget = packageResolver(moduleInPackagePath)
           }
 
-          const potentialPath = join(nodeModulePaths, packageName, relativeTarget)
+          let potentialPath = join(nodeModulePaths, packageName, relativeTarget)
+
+          // we need to also check if there is package.json at the potentialPath location
+          // as it might have "main" field that redirects further
+          const potentialNestedPackageJson = join(potentialPath, 'package.json')
+          const maybeNestedPackageJson = registeredModules.get(potentialNestedPackageJson)
+          if (maybeNestedPackageJson) {
+            const packageResolver = getPackageResolver(maybeNestedPackageJson)
+            const maybeMain = packageResolver('', false)
+            if (maybeMain) {
+              potentialPath = join(potentialPath, maybeMain)
+            }
+          }
 
           matchedModule = tryMatchingWithIndex(potentialPath)
           if (matchedModule) {
