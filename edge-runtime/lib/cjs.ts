@@ -1,7 +1,7 @@
 import { Module, createRequire } from 'node:module'
 import vm from 'node:vm'
 import { sep } from 'node:path'
-import { join, dirname, sep as posixSep } from 'node:path/posix'
+import { join, dirname, sep as posixSep, resolve as pathResolve } from 'node:path/posix'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const toPosixPath = (path: string) => path.split(sep).join(posixSep)
@@ -14,7 +14,29 @@ type RegisteredModule = {
   parsedJson?: any
 }
 type ModuleResolutions = (subpath: string, handleExportMap?: boolean) => string
-const registeredModules = new Map<string, RegisteredModule>()
+
+const registeredSymlinks = new Map<string, string>()
+
+class SymlinkAwareRegisteredModulesMap extends Map<string, RegisteredModule> {
+  private resolveSymlink(path: string) {
+    for (const [symlinkPath, targetPath] of registeredSymlinks) {
+      if (path === symlinkPath) {
+        return targetPath
+      }
+      if (path.startsWith(symlinkPath + '/')) {
+        return targetPath + path.slice(symlinkPath.length)
+      }
+    }
+
+    return path
+  }
+
+  override get(key: string): RegisteredModule | undefined {
+    return super.get(this.resolveSymlink(key))
+  }
+}
+
+const registeredModules = new SymlinkAwareRegisteredModulesMap()
 const memoizedPackageResolvers = new WeakMap<RegisteredModule, ModuleResolutions>()
 
 const require = createRequire(import.meta.url)
@@ -264,12 +286,22 @@ function tryMatchingWithIndex(target: string) {
   return matchedModule
 }
 
-export function registerCJSModules(baseUrl: URL, modules: Map<string, string>) {
+export function registerCJSModules(
+  baseUrl: URL,
+  modules: Map<string, string>,
+  symlinks: Map<string, string> = new Map(),
+) {
   const basePath = dirname(toPosixPath(fileURLToPath(baseUrl, { windows: false })))
 
   for (const [filename, source] of modules.entries()) {
     const target = join(basePath, filename)
     registeredModules.set(target, { source, loaded: false, filepath: target })
+  }
+
+  for (const [symlinkPath, targetPath] of symlinks) {
+    const source = join(basePath, symlinkPath)
+    const target = pathResolve(dirname(source), targetPath)
+    registeredSymlinks.set(source, target)
   }
 
   if (!hookedIn) {

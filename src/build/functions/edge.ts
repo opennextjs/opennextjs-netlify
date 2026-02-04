@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { cp, lstat, mkdir, readdir, readFile, readlink, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, relative } from 'node:path/posix'
 
 import type { Manifest, ManifestFunction } from '@netlify/edge-functions'
@@ -246,17 +246,22 @@ const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
 
   const commonPrefix = relative(join(srcDir, maxParentDirectoriesPath), srcDir)
 
-  parts.push(`const virtualModules = new Map();`)
+  parts.push(`const virtualModules = new Map();`, `const virtualSymlinks = new Map();`)
 
   const handleFileOrDirectory = async (fileOrDir: string) => {
     const srcPath = join(srcDir, fileOrDir)
 
-    const stats = await stat(srcPath)
+    const stats = await lstat(srcPath)
     if (stats.isDirectory()) {
       const filesInDir = await readdir(srcPath)
       for (const fileInDir of filesInDir) {
         await handleFileOrDirectory(join(fileOrDir, fileInDir))
       }
+    } else if (stats.isSymbolicLink()) {
+      const symlinkTarget = await readlink(srcPath)
+      parts.push(
+        `virtualSymlinks.set(${JSON.stringify(join(commonPrefix, fileOrDir))}, ${JSON.stringify(symlinkTarget)});`,
+      )
     } else {
       const content = await readFile(srcPath, 'utf8')
 
@@ -269,7 +274,7 @@ const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
   for (const file of files) {
     await handleFileOrDirectory(file)
   }
-  parts.push(`registerCJSModules(import.meta.url, virtualModules);
+  parts.push(`registerCJSModules(import.meta.url, virtualModules, virtualSymlinks);
 
     const require = createRequire(import.meta.url);
     const handlerMod = require("./${join(commonPrefix, entry)}");
