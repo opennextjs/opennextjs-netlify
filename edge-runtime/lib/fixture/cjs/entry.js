@@ -25,6 +25,15 @@ module.exports = {
   packageExportsWildcardModuleWithExt: safeRequire('package-exports/wildcard/module.js'),
   packageExportsNotAllowedBecauseNotInExportMap: safeRequire('package-exports/not-allowed.js'),
 
+  // symlinked package with exports map (using pnpm style node_modules layout)
+  pnpmPackageExportsRoot: safeRequire('pnpm-package-exports'),
+  pnpmPackageExportsExportedModule: safeRequire('pnpm-package-exports/exported-module.js'),
+  pnpmPackageExportsWildcardModuleNoExt: safeRequire('pnpm-package-exports/wildcard/module'),
+  pnpmPackageExportsWildcardModuleWithExt: safeRequire('pnpm-package-exports/wildcard/module.js'),
+  pnpmPackageExportsNotAllowedBecauseNotInExportMap: safeRequire(
+    'pnpm-package-exports/not-allowed.js',
+  ),
+
   // package with `exports` (with conditions, including nested ones), but no `main`
   packageExportsConditionsRoot: safeRequire('package-exports-conditions'),
   packageExportsConditionsExportedModule: safeRequire(
@@ -42,4 +51,7 @@ module.exports = {
 
   // package with `exports` using shorthand / sugar syntax with single export
   packageExportsSugarRoot: safeRequire('package-exports-sugar'),
+
+  // package containing nested package.json that have `main` field
+  packageWithNestedPackageJsons: safeRequire('package-with-nested-package-jsons'),
 }
