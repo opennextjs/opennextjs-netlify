@@ -9,11 +9,11 @@
   },
   "packageManager": "npm@10.2.3",
   "dependencies": {
-    "next": "13.4.1"
+    "next": "16.1.5"
   },
   "test": {
     "dependencies": {
-      "next": "13.4.1"
+      "next": "16.1.5"
     }
   }
 }
