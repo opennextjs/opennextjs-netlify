@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.8](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.7...v5.15.8) (2026-02-05)
+
+
+### Bug Fixes
+
+* handle case of resolving commonjs with nested package.json in Node Middlleware/proxy ([#3408](https://github.com/opennextjs/opennextjs-netlify/issues/3408)) ([df57270](https://github.com/opennextjs/opennextjs-netlify/commit/df5727089fec21288355b75cee037bf4eca03823))
+
 ## [5.15.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.6...v5.15.7) (2026-01-26)
 
 

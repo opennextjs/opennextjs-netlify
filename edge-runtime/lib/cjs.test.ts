@@ -19,6 +19,7 @@ const virtualRootPath = dirname(fileURLToPath(virtualRoot))
 
 // load fixture into virtual CJS
 const virtualModules = new Map<string, string>()
+const virtualLinks = new Map<string, string>()
 const decoder = new TextDecoder('utf-8')
 async function addVirtualModulesFromDir(dir: string) {
   const dirUrl = new URL('./' + dir, fixtureRoot)
@@ -30,12 +31,15 @@ async function addVirtualModulesFromDir(dir: string) {
     } else if (dirEntry.isFile) {
       const fileURL = new URL('./' + dirEntry.name, dirUrl)
       virtualModules.set(relPath, decoder.decode(await Deno.readFile(fileURL)))
+    } else if (dirEntry.isSymlink) {
+      const target = await Deno.readLink(new URL('./' + dirEntry.name, dirUrl))
+      virtualLinks.set(relPath, target)
     }
   }
 }
 
 await addVirtualModulesFromDir('')
-registerCJSModules(virtualRoot, virtualModules)
+registerCJSModules(virtualRoot, virtualModules, virtualLinks)
 
 const virtualRequire = createRequire(virtualRoot)
 const virtualRequireResult = virtualRequire('./entry.js') as RequireResult
@@ -65,6 +69,17 @@ const expectedVirtualRequireResult = {
   packageInternalModule: '/virtual-root/node_modules/package/internal-module.js',
   packageMainRoot: '/virtual-root/node_modules/package-main/main.js',
   packageMainInternalModule: '/virtual-root/node_modules/package-main/internal-module.js',
+  packageWithNestedPackageJsons:
+    '/virtual-root/node_modules/package-with-nested-package-jsons/dist/compiled/nested/main.js',
+  pnpmPackageExportsExportedModule:
+    '/virtual-root/node_modules/.pnpm/pnpm-package-exports@0.0.0/dist/exported-module.js',
+  pnpmPackageExportsNotAllowedBecauseNotInExportMap: 'ERROR',
+  pnpmPackageExportsRoot:
+    '/virtual-root/node_modules/.pnpm/pnpm-package-exports@0.0.0/root-export.js',
+  pnpmPackageExportsWildcardModuleNoExt:
+    '/virtual-root/node_modules/.pnpm/pnpm-package-exports@0.0.0/dist/wildcard/module.js',
+  pnpmPackageExportsWildcardModuleWithExt:
+    '/virtual-root/node_modules/.pnpm/pnpm-package-exports@0.0.0/dist/wildcard/module.js',
 } as RequireResult
 
 Deno.test('Virtual CJS Module loader matches real CJS Module loader', async (t) => {
