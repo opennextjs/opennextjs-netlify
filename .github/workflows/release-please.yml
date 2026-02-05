@@ -3,6 +3,12 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      git_tag:
+        description: "Git tag to checkout and publish (e.g. v5.10.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,27 +22,33 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
+        if: ${{ github.event_name == 'push' }}
       - uses: actions/checkout@v6
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ github.event_name == 'push' && steps.release.outputs.release_created }}
+      - uses: actions/checkout@v6
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        with:
+          ref: ${{ inputs.git_tag }}
       - uses: actions/setup-node@v6
         with:
           node-version: '*'
           cache: 'npm'
           check-latest: true
           registry-url: 'https://registry.npmjs.org'
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
       - name: Install dependencies
         run: CI=1 npm ci
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
       - name: Install Deno
         uses: denoland/setup-deno@v1
         with:
           # Should match the `DENO_VERSION_RANGE` from https://github.com/netlify/build/blob/main/packages/edge-bundler/node/bridge.ts#L20
           deno-version: 2.6.6
+        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
       - name: Build
         run: npm run build
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
       - run: npm publish --provenance
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
