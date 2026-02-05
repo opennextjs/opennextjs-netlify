@@ -6,13 +6,13 @@
     "build": "next build"
   },
   "dependencies": {
-    "next": "12.0.3",
+    "next": "16.1.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "test": {
     "dependencies": {
-      "next": "12.0.3"
+      "next": "16.1.5"
     }
   }
 }
