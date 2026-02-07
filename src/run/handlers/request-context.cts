@@ -59,7 +59,14 @@ export function createRequestContext(request?: Request, context?: Context): Requ
   const isDebugRequest =
     request?.headers.has('x-nf-debug-logging') || request?.headers.has('x-next-debug-logging')
 
-  const logger = systemLogger.withLogLevel(isDebugRequest ? LogLevel.Debug : LogLevel.Log)
+  const logger = systemLogger
+    .withLogLevel(isDebugRequest ? LogLevel.Debug : LogLevel.Log)
+    .withFields({
+      request_id: context?.requestId,
+      site_id: context?.site?.id,
+      deploy_id: context?.deploy?.id,
+      url: request?.url,
+    })
 
   const isBackgroundRevalidation =
     request?.headers.get('netlify-invocation-source') === 'background-revalidation'
