@@ -85,6 +85,7 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
       join(ctx.serverHandlerDir, RUN_CONFIG_FILE),
       JSON.stringify({
         nextConfig: reqServerFiles.config,
+        nextVersion: ctx.nextVersion,
         // only enable setting up 'use cache' handler when Next.js supports CacheHandlerV2 as we don't have V1 compatible implementation
         // see https://github.com/vercel/next.js/pull/76687 first released in v15.3.0-canary.13
         enableUseCacheHandler: ctx.nextVersion

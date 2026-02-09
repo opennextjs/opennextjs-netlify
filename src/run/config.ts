@@ -9,6 +9,7 @@ import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
 
 export type RunConfig = {
   nextConfig: NextConfigComplete
+  nextVersion: string | null
   enableUseCacheHandler: boolean
 }
 
