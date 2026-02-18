@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@netlify/plugin-nextjs": "^5.15.7",
-    "next": "^15.5.0",
+    "next": "^16.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -18,7 +18,7 @@
     "autoprefixer": "^10.4.19",
     "daisyui": "^4.12.2",
     "eslint": "^9.34.0",
-    "eslint-config-next": "^15.5.0",
+    "eslint-config-next": "^16.0.0",
     "netlify-cli": "^23.15.1",
     "postcss": "^8.4.38",
     "sass": "^1.77.1",
