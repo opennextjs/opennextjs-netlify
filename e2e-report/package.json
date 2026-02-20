@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.19",
-    "daisyui": "^4.12.2",
+    "daisyui": "^5.0.0",
     "eslint": "^9.34.0",
     "eslint-config-next": "^15.5.0",
     "netlify-cli": "^23.15.1",
