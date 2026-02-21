@@ -103,7 +103,7 @@ following:
    node_module from the registry)
 5. Creating a `netlify.toml` inside the temp directory of the fixture and adding the runtime as a
    plugin.
-6. Running `netlify deploy --build` invoking the runtime. This will use the
+6. Running `netlify deploy` invoking the runtime during the build step. This will use the
    [next-runtime-testing](https://app.netlify.com/sites/next-runtime-testing/overview) as site to
    deploy to.
 7. Using the `deployId` and `url` of the deployed site to run some
