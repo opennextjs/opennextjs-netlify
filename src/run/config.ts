@@ -5,9 +5,8 @@ import { join, resolve } from 'node:path'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
 import type { SerializedAdapterOutput } from '../adapter/adapter-output.js'
-import { ADAPTER_MANIFEST_FILE } from '../build/content/server.js'
 
-import { PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
+import { ADAPTER_MANIFEST_FILE, PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
 import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
 
 export type RunConfig = {

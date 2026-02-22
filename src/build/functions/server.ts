@@ -5,16 +5,39 @@ import { join as posixJoin } from 'node:path/posix'
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import { glob } from 'fast-glob'
+import { satisfies } from 'semver'
 
+import type { RunConfig } from '../../run/config.js'
+import { RUN_CONFIG_FILE } from '../../run/constants.js'
+import { copyNextServerCodeFromAdapter } from '../content/server-adapter.js'
 import {
   copyNextDependencies,
   copyNextServerCode,
-  copyNextServerCodeFromAdapter,
   verifyHandlerDirStructure,
 } from '../content/server.js'
 import { PluginContext, SERVER_HANDLER_NAME } from '../plugin-context.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
+
+// write our run-config.json to the root dir so that we can easily get the runtime config of the required-server-files.json
+// without the need to know about the monorepo or distDir configuration upfront.
+export const writeRunConfig = async (ctx: PluginContext): Promise<void> => {
+  await writeFile(
+    join(ctx.serverHandlerDir, RUN_CONFIG_FILE),
+    JSON.stringify({
+      nextConfig: ctx.buildConfig,
+      nextVersion: ctx.nextVersion,
+      // only enable setting up 'use cache' handler when Next.js supports CacheHandlerV2 as we don't have V1 compatible implementation
+      // see https://github.com/vercel/next.js/pull/76687 first released in v15.3.0-canary.13
+      enableUseCacheHandler: ctx.nextVersion
+        ? satisfies(ctx.nextVersion, '>=15.3.0-canary.13', {
+            includePrerelease: true,
+          })
+        : false,
+    } satisfies RunConfig),
+    'utf-8',
+  )
+}
 
 /** Copies the runtime dist folder to the lambda */
 const copyHandlerDependencies = async (ctx: PluginContext) => {
@@ -113,9 +136,8 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
   if (ctx.useAdapter) {
     const template = await readFile(join(templatesDir, 'handler-adapter.tmpl.js'), 'utf-8')
     templateVariables['{{cwd}}'] =
-      ctx.relativeAppDir.length !== 0
-        ? posixJoin(ctx.lambdaWorkingDirectory)
-        : '/var/task'
+      // eslint-disable-next-line no-negated-condition
+      ctx.relativeAppDir.length !== 0 ? posixJoin(ctx.lambdaWorkingDirectory) : '/var/task'
     return applyTemplateVariables(template, templateVariables)
   }
 
@@ -160,6 +182,7 @@ export const createServerHandler = async (ctx: PluginContext) => {
     }
 
     await copyHandlerDependencies(ctx)
+    await writeRunConfig(ctx)
     await writeHandlerManifest(ctx)
     await writeHandlerFile(ctx)
 

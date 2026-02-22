@@ -365,6 +365,7 @@ export class PluginContext {
   get requiredServerFiles(): RequiredServerFilesManifest {
     if (!this._requiredServerFiles) {
       if (this.useAdapter) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const adapter = this.adapterOutput!
         this._requiredServerFiles = {
           version: 1,
@@ -392,6 +393,7 @@ export class PluginContext {
         ) as RequiredServerFilesManifest
       }
     }
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     return this._requiredServerFiles!
   }
 
@@ -438,6 +440,7 @@ export class PluginContext {
   get nextVersion(): string | null {
     if (this.#nextVersion === undefined) {
       if (this.useAdapter) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         this.#nextVersion = this.adapterOutput!.nextVersion
       } else {
         try {
