@@ -8,6 +8,7 @@ import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/rou
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
+  adjustDateHeader,
   setCacheControlHeaders,
   setCacheStatusHeader,
   setCacheTagsHeaders,
@@ -183,6 +184,9 @@ export default async (request: Request, requestContext: RequestContext) => {
     if (resolution.redirect) {
       // Handle explicit redirect
       const { url: redirectUrl, status } = resolution.redirect
+      // TODO(adapter): this can be cached forever
+      // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
+      // which would require setting correct netlify-vary header.
       return new Response(null, {
         status,
         headers: { location: redirectUrl.toString() },
@@ -221,6 +225,9 @@ export default async (request: Request, requestContext: RequestContext) => {
     }
 
     if (isRedirectResolution(resolution)) {
+      // TODO(adapter): this can be cached forever
+      // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
+      // which would require setting correct netlify-vary header.
       return applyResolutionToResponse(
         new Response(null, { status: resolution.status }),
         resolution,
@@ -248,17 +255,30 @@ export default async (request: Request, requestContext: RequestContext) => {
           // Invoke the route handler using the Node.js handler signature
           // as defined by the Next.js adapter contract:
           // handler(req: IncomingMessage, res: ServerResponse, ctx)
-          await handler(req, res, {
+          const nextHandlerPromise = handler(req, res, {
             waitUntil: requestContext.trackBackgroundWork,
           })
 
-          // Convert Node.js ServerResponse back to Web Response
+          // below is for now copied from standalone handler (without some extras, that generally could also be removed from standalone)
+          // but will be nice to extract common handling to shared module and cleanup some things
+
+          // Contrary to the docs, this resolves when the headers are available, not when the stream closes.
+          // See https://github.com/fastly/http-compute-js/blob/main/src/http-compute-js/http-server.ts#L168-L173
           const response = await toComputeResponse(res)
 
           invokeSpan?.setAttribute('http.status_code', response.status)
 
-          // Apply Netlify headers
           const nextCache = response.headers.get('x-nextjs-cache')
+          const isServedFromNextCache = nextCache === 'HIT' || nextCache === 'STALE'
+
+          if (isServedFromNextCache) {
+            await adjustDateHeader({
+              headers: response.headers,
+              request,
+              span,
+              requestContext,
+            })
+          }
           setCacheControlHeaders(response, request, requestContext)
           setCacheTagsHeaders(response.headers, requestContext)
           setVaryHeaders(
@@ -268,7 +288,33 @@ export default async (request: Request, requestContext: RequestContext) => {
           )
           setCacheStatusHeader(response.headers, nextCache)
 
-          return response
+          // eslint-disable-next-line no-inner-declarations
+          async function waitForBackgroundWork() {
+            // it's important to keep the stream open until the next handler has finished
+            await nextHandlerPromise
+
+            // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
+            // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
+            // otherwise Next would never run the callback variant of `next/after`
+            res.emit('close')
+
+            // We have to keep response stream open until tracked background promises that are don't use `context.waitUntil`
+            // are resolved. If `context.waitUntil` is available, `requestContext.backgroundWorkPromise` will be empty
+            // resolved promised and so awaiting it is no-op
+            await requestContext.backgroundWorkPromise
+          }
+
+          const keepOpenUntilNextFullyRendered = new TransformStream({
+            async flush() {
+              await waitForBackgroundWork()
+            },
+          })
+
+          if (!response.body) {
+            await waitForBackgroundWork()
+          }
+
+          return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
         } catch (error) {
           console.error('route handler error', error)
           getLogger().withError(error).error('route handler error')
@@ -280,6 +326,8 @@ export default async (request: Request, requestContext: RequestContext) => {
 
     // No match found — 404
     // TODO(adapter): this can be cached forever because it will never match any routes
+    // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
+    // which would require setting correct netlify-vary header.
     return new Response('Not Found', { status: 404 })
   })
 }
