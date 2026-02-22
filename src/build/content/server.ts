@@ -539,43 +539,6 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContext): Promise
       )
     }
     await Promise.all(copyPromises)
-
-    // Patch middleware-manifest.json if it exists in the handler dir
-    const middlewareManifestPath = join(
-      ctx.serverHandlerDir,
-      ctx.nextDistDir,
-      'server/middleware-manifest.json',
-    )
-    if (existsSync(middlewareManifestPath)) {
-      console.log('wat why is this here')
-      try {
-        await replaceMiddlewareManifest(middlewareManifestPath, middlewareManifestPath)
-      } catch (error) {
-        throw new Error('Could not patch middleware manifest file', { cause: error })
-      }
-    }
-
-    // Patch functions-config-manifest.json if it exists
-    // const functionsConfigManifestPath = join(
-    //   ctx.serverHandlerDir,
-    //   ctx.nextDistDir,
-    //   'server/functions-config-manifest.json',
-    // )
-    // if (existsSync(functionsConfigManifestPath)) {
-    //   try {
-    //     await replaceFunctionsConfigManifest(
-    //       functionsConfigManifestPath,
-    //       functionsConfigManifestPath,
-    //     )
-    //   } catch (error) {
-    //     console.error({ functionsConfigManifestPath }, error)
-    //     throw new Error('Could not patch functions config manifest file', { cause: error })
-    //   }
-    // }
-
-    // // Apply Next.js module patches
-    // const serverHandlerRequire = createRequire(posixJoin(ctx.serverHandlerDir, ':internal:'))
-    // await patchNextModules(ctx, adapterOutput.nextVersion, serverHandlerRequire.resolve)
   })
 }
 
