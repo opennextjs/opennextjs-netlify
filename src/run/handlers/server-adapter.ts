@@ -242,6 +242,10 @@ export default async (request: Request, requestContext: RequestContext) => {
         return new Response('Routing matched but no matched output exists', { status: 500 })
       }
 
+      if (matchedOutput.runtime !== 'nodejs') {
+        return new Response(`Not yet supported runtime ${matchedOutput.runtime}`, { status: 500 })
+      }
+
       span?.setAttribute('matched.pathname', resolution.matchedPathname)
       span?.setAttribute('matched.filePath', matchedOutput.filePath)
 

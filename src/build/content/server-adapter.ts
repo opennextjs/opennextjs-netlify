@@ -45,6 +45,12 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContext): Promise
 
     for (const outputs of outputArrays) {
       for (const output of outputs) {
+        if (output.runtime !== 'nodejs') {
+          console.log(
+            `Skipping non-nodejs output ${output.filePath} with runtime ${output.runtime}`,
+          )
+          continue
+        }
         // filePath is already relative to repoRoot (rewritten in adapter's onBuildComplete).
         // Resolve the absolute source path for copying.
         allAssets.set(output.filePath, join(adapterOutput.repoRoot, output.filePath))
