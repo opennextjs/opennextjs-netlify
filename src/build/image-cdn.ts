@@ -1,7 +1,15 @@
+import { fileURLToPath } from 'node:url'
+
 import type { RemotePattern } from 'next/dist/shared/lib/image-config.js'
 import { makeRe } from 'picomatch'
 
 import { PluginContext } from './plugin-context.js'
+
+// Use new URL() + fileURLToPath instead of import.meta.resolve for Vitest compatibility
+// (Vitest does not support import.meta.resolve — see https://github.com/vitest-dev/vitest/issues/6953)
+export const NETLIFY_IMAGE_LOADER_FILE = fileURLToPath(
+  new URL(`../shared/netlify-image-cdn-next-image-loader.cjs`, import.meta.url),
+)
 
 function generateRegexFromPattern(pattern: string): string {
   return makeRe(pattern).source
@@ -12,12 +20,23 @@ function generateRegexFromPattern(pattern: string): string {
  */
 export const setImageConfig = async (ctx: PluginContext): Promise<void> => {
   const {
-    images: { domains, remotePatterns, path: imageEndpointPath, loader: imageLoader },
+    images: {
+      domains,
+      remotePatterns,
+      path: imageEndpointPath,
+      loader: imageLoader,
+      loaderFile: imageLoaderFile,
+    },
   } = await ctx.buildConfig
-  if (imageLoader !== 'default') {
+
+  const usingNetlifyImageLoader =
+    imageLoader === 'custom' && imageLoaderFile === NETLIFY_IMAGE_LOADER_FILE
+  if (imageLoader !== 'default' && !usingNetlifyImageLoader) {
     return
   }
 
+  // when migrating from @netlify/plugin-nextjs@5 that is not using loader image /_next/image might be cached in the browser,
+  // so we need to keep it
   ctx.netlifyConfig.redirects.push(
     {
       from: imageEndpointPath,

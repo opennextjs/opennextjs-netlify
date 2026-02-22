@@ -1,4 +1,5 @@
-import { rm } from 'fs/promises'
+import { rm } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 
 import type { NetlifyPluginOptions } from '@netlify/build'
 import { trace } from '@opentelemetry/api'
@@ -65,6 +66,10 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     }
     await setSkewProtection(ctx, span)
   })
+
+  if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+    process.env.NEXT_ADAPTER_PATH = fileURLToPath(import.meta.resolve(`./adapter/adapter.js`))
+  }
 }
 
 export const onBuild = async (options: NetlifyPluginOptions) => {
