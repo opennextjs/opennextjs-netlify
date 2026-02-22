@@ -20,6 +20,8 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       os: ${{ steps.set-matrix.outputs.os }}
+      extraE2EIncludes: ${{ steps.set-matrix.outputs.extraE2EIncludes }}
+      extraMergeReportsIncludes: ${{ steps.set-matrix.outputs.extraMergeReportsIncludes }}
     steps:
       - name: Check PR labels
         if: github.event_name == 'pull_request'
@@ -86,6 +88,33 @@ jobs:
             } else {
               core.setOutput('os', '["ubuntu-latest"]');
             }
+      - name: Set Next.js versions to test
+        id: set-adapters-includes
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const versionMatrix = '${{ steps.set-matrix.outputs.matrix }}';
+            const versions = versionMatrix ? JSON.parse(versionMatrix) : []
+            const runsCanary = versions.includes('canary');
+
+            if (runsCanary) {
+              core.setOutput('extraE2EIncludes', JSON.stringify([
+                {
+                  version: 'canary',
+                  shard: [1, 2, 3, 4, 5],
+                  mode: "adapter"
+                }
+              ]));
+              core.setOutput('extraMergeReportsIncludes', JSON.stringify([
+                {
+                  version: 'canary',
+                  blobReportKey: 'adapter'
+                }
+              ]));
+            } else {
+              core.setOutput('extraE2EIncludes', '[]');
+              core.setOutput('extraMergeReportsIncludes', '[]');
+            }
 
   e2e:
     needs: setup
@@ -95,6 +124,7 @@ jobs:
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         shard: [1, 2, 3, 4, 5]
+        include: ${{ fromJson(needs.setup.outputs.extraE2EIncludes) }}
 
     steps:
       - uses: actions/checkout@v6
@@ -155,6 +185,17 @@ jobs:
       - name: Install Playwright Browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
+      - name: Is Adapter Test?
+        id: is-adapter-test
+        shell: bash
+        run: |
+          if [[ "${{ matrix.mode }}" == "adapter" ]]; then
+            echo "NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true" >> $GITHUB_OUTPUT
+            echo "BLOB_REPORT_KEY=adapter" >> $GITHUB_OUTPUT
+          else
+            echo "NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=" >> $GITHUB_OUTPUT
+            echo "BLOB_REPORT_KEY=standalone" >> $GITHUB_OUTPUT
+          fi
       - name: Run Playwright tests
         run: npm run test:ci:e2e -- --shard=${{ matrix.shard }}/5
         env:
@@ -162,11 +203,12 @@ jobs:
           NEXT_VERSION: ${{ matrix.version }}
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           NODE_OPTIONS: --import file://${{ github.workspace }}/tools/fetch-retry.mjs
+          NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ steps.is-adapter-test.outputs.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER }}
       - name: Upload blob report to GitHub Actions Artifacts
         uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: blob-report-${{matrix.version}}-${{ matrix.shard }}
+          name: blob-report-${{ steps.is-adapter-test.outputs.BLOB_REPORT_KEY }}-${{matrix.version}}-${{ matrix.shard }}
           path: blob-report
           retention-days: 1
 
@@ -328,6 +370,8 @@ jobs:
       fail-fast: false
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
+        key: ["standalone"]
+        include: ${{ fromJson(needs.setup.outputs.extraMergeReportsIncludes) }}
 
     runs-on: ubuntu-latest
     steps:
@@ -342,7 +386,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: all-blob-reports
-          pattern: blob-report-${{ matrix.version }}-*
+          pattern: blob-report-${{ matrix.key }}-${{ matrix.version }}-*
           merge-multiple: true
 
       - name: Merge reports
