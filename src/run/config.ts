@@ -4,6 +4,9 @@ import { join, resolve } from 'node:path'
 
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
+import type { SerializedAdapterOutput } from '../adapter/adapter-output.js'
+import { ADAPTER_MANIFEST_FILE } from '../build/content/server.js'
+
 import { PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
 import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
 
@@ -14,10 +17,29 @@ export type RunConfig = {
 }
 
 /**
+ * Subset of the adapter output that is needed at runtime for route resolution
+ */
+export type AdapterManifest = Pick<
+  SerializedAdapterOutput,
+  'routing' | 'outputs' | 'buildId' | 'config'
+>
+
+/**
  * Get Next.js config from the build output
  */
 export const getRunConfig = async () => {
   return JSON.parse(await readFile(resolve(PLUGIN_DIR, RUN_CONFIG_FILE), 'utf-8')) as RunConfig
+}
+
+/**
+ * Get the adapter manifest written at build time.
+ * Uses the same PLUGIN_DIR resolution as getRunConfig() — both files are
+ * written to ctx.serverHandlerDir during the build.
+ */
+export const getAdapterManifest = async (): Promise<AdapterManifest> => {
+  return JSON.parse(
+    await readFile(resolve(PLUGIN_DIR, ADAPTER_MANIFEST_FILE), 'utf-8'),
+  ) as AdapterManifest
 }
 
 export type NextConfigForMultipleVersions = NextConfigComplete & {

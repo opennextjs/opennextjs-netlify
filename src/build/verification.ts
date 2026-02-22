@@ -46,7 +46,8 @@ export function verifyPublishDir(ctx: PluginContext) {
         'Your publish directory does not contain expected Next.js build output. Please check your build settings',
       )
     }
-    if (!existsSync(ctx.standaloneRootDir)) {
+    // In adapter mode, standalone output may not exist — skip that check
+    if (!ctx.useAdapter && !existsSync(ctx.standaloneRootDir)) {
       ctx.failBuild(
         `Your publish directory does not contain expected Next.js build output. Please make sure you are using Next.js version (${SUPPORTED_NEXT_VERSIONS})`,
       )

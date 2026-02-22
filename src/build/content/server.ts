@@ -20,9 +20,13 @@ import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middlew
 import type { FunctionsConfigManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
 import { prerelease, satisfies, lt as semverLowerThan, lte as semverLowerThanOrEqual } from 'semver'
 
+import { ADAPTER_OUTPUT_FILE } from '../../adapter/adapter-output.js'
+import type { SerializedAdapterOutput } from '../../adapter/adapter-output.js'
 import type { RunConfig } from '../../run/config.js'
 import { RUN_CONFIG_FILE } from '../../run/constants.js'
 import type { PluginContext, RequiredServerFilesManifest } from '../plugin-context.js'
+
+export const ADAPTER_MANIFEST_FILE = 'adapter-manifest.json'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
@@ -461,6 +465,118 @@ const replaceFunctionsConfigManifest = async (sourcePath: string, destPath: stri
   } else {
     await cp(sourcePath, destPath, { recursive: true, force: true })
   }
+}
+
+/**
+ * Copy Next.js server code using adapter-provided traced assets instead of standalone output.
+ * Collects all assets from all function outputs and copies them preserving relative paths.
+ */
+export const copyNextServerCodeFromAdapter = async (ctx: PluginContext): Promise<void> => {
+  await tracer.withActiveSpan('copyNextServerCodeFromAdapter', async () => {
+    const adapterOutput = ctx.adapterOutput!
+
+    await mkdir(ctx.serverHandlerDir, { recursive: true })
+
+    // Write run-config.json
+    // Cast config through unknown because next-with-adapters' NextConfigComplete
+    // differs slightly from the `next` package's type, but they're compatible at runtime
+    await writeFile(
+      join(ctx.serverHandlerDir, RUN_CONFIG_FILE),
+      JSON.stringify({
+        nextConfig: adapterOutput.config as unknown as RunConfig['nextConfig'],
+        nextVersion: adapterOutput.nextVersion,
+        enableUseCacheHandler: satisfies(adapterOutput.nextVersion, '>=15.3.0-canary.13', {
+          includePrerelease: true,
+        }),
+      } satisfies RunConfig),
+      'utf-8',
+    )
+
+    // Write the adapter manifest (routing + output metadata) for runtime use.
+    // filePaths are already relative (rewritten in the adapter's onBuildComplete).
+    await writeFile(
+      join(ctx.serverHandlerDir, ADAPTER_MANIFEST_FILE),
+      JSON.stringify({
+        routing: adapterOutput.routing,
+        outputs: adapterOutput.outputs,
+        buildId: adapterOutput.buildId,
+        config: adapterOutput.config,
+      }),
+      'utf-8',
+    )
+
+    // Collect all assets from all function outputs into a unified map
+    // key = relative path from repoRoot, value = absolute path on disk
+    const allAssets = new Map<string, string>()
+    const outputArrays = [
+      adapterOutput.outputs.pages,
+      adapterOutput.outputs.pagesApi,
+      adapterOutput.outputs.appPages,
+      adapterOutput.outputs.appRoutes,
+    ] as const
+
+    for (const outputs of outputArrays) {
+      for (const output of outputs) {
+        // filePath is already relative to repoRoot (rewritten in adapter's onBuildComplete).
+        // Resolve the absolute source path for copying.
+        allAssets.set(output.filePath, join(adapterOutput.repoRoot, output.filePath))
+
+        // Add all traced assets
+        for (const [relPath, absPath] of Object.entries(output.assets)) {
+          allAssets.set(relPath, absPath)
+        }
+      }
+    }
+
+    // Copy all collected assets preserving relative paths
+    const copyPromises: Promise<void>[] = []
+    for (const [relPath, absPath] of allAssets) {
+      const destPath = join(ctx.serverHandlerRootDir, relPath)
+      copyPromises.push(
+        mkdir(dirname(destPath), { recursive: true }).then(() =>
+          cp(absPath, destPath, { recursive: true, force: true }),
+        ),
+      )
+    }
+    await Promise.all(copyPromises)
+
+    // Patch middleware-manifest.json if it exists in the handler dir
+    const middlewareManifestPath = join(
+      ctx.serverHandlerDir,
+      ctx.nextDistDir,
+      'server/middleware-manifest.json',
+    )
+    if (existsSync(middlewareManifestPath)) {
+      console.log('wat why is this here')
+      try {
+        await replaceMiddlewareManifest(middlewareManifestPath, middlewareManifestPath)
+      } catch (error) {
+        throw new Error('Could not patch middleware manifest file', { cause: error })
+      }
+    }
+
+    // Patch functions-config-manifest.json if it exists
+    // const functionsConfigManifestPath = join(
+    //   ctx.serverHandlerDir,
+    //   ctx.nextDistDir,
+    //   'server/functions-config-manifest.json',
+    // )
+    // if (existsSync(functionsConfigManifestPath)) {
+    //   try {
+    //     await replaceFunctionsConfigManifest(
+    //       functionsConfigManifestPath,
+    //       functionsConfigManifestPath,
+    //     )
+    //   } catch (error) {
+    //     console.error({ functionsConfigManifestPath }, error)
+    //     throw new Error('Could not patch functions config manifest file', { cause: error })
+    //   }
+    // }
+
+    // // Apply Next.js module patches
+    // const serverHandlerRequire = createRequire(posixJoin(ctx.serverHandlerDir, ':internal:'))
+    // await patchNextModules(ctx, adapterOutput.nextVersion, serverHandlerRequire.resolve)
+  })
 }
 
 export const verifyHandlerDirStructure = async (ctx: PluginContext) => {

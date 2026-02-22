@@ -9,6 +9,7 @@ import { glob } from 'fast-glob'
 import {
   copyNextDependencies,
   copyNextServerCode,
+  copyNextServerCodeFromAdapter,
   verifyHandlerDirStructure,
 } from '../content/server.js'
 import { PluginContext, SERVER_HANDLER_NAME } from '../plugin-context.js'
@@ -107,6 +108,17 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
   const templateVariables: Record<string, string> = {
     '{{useRegionalBlobs}}': ctx.useRegionalBlobs.toString(),
   }
+
+  // Adapter mode uses a dedicated template that works for both monorepo and non-monorepo setups
+  if (ctx.useAdapter) {
+    const template = await readFile(join(templatesDir, 'handler-adapter.tmpl.js'), 'utf-8')
+    templateVariables['{{cwd}}'] =
+      ctx.relativeAppDir.length !== 0
+        ? posixJoin(ctx.lambdaWorkingDirectory)
+        : '/var/task'
+    return applyTemplateVariables(template, templateVariables)
+  }
+
   // In this case it is a monorepo and we need to use a own template for it
   // as we have to change the process working directory
   if (ctx.relativeAppDir.length !== 0) {
@@ -140,8 +152,13 @@ export const createServerHandler = async (ctx: PluginContext) => {
   await tracer.withActiveSpan('createServerHandler', async () => {
     await mkdir(join(ctx.serverHandlerRuntimeModulesDir), { recursive: true })
 
-    await copyNextServerCode(ctx)
-    await copyNextDependencies(ctx)
+    if (ctx.useAdapter) {
+      await copyNextServerCodeFromAdapter(ctx)
+    } else {
+      await copyNextServerCode(ctx)
+      await copyNextDependencies(ctx)
+    }
+
     await copyHandlerDependencies(ctx)
     await writeHandlerManifest(ctx)
     await writeHandlerFile(ctx)
