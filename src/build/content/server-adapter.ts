@@ -7,6 +7,8 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 import { ADAPTER_MANIFEST_FILE } from '../../run/constants.js'
 import type { PluginContext } from '../plugin-context.js'
 
+import { writeRunConfig } from './server.js'
+
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
 /**
@@ -19,6 +21,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContext): Promise
     const adapterOutput = ctx.adapterOutput!
 
     await mkdir(ctx.serverHandlerDir, { recursive: true })
+    await writeRunConfig(ctx)
 
     // Write the adapter manifest (routing + output metadata) for runtime use.
     // filePaths are already relative (rewritten in the adapter's onBuildComplete).

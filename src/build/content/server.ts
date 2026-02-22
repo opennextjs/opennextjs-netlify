@@ -18,7 +18,7 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
 import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
 import type { FunctionsConfigManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
-import { prerelease, lt as semverLowerThan, lte as semverLowerThanOrEqual } from 'semver'
+import { prerelease, satisfies, lt as semverLowerThan, lte as semverLowerThanOrEqual } from 'semver'
 
 import type { RunConfig } from '../../run/config.js'
 import { RUN_CONFIG_FILE } from '../../run/constants.js'
@@ -34,6 +34,26 @@ const toPosixPath = (path: string) =>
 
 function isError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error
+}
+
+// write our run-config.json to the root dir so that we can easily get the runtime config of the required-server-files.json
+// without the need to know about the monorepo or distDir configuration upfront.
+export const writeRunConfig = async (ctx: PluginContext): Promise<void> => {
+  await writeFile(
+    join(ctx.serverHandlerDir, RUN_CONFIG_FILE),
+    JSON.stringify({
+      nextConfig: ctx.buildConfig,
+      nextVersion: ctx.nextVersion,
+      // only enable setting up 'use cache' handler when Next.js supports CacheHandlerV2 as we don't have V1 compatible implementation
+      // see https://github.com/vercel/next.js/pull/76687 first released in v15.3.0-canary.13
+      enableUseCacheHandler: ctx.nextVersion
+        ? satisfies(ctx.nextVersion, '>=15.3.0-canary.13', {
+            includePrerelease: true,
+          })
+        : false,
+    } satisfies RunConfig),
+    'utf-8',
+  )
 }
 
 /**
@@ -79,6 +99,7 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
 
     // ensure the directory exists before writing to it
     await mkdir(ctx.serverHandlerDir, { recursive: true })
+    await writeRunConfig(ctx)
 
     const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
     // if the distDir got resolved and altered use the nextDistDir instead
