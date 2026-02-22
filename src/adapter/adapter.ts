@@ -53,11 +53,7 @@ const adapter: NextAdapter = {
       buildId: ctx.buildId,
     }
 
-    await writeFile(
-      join(ctx.distDir, ADAPTER_OUTPUT_FILE),
-      JSON.stringify(serialized),
-      'utf-8',
-    )
+    await writeFile(join(ctx.distDir, ADAPTER_OUTPUT_FILE), JSON.stringify(serialized), 'utf-8')
   },
 }
 
