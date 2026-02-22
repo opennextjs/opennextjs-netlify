@@ -2,7 +2,10 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { resolve } from 'node:path'
 
-import { getAdapterManifest } from '../config.js'
+import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
+import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
+
+import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
   setCacheControlHeaders,
@@ -12,10 +15,33 @@ import {
 } from '../headers.js'
 import { resolveRoutes } from '../routing.cjs'
 import type { ResolveRoutesParams, ResolveRoutesResult } from '../routing.cjs'
+import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
 import type { RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
+import { configureUseCacheHandlers } from './use-cache-handler.js'
+import { setupWaitUntil } from './wait-until.cjs'
+
+// Read the adapter manifest written at build time (same path resolution as getRunConfig)
+let manifest: Awaited<ReturnType<typeof getAdapterManifest>>
+try {
+  manifest = await getAdapterManifest()
+} catch (error) {
+  console.error('Failed to load adapter manifest', error)
+  throw error
+}
+
+// make use of global fetch before Next.js applies any patching
+setFetchBeforeNextPatchedIt(globalThis.fetch)
+// configure globals that Next.js make use of before we start importing any Next.js code
+// as some globals are consumed at import time
+const { nextConfig: initialNextConfig, enableUseCacheHandler } = await getRunConfig()
+if (enableUseCacheHandler) {
+  configureUseCacheHandlers()
+}
+const nextConfig = setRunConfig(initialNextConfig) as unknown as NextConfigRuntime
+setupWaitUntil()
 
 // Next.js checks globalThis.AsyncLocalStorage to decide whether to use real
 // or fake (throwing) AsyncLocalStorage. Must be set before any Next.js code loads
@@ -25,13 +51,18 @@ if (!('AsyncLocalStorage' in globalThis)) {
   globals.AsyncLocalStorage = AsyncLocalStorage
 }
 
-// Read the adapter manifest written at build time (same path resolution as getRunConfig)
-let manifest: Awaited<ReturnType<typeof getAdapterManifest>>
-try {
-  manifest = await getAdapterManifest()
-} catch (error) {
-  console.error('Failed to load adapter manifest', error)
-  throw error
+const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
+const globalThisWithRouterServerContext = globalThis as typeof globalThis & {
+  [RouterServerContextSymbol]?: RouterServerContext
+}
+
+if (!globalThisWithRouterServerContext[RouterServerContextSymbol]) {
+  globalThisWithRouterServerContext[RouterServerContextSymbol] = {
+    // TODO(adapter): monorepo?
+    '': {
+      nextConfig,
+    },
+  }
 }
 
 // Build a map of pathname -> output for quick lookup at request time
@@ -59,7 +90,7 @@ type NodeHandlerFn = (
 ) => Promise<void>
 
 // Cache loaded handler functions
-const handlerCache = new Map<string, NodeHandlerFn>()
+const nodeHandlerCache = new Map<string, NodeHandlerFn>()
 
 function preferDefault(mod: unknown): unknown {
   return mod && typeof mod === 'object' && 'default' in mod ? mod.default : mod
@@ -68,7 +99,7 @@ function preferDefault(mod: unknown): unknown {
 async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   // Resolve relative paths against process.cwd() (set by handler template)
   const resolvedPath = resolve(filePath)
-  const cached = handlerCache.get(resolvedPath)
+  const cached = nodeHandlerCache.get(resolvedPath)
   if (cached) {
     return cached
   }
@@ -77,8 +108,40 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   // Handle both ESM default exports and CJS module.exports (which can
   // result in double-nested .default when imported from ESM)
   const { handler } = preferDefault(preferDefault(mod)) as { handler: NodeHandlerFn }
-  handlerCache.set(resolvedPath, handler)
+  nodeHandlerCache.set(resolvedPath, handler)
   return handler
+}
+
+// grabbed from Reference AWS Adapter
+function applyResolutionToResponse(
+  response: Response,
+  resolution: ResolveRoutesResult,
+  explicitStatus?: number,
+): Response {
+  const headers = new Headers(response.headers)
+  const hasExplicitCacheControl = headers.has('cache-control')
+  if (resolution.resolvedHeaders) {
+    for (const [key, value] of resolution.resolvedHeaders.entries()) {
+      const normalizedKey = key.toLowerCase()
+      if (normalizedKey === 'cache-control' && hasExplicitCacheControl) {
+        continue
+      }
+      headers.set(key, value)
+    }
+  }
+
+  return new Response(response.body, {
+    status: explicitStatus ?? resolution.status ?? response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
+// grabbed from Reference AWS Adapter
+function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
+  if (!resolution.status) return false
+  if (resolution.status < 300 || resolution.status >= 400) return false
+  return Boolean(resolution.resolvedHeaders?.get('location'))
 }
 
 export default async (request: Request, requestContext: RequestContext) => {
@@ -112,16 +175,20 @@ export default async (request: Request, requestContext: RequestContext) => {
       return new Response('Internal Server Error', { status: 500 })
     }
 
+    // TODO(adapter): what's up with resolution.resolvedHeaders
+    // They contain request headers, but also response headers ...
+
     console.log({ resolution })
 
-    // Handle redirect
-    if (resolution.redirect) {
-      const { url: redirectUrl, status } = resolution.redirect
-      return new Response(null, {
-        status,
-        headers: { location: redirectUrl.toString() },
-      })
-    }
+    if (resolution.status ?? 0)
+      if (resolution.redirect) {
+        // Handle explicit redirect
+        const { url: redirectUrl, status } = resolution.redirect
+        return new Response(null, {
+          status,
+          headers: { location: redirectUrl.toString() },
+        })
+      }
 
     // Handle external rewrite
     if (resolution.externalRewrite) {
@@ -139,6 +206,14 @@ export default async (request: Request, requestContext: RequestContext) => {
         getLogger().withError(error).error('external rewrite fetch error')
         return new Response('Bad Gateway', { status: 502 })
       }
+    }
+
+    if (isRedirectResolution(resolution)) {
+      return applyResolutionToResponse(
+        new Response(null, { status: resolution.status }),
+        resolution,
+        resolution.status,
+      )
     }
 
     // Handle matched route
@@ -192,7 +267,7 @@ export default async (request: Request, requestContext: RequestContext) => {
     }
 
     // No match found — 404
-    // TODO: this can be cached forever because it will never match any routes
+    // TODO(adapter): this can be cached forever because it will never match any routes
     return new Response('Not Found', { status: 404 })
   })
 }

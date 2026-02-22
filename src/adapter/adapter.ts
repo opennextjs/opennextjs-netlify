@@ -12,6 +12,7 @@ const adapter: NextAdapter = {
   name: 'Netlify',
   modifyConfig(config, ctx) {
     if (ctx?.phase === 'phase-production-build' && config.output !== 'export') {
+      // TODO(adapter)
       // If not export, make sure to not build standalone output as it will become useless
       // // @ts-expect-error types don't unsetting output to not use 'standalone'
       // config.output = undefined
