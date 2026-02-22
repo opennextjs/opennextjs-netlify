@@ -38,11 +38,14 @@ function isError(error: unknown): error is NodeJS.ErrnoException {
 
 // write our run-config.json to the root dir so that we can easily get the runtime config of the required-server-files.json
 // without the need to know about the monorepo or distDir configuration upfront.
-export const writeRunConfig = async (ctx: PluginContext): Promise<void> => {
+export const writeRunConfig = async (
+  ctx: PluginContext,
+  nextConfig = ctx.buildConfig,
+): Promise<void> => {
   await writeFile(
     join(ctx.serverHandlerDir, RUN_CONFIG_FILE),
     JSON.stringify({
-      nextConfig: ctx.buildConfig,
+      nextConfig,
       nextVersion: ctx.nextVersion,
       // only enable setting up 'use cache' handler when Next.js supports CacheHandlerV2 as we don't have V1 compatible implementation
       // see https://github.com/vercel/next.js/pull/76687 first released in v15.3.0-canary.13
@@ -99,7 +102,7 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
 
     // ensure the directory exists before writing to it
     await mkdir(ctx.serverHandlerDir, { recursive: true })
-    await writeRunConfig(ctx)
+    await writeRunConfig(ctx, reqServerFiles.config)
 
     const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
     // if the distDir got resolved and altered use the nextDistDir instead
