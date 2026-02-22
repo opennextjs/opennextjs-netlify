@@ -180,27 +180,39 @@ export default async (request: Request, requestContext: RequestContext) => {
 
     console.log({ resolution })
 
-    if (resolution.status ?? 0)
-      if (resolution.redirect) {
-        // Handle explicit redirect
-        const { url: redirectUrl, status } = resolution.redirect
-        return new Response(null, {
-          status,
-          headers: { location: redirectUrl.toString() },
-        })
-      }
+    if (resolution.redirect) {
+      // Handle explicit redirect
+      const { url: redirectUrl, status } = resolution.redirect
+      return new Response(null, {
+        status,
+        headers: { location: redirectUrl.toString() },
+      })
+    }
 
     // Handle external rewrite
     if (resolution.externalRewrite) {
       try {
-        const externalResponse = await fetch(resolution.externalRewrite.toString(), {
-          method: request.method,
-          headers: request.headers,
-          body: request.body,
-          // @ts-expect-error - duplex is needed for streaming request bodies
-          duplex: 'half',
+        const proxyRequest = new Request(resolution.externalRewrite.toString(), request)
+        // Remove Netlify internal headers
+        for (const key of request.headers.keys()) {
+          if (key.startsWith('x-nf-')) {
+            proxyRequest.headers.delete(key)
+          }
+        }
+
+        const fetchResp = await fetch(proxyRequest, { redirect: 'manual' })
+        // fetch() returns immutable headers — create a new Response with mutable headers
+        const headers = new Headers(fetchResp.headers)
+        // fetch() transparently decompresses the body but keeps the original
+        // content-encoding/transfer-encoding headers. Strip them so the browser
+        // doesn't try to decompress an already-decompressed body.
+        headers.delete('transfer-encoding')
+        headers.delete('content-encoding')
+        headers.delete('content-length')
+        return new Response(fetchResp.body, {
+          ...fetchResp,
+          headers,
         })
-        return externalResponse
       } catch (error) {
         console.error('external rewrite fetch error', error)
         getLogger().withError(error).error('external rewrite fetch error')
