@@ -2,9 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { resolve } from 'node:path'
 
-import { toComputeResponse, toReqRes } from '@fastly/http-compute-js'
-
 import { getAdapterManifest } from '../config.js'
+import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
   setCacheControlHeaders,
   setCacheStatusHeader,
