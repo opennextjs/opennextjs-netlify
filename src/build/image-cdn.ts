@@ -3,12 +3,14 @@ import { fileURLToPath } from 'node:url'
 import type { RemotePattern } from 'next/dist/shared/lib/image-config.js'
 import { makeRe } from 'picomatch'
 
+import { workaroundNpmLinkOutsideOfProjectRoot } from '../shared/npm-link-workaround.js'
+
 import { PluginContext } from './plugin-context.js'
 
 // Use new URL() + fileURLToPath instead of import.meta.resolve for Vitest compatibility
 // (Vitest does not support import.meta.resolve — see https://github.com/vitest-dev/vitest/issues/6953)
-export const NETLIFY_IMAGE_LOADER_FILE = fileURLToPath(
-  new URL(`../shared/netlify-image-cdn-next-image-loader.cjs`, import.meta.url),
+export const NETLIFY_IMAGE_LOADER_FILE = workaroundNpmLinkOutsideOfProjectRoot(
+  fileURLToPath(new URL(`../shared/netlify-image-cdn-next-image-loader.cjs`, import.meta.url)),
 )
 
 function generateRegexFromPattern(pattern: string): string {
