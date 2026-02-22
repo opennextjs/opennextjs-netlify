@@ -20,8 +20,8 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       os: ${{ steps.set-matrix.outputs.os }}
-      extraE2EIncludes: ${{ steps.set-matrix.outputs.extraE2EIncludes }}
-      extraMergeReportsIncludes: ${{ steps.set-matrix.outputs.extraMergeReportsIncludes }}
+      extraE2EIncludes: ${{ steps.set-adapters-includes.outputs.extraE2EIncludes }}
+      extraMergeReportsIncludes: ${{ steps.set-adapters-includes.outputs.extraMergeReportsIncludes }}
     steps:
       - name: Check PR labels
         if: github.event_name == 'pull_request'
@@ -88,7 +88,7 @@ jobs:
             } else {
               core.setOutput('os', '["ubuntu-latest"]');
             }
-      - name: Set Next.js versions to test
+      - name: Set adapter test includes
         id: set-adapters-includes
         uses: actions/github-script@v8
         with:
@@ -98,13 +98,13 @@ jobs:
             const runsCanary = versions.includes('canary');
 
             if (runsCanary) {
-              core.setOutput('extraE2EIncludes', JSON.stringify([
-                {
+              core.setOutput('extraE2EIncludes', JSON.stringify(
+                [1, 2, 3, 4, 5].map(shard => ({
                   version: 'canary',
-                  shard: [1, 2, 3, 4, 5],
-                  mode: "adapter"
-                }
-              ]));
+                  shard,
+                  mode: 'adapter'
+                }))
+              ));
               core.setOutput('extraMergeReportsIncludes', JSON.stringify([
                 {
                   version: 'canary',
