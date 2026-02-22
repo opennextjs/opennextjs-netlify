@@ -99,7 +99,7 @@ jobs:
 
             if (runsCanary) {
               core.setOutput('extraE2EIncludes', JSON.stringify(
-                [1, 2, 3, 4, 5].map(shard => ({
+                ['1', '2', '3', '4', '5'].map(shard => ({
                   version: 'canary',
                   shard,
                   mode: 'adapter'
@@ -115,6 +115,10 @@ jobs:
               core.setOutput('extraE2EIncludes', '[]');
               core.setOutput('extraMergeReportsIncludes', '[]');
             }
+      - name: Debug outputs
+        run: |
+          echo "extraE2EIncludes: ${{ steps.set-adapters-includes.outputs.extraE2EIncludes }}"
+          echo "extraMergeReportsIncludes: ${{ steps.set-adapters-includes.outputs.extraMergeReportsIncludes }}"
 
   e2e:
     needs: setup
@@ -124,6 +128,7 @@ jobs:
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         shard: [1, 2, 3, 4, 5]
+        mode: ["standalone"]
         include: ${{ fromJson(needs.setup.outputs.extraE2EIncludes) }}
 
     steps:
