@@ -402,6 +402,6 @@ jobs:
       - name: Upload HTML report
         uses: actions/upload-artifact@v6
         with:
-          name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
+          name: html-report-${{ matrix.key }}-${{ matrix.version }}-attempt-${{ github.run_attempt }}
           path: playwright-report
           retention-days: 14
