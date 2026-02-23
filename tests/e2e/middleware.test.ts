@@ -1,6 +1,6 @@
 import { expect, Response } from '@playwright/test'
 import { hasNodeMiddlewareSupport, nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
-import { test } from '../utils/playwright-helpers.js'
+import { test as baseTest } from '../utils/playwright-helpers.js'
 import { getImageSize } from 'next/dist/server/image-optimizer.js'
 import type { Fixture } from '../utils/create-e2e-fixture.js'
 
@@ -21,7 +21,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
     expectedRuntime: 'edge-runtime',
     isNodeMiddleware: false,
     label: 'Edge runtime middleware',
-    testWithSwitchableMiddlewareRuntime: test.extend<{}, ExtendedFixtures>({
+    testWithSwitchableMiddlewareRuntime: baseTest.extend<{}, ExtendedFixtures>({
       edgeOrNodeMiddleware: [
         async ({ middleware }, use) => {
           await use(middleware)
@@ -64,13 +64,12 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
       ],
     }),
   },
-  // TODO(adapter): re-enable once we look into middleware handling
-  !process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && hasNodeMiddlewareSupport()
+  hasNodeMiddlewareSupport()
     ? {
         expectedRuntime: 'node',
         isNodeMiddleware: true,
         label: 'Node.js runtime middleware',
-        testWithSwitchableMiddlewareRuntime: test.extend<{}, ExtendedFixtures>({
+        testWithSwitchableMiddlewareRuntime: baseTest.extend<{}, ExtendedFixtures>({
           edgeOrNodeMiddleware: [
             async ({ middlewareNode }, use) => {
               await use(middlewareNode)
@@ -117,9 +116,15 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
 ].filter(function isDefined<T>(argument: T | undefined): argument is T {
   return typeof argument !== 'undefined'
 })) {
-  const test = testWithSwitchableMiddlewareRuntime
+  // TODO(adapter): don't skip once we look into middleware handling
+  const test = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+    ? testWithSwitchableMiddlewareRuntime.skip
+    : testWithSwitchableMiddlewareRuntime
+  const testDescribe = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+    ? testWithSwitchableMiddlewareRuntime.describe.skip
+    : testWithSwitchableMiddlewareRuntime.describe
 
-  test.describe(label, () => {
+  testDescribe(label, () => {
     test('Runs middleware', async ({ page, edgeOrNodeMiddleware }) => {
       const res = await page.goto(`${edgeOrNodeMiddleware.url}/test/redirect`)
 
@@ -182,7 +187,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
       })
     }
 
-    test.describe('json data', () => {
+    testDescribe('json data', () => {
       const testConfigs = [
         {
           describeLabel: 'NextResponse.next() -> getServerSideProps page',
@@ -220,9 +225,9 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
         })
       }
 
-      test.describe('no 18n', () => {
+      testDescribe('no 18n', () => {
         for (const testConfig of testConfigs) {
-          test.describe(testConfig.describeLabel, () => {
+          testDescribe(testConfig.describeLabel, () => {
             test('json data fetch', async ({ edgeOrNodeMiddlewarePages, page }) => {
               const dataFetchPromise = new Promise<Response>((resolve) => {
                 page.on('response', (response) => {
@@ -274,15 +279,15 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
         }
       })
 
-      test.describe('with 18n', () => {
+      testDescribe('with 18n', () => {
         for (const testConfig of testConfigs) {
-          test.describe(testConfig.describeLabel, () => {
+          testDescribe(testConfig.describeLabel, () => {
             for (const { localeLabel, pageWithLinksPathname } of [
               { localeLabel: 'implicit default locale', pageWithLinksPathname: '/link' },
               { localeLabel: 'explicit default locale', pageWithLinksPathname: '/en/link' },
               { localeLabel: 'explicit non-default locale', pageWithLinksPathname: '/fr/link' },
             ]) {
-              test.describe(localeLabel, () => {
+              testDescribe(localeLabel, () => {
                 test('json data fetch', async ({ edgeOrNodeMiddlewareI18n, page }) => {
                   const dataFetchPromise = new Promise<Response>((resolve) => {
                     page.on('response', (response) => {
@@ -343,7 +348,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
 
     // those tests use `fetch` instead of `page.goto` intentionally to avoid potential client rendering
     // hiding any potential edge/server issues
-    test.describe('Middleware with i18n and excluded paths', () => {
+    testDescribe('Middleware with i18n and excluded paths', () => {
       const DEFAULT_LOCALE = 'en'
 
       /** helper function to extract JSON data from page rendering data with `<pre>{JSON.stringify(data)}</pre>` */
@@ -372,7 +377,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
 
       // those tests hit paths ending with `/json` which has special handling in middleware
       // to return JSON response from middleware itself
-      test.describe('Middleware response path', () => {
+      testDescribe('Middleware response path', () => {
         test('should match on non-localized not excluded page path', async ({
           edgeOrNodeMiddlewareI18nExcludedPaths,
         }) => {
@@ -406,7 +411,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
 
       // those tests hit paths that don't end with `/json` while still satisfying middleware matcher
       // so middleware should pass them through to origin
-      test.describe('Middleware passthrough', () => {
+      testDescribe('Middleware passthrough', () => {
         test('should match on non-localized not excluded page path', async ({
           edgeOrNodeMiddlewareI18nExcludedPaths,
         }) => {
@@ -444,7 +449,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
 
       // those tests hit paths that don't satisfy middleware matcher, so should go directly to origin
       // without going through middleware
-      test.describe('Middleware skipping (paths not satisfying middleware matcher)', () => {
+      testDescribe('Middleware skipping (paths not satisfying middleware matcher)', () => {
         test('should NOT match on non-localized excluded API path', async ({
           edgeOrNodeMiddlewareI18nExcludedPaths,
         }) => {
@@ -504,7 +509,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
       expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
     })
 
-    test.describe('RSC cache poisoning', () => {
+    testDescribe('RSC cache poisoning', () => {
       test('Middleware rewrite', async ({ page, edgeOrNodeMiddleware }) => {
         const prefetchResponsePromise = new Promise<Response>((resolve) => {
           page.on('response', (response) => {
@@ -578,8 +583,8 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
 
     if (isNodeMiddleware) {
       // Node.js Middleware specific tests to test features not available in Edge Runtime
-      test.describe('Node.js Middleware specific', () => {
-        test.describe('npm package manager', () => {
+      testDescribe('Node.js Middleware specific', () => {
+        testDescribe('npm package manager', () => {
           test('node:crypto module', async ({ middlewareNodeRuntimeSpecific }) => {
             const response = await fetch(`${middlewareNodeRuntimeSpecific.url}/test/crypto`)
             expect(response.status).toBe(200)
@@ -611,7 +616,7 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
           })
         })
 
-        test.describe('pnpm package manager', () => {
+        testDescribe('pnpm package manager', () => {
           test('node:crypto module', async ({ middlewareNodeRuntimeSpecificPnpm }) => {
             const response = await fetch(`${middlewareNodeRuntimeSpecificPnpm.url}/test/crypto`)
             expect(response.status).toBe(200)
@@ -647,19 +652,23 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
   })
 }
 
+// TODO(adapter): don't skip once we look into middleware handling
+const adapterBaseTest = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER ? baseTest.skip : baseTest
+
 // this test is using pinned next version that doesn't support node middleware
-test("requests with x-middleware-subrequest don't skip middleware (GHSA-f82v-jwr5-mffw)", async ({
-  middlewareSubrequestVuln,
-}) => {
-  const response = await fetch(`${middlewareSubrequestVuln.url}`, {
-    headers: {
-      'x-middleware-subrequest': 'middleware:middleware:middleware:middleware:middleware',
-    },
-  })
+adapterBaseTest(
+  "requests with x-middleware-subrequest don't skip middleware (GHSA-f82v-jwr5-mffw)",
+  async ({ middlewareSubrequestVuln }) => {
+    const response = await fetch(`${middlewareSubrequestVuln.url}`, {
+      headers: {
+        'x-middleware-subrequest': 'middleware:middleware:middleware:middleware:middleware',
+      },
+    })
 
-  // middleware was not skipped
-  expect(response.headers.get('x-test-used-middleware')).toBe('true')
+    // middleware was not skipped
+    expect(response.headers.get('x-test-used-middleware')).toBe('true')
 
-  // ensure we are testing version before the fix for self hosted
-  expect(response.headers.get('x-test-used-next-version')).toBe('15.1.11')
-})
+    // ensure we are testing version before the fix for self hosted
+    expect(response.headers.get('x-test-used-next-version')).toBe('15.1.11')
+  },
+)
