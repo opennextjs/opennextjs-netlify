@@ -20,6 +20,7 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       os: ${{ steps.set-matrix.outputs.os }}
+      shardsE2E: ${{ steps.set-matrix.outputs.shardsE2E }}
       extraE2EIncludes: ${{ steps.set-adapters-includes.outputs.extraE2EIncludes }}
       extraMergeReportsIncludes: ${{ steps.set-adapters-includes.outputs.extraMergeReportsIncludes }}
     steps:
@@ -88,6 +89,8 @@ jobs:
             } else {
               core.setOutput('os', '["ubuntu-latest"]');
             }
+
+            core.setOutput('shardsE2E', '["1", "2", "3", "4", "5"]');
       - name: Set adapter test includes
         id: set-adapters-includes
         uses: actions/github-script@v8
@@ -95,11 +98,15 @@ jobs:
           script: |
             const versionMatrix = '${{ steps.set-matrix.outputs.matrix }}';
             const versions = versionMatrix ? JSON.parse(versionMatrix) : []
+
+            const shardsE2E = '${{ steps.set-matrix.outputs.shardsE2E }}';
+            const shardArray = shardsE2E ? JSON.parse(shardsE2E) : []
+
             const runsCanary = versions.includes('canary');
 
             if (runsCanary) {
               core.setOutput('extraE2EIncludes', JSON.stringify(
-                ['1', '2', '3', '4', '5'].map(shard => ({
+                shardArray.map(shard => ({
                   version: 'canary',
                   shard,
                   mode: 'adapter'
@@ -108,7 +115,7 @@ jobs:
               core.setOutput('extraMergeReportsIncludes', JSON.stringify([
                 {
                   version: 'canary',
-                  blobReportKey: 'adapter'
+                  mode: 'adapter'
                 }
               ]));
             } else {
@@ -127,7 +134,7 @@ jobs:
       fail-fast: false
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
-        shard: [1, 2, 3, 4, 5]
+        shard: ${{ fromJson(needs.setup.outputs.shardsE2E) }}
         mode: ["standalone"]
         include: ${{ fromJson(needs.setup.outputs.extraE2EIncludes) }}
 
@@ -375,7 +382,7 @@ jobs:
       fail-fast: false
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
-        key: ["standalone"]
+        mode: ["standalone"]
         include: ${{ fromJson(needs.setup.outputs.extraMergeReportsIncludes) }}
 
     runs-on: ubuntu-latest
@@ -391,7 +398,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: all-blob-reports
-          pattern: blob-report-${{ matrix.key }}-${{ matrix.version }}-*
+          pattern: blob-report-${{ matrix.mode }}-${{ matrix.version }}-*
           merge-multiple: true
 
       - name: Merge reports
@@ -402,6 +409,6 @@ jobs:
       - name: Upload HTML report
         uses: actions/upload-artifact@v6
         with:
-          name: html-report-${{ matrix.key }}-${{ matrix.version }}-attempt-${{ github.run_attempt }}
+          name: html-report-${{ matrix.mode }}-${{ matrix.version }}-attempt-${{ github.run_attempt }}
           path: playwright-report
           retention-days: 14
