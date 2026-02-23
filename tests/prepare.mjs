@@ -15,6 +15,13 @@ import { setNextVersionInFixture } from './utils/next-version-helpers.mjs'
 
 const NEXT_VERSION = process.env.NEXT_VERSION ?? 'latest'
 
+if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+  console.log(`🔌 Preparing fixtures for tests running adapter mode`)
+  process.env.NEXT_ADAPTER_PATH = fileURLToPath(
+    new URL(`../dist/adapter/adapter.js`, import.meta.url),
+  )
+}
+
 const fixturesDir = fileURLToPath(new URL(`./fixtures`, import.meta.url))
 const fixtureFilter = argv[2] ?? ''
 
