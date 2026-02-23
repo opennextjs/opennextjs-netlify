@@ -114,7 +114,7 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
     const template = await readFile(join(templatesDir, 'handler-adapter.tmpl.js'), 'utf-8')
     templateVariables['{{cwd}}'] =
       // eslint-disable-next-line no-negated-condition
-      ctx.relativeAppDir.length !== 0 ? posixJoin(ctx.lambdaWorkingDirectory) : '/var/task'
+      ctx.relativeAppDir.length !== 0 ? posixJoin(ctx.distDirParent) : ''
     return applyTemplateVariables(template, templateVariables)
   }
 

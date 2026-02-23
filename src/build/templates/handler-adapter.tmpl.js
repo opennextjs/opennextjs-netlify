@@ -1,11 +1,14 @@
 import {
   createRequestContext,
   runWithRequestContext,
-} from '{{cwd}}/.netlify/dist/run/handlers/request-context.cjs'
-import serverHandler from '{{cwd}}/.netlify/dist/run/handlers/server-adapter.js'
-import { getTracer, withActiveSpan } from '{{cwd}}/.netlify/dist/run/handlers/tracer.cjs'
+} from './.netlify/dist/run/handlers/request-context.cjs'
+import serverHandler from './.netlify/dist/run/handlers/server-adapter.js'
+import { getTracer, withActiveSpan } from './.netlify/dist/run/handlers/tracer.cjs'
 
-process.chdir('{{cwd}}')
+// eslint-disable-next-line no-constant-condition
+if ('{{cwd}}') {
+  process.chdir('{{cwd}}')
+}
 
 // Set feature flag for regional blobs
 process.env.USE_REGIONAL_BLOBS = '{{useRegionalBlobs}}'

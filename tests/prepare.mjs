@@ -52,7 +52,7 @@ const fixtures = readdirSync(fixturesDir)
   // Ignoring things like `.DS_Store`.
   .filter((fixture) => !fixture.startsWith('.'))
   // Applying the filter, if one is set.
-  .filter((fixture) => !fixtureFilter || fixture.startsWith(fixtureFilter))
+  .filter((fixture) => !fixtureFilter || new RegExp(fixtureFilter).test(fixture))
   // Filter out fixtures that are only needed for E2E tests
   .filter((fixture) => !e2eOnlyFixtures.has(fixture))
 

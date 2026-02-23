@@ -475,7 +475,12 @@ export const verifyHandlerDirStructure = async (ctx: PluginContext) => {
     await readFile(join(ctx.serverHandlerDir, RUN_CONFIG_FILE), 'utf-8'),
   ) as RunConfig
 
-  const expectedBuildIDPath = join(ctx.serverHandlerDir, nextConfig.distDir, 'BUILD_ID')
+  const expectedBuildIDPath = join(
+    ctx.serverHandlerRootDir,
+    ctx.relativeAppDir,
+    nextConfig.distDir,
+    'BUILD_ID',
+  )
   if (!existsSync(expectedBuildIDPath)) {
     ctx.failBuild(
       `Failed creating server handler. BUILD_ID file not found at expected location "${expectedBuildIDPath}".`,

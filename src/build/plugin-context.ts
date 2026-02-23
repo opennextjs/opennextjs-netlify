@@ -228,7 +228,7 @@ export class PluginContext {
   }
 
   get serverHandlerDir(): string {
-    if (this.relativeAppDir.length === 0) {
+    if (this.relativeAppDir.length === 0 || this.useAdapter) {
       return this.serverHandlerRootDir
     }
     return join(this.serverHandlerRootDir, this.distDirParent)

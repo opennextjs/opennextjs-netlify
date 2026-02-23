@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { resolve } from 'node:path'
 
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
@@ -99,16 +98,14 @@ function preferDefault(mod: unknown): unknown {
 
 async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   // Resolve relative paths against process.cwd() (set by handler template)
-  const resolvedPath = resolve(filePath)
+  const resolvedPath = `../../../../${filePath}`
   const cached = nodeHandlerCache.get(resolvedPath)
   if (cached) {
     return cached
   }
   // eslint-disable-next-line import/no-dynamic-require
-  const mod = await import(resolvedPath)
-  // Handle both ESM default exports and CJS module.exports (which can
-  // result in double-nested .default when imported from ESM)
-  const { handler } = preferDefault(preferDefault(mod)) as { handler: NodeHandlerFn }
+  const mod = await import(`${resolvedPath}`)
+  const { handler } = preferDefault(mod) as { handler: NodeHandlerFn }
   nodeHandlerCache.set(resolvedPath, handler)
   return handler
 }
@@ -179,7 +176,7 @@ export default async (request: Request, requestContext: RequestContext) => {
     // TODO(adapter): what's up with resolution.resolvedHeaders
     // They contain request headers, but also response headers ...
 
-    console.log({ resolution })
+    console.log({ url, resolution })
 
     if (resolution.redirect) {
       // Handle explicit redirect

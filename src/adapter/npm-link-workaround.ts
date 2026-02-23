@@ -10,7 +10,11 @@ const WORKAROUND_REL_DIR = '.netlify/npm-link-workaround'
 // this is intentionally sync function so it works in every context without worrying about async
 export const workaroundNpmLinkOutsideOfProjectRoot = (filePath: string) => {
   const cwd = process.cwd()
-  if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && relative(cwd, filePath).startsWith('..')) {
+  if (
+    process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER &&
+    !process.env.RUNNING_INTEGRATION_TESTS &&
+    relative(cwd, filePath).startsWith('..')
+  ) {
     const workaroundDir = join(cwd, WORKAROUND_REL_DIR)
 
     mkdirSync(workaroundDir, { recursive: true })
