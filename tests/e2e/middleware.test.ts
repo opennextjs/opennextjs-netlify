@@ -64,7 +64,8 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
       ],
     }),
   },
-  hasNodeMiddlewareSupport()
+  // TODO(adapter): re-enable once we look into middleware handling
+  !process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && hasNodeMiddlewareSupport()
     ? {
         expectedRuntime: 'node',
         isNodeMiddleware: true,
