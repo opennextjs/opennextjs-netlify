@@ -235,6 +235,10 @@ export class PluginContext {
   }
 
   get serverHandlerRuntimeModulesDir(): string {
+    if (this.useAdapter) {
+      return join(this.serverHandlerRootDir, '.netlify')
+    }
+
     return join(this.serverHandlerDir, '.netlify')
   }
 

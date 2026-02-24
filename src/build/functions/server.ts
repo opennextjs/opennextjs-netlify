@@ -82,7 +82,7 @@ const writeHandlerManifest = async (ctx: PluginContext) => {
     join(ctx.serverHandlerRootDir, `${SERVER_HANDLER_NAME}.json`),
     JSON.stringify({
       config: {
-        name: 'Next.js Server Handler',
+        name: ctx.useAdapter ? 'Next.js Adapter Server Handler' : 'Next.js Server Handler',
         generator: `${ctx.pluginName}@${ctx.pluginVersion}`,
         nodeBundler: 'none',
         // the folders can vary in monorepos based on the folder structure of the user so we have to glob all
@@ -162,6 +162,8 @@ export const createServerHandler = async (ctx: PluginContext) => {
     await writeHandlerManifest(ctx)
     await writeHandlerFile(ctx)
 
-    await verifyHandlerDirStructure(ctx)
+    if (!ctx.useAdapter) {
+      await verifyHandlerDirStructure(ctx)
+    }
   })
 }
