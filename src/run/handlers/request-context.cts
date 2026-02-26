@@ -37,6 +37,9 @@ export type RequestContext = {
   logger: SystemLogger
   requestID: string
   isCacheableAppPage?: boolean
+
+  originalRequest?: Request
+  originalContext?: Context
 }
 
 type RequestContextAsyncLocalStorage = AsyncLocalStorage<RequestContext>
@@ -90,6 +93,8 @@ export function createRequestContext(request?: Request, context?: Context): Requ
     },
     logger,
     requestID: request?.headers.get('x-nf-request-id') ?? getFallbackRequestID(),
+    originalRequest: request,
+    originalContext: context,
   }
 }
 

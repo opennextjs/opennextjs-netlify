@@ -17,7 +17,7 @@ import { resolveRoutes } from '../routing.cjs'
 import type { ResolveRoutesParams, ResolveRoutesResult } from '../routing.cjs'
 import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
 
-import type { RequestContext } from './request-context.cjs'
+import { getRequestContext, type RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
@@ -51,20 +51,6 @@ if (!('AsyncLocalStorage' in globalThis)) {
   globals.AsyncLocalStorage = AsyncLocalStorage
 }
 
-const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
-const globalThisWithRouterServerContext = globalThis as typeof globalThis & {
-  [RouterServerContextSymbol]?: RouterServerContext
-}
-
-if (!globalThisWithRouterServerContext[RouterServerContextSymbol]) {
-  globalThisWithRouterServerContext[RouterServerContextSymbol] = {
-    // TODO(adapter): monorepo?
-    '': {
-      nextConfig,
-    },
-  }
-}
-
 // Build a map of pathname -> output for quick lookup at request time
 const outputsByPathname = new Map<string, { filePath: string; runtime: string }>()
 
@@ -91,6 +77,8 @@ type NodeHandlerFn = (
 
 // Cache loaded handler functions
 const nodeHandlerCache = new Map<string, NodeHandlerFn>()
+
+globalThis['@netlify/node-handler-cache'] = nodeHandlerCache
 
 function preferDefault(mod: unknown): unknown {
   return mod && typeof mod === 'object' && 'default' in mod ? mod.default : mod
@@ -142,7 +130,7 @@ function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
   return Boolean(resolution.resolvedHeaders?.get('location'))
 }
 
-export default async (request: Request, requestContext: RequestContext) => {
+export default async function ServerHandler(request: Request, requestContext: RequestContext) {
   const tracer = getTracer()
 
   return await withActiveSpan(tracer, 'adapter route resolution', async (span) => {
@@ -331,4 +319,61 @@ export default async (request: Request, requestContext: RequestContext) => {
     // which would require setting correct netlify-vary header.
     return new Response('Not Found', { status: 404 })
   })
+}
+
+const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
+const globalThisWithRouterServerContext = globalThis as typeof globalThis & {
+  [RouterServerContextSymbol]?: RouterServerContext
+}
+
+if (!globalThisWithRouterServerContext[RouterServerContextSymbol]) {
+  globalThisWithRouterServerContext[RouterServerContextSymbol] = {
+    // TODO(adapter): monorepo?
+    '': {
+      nextConfig,
+      revalidate: async (args) => {
+        const { urlPath, revalidateHeaders } = args
+        const requestContext = getRequestContext()
+        if (!requestContext) {
+          throw new Error('revalidate called outside of request context')
+        }
+
+        if (!requestContext.originalRequest) {
+          throw new Error('original request not set in request context')
+        }
+
+        if (!requestContext.originalContext) {
+          throw new Error('original context not set in request context')
+        }
+
+        const normalizeRevalidateHeaders = new Headers()
+        for (const [headerName, headerValueOrValues] of Object.entries(revalidateHeaders)) {
+          const headerValues = Array.isArray(headerValueOrValues)
+            ? headerValueOrValues
+            : [headerValueOrValues]
+          for (const headerValue of headerValues) {
+            normalizeRevalidateHeaders.append(headerName, headerValue)
+          }
+        }
+
+        const revalidateRequest = new Request(
+          new URL(urlPath, requestContext.originalRequest.url),
+          {
+            headers: normalizeRevalidateHeaders,
+          },
+        )
+
+        console.log('[revalidate]', { args, revalidateRequest })
+        const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
+        requestContext.trackBackgroundWork(revalidatePromise)
+        return revalidatePromise
+          .catch((revalidateError) => {
+            console.error('Revalidation failed', revalidateError)
+          })
+          .finally(() => {
+            // no-op
+          })
+      },
+    },
+  }
 }
