@@ -75,10 +75,73 @@ type NodeHandlerFn = (
   ctx?: { waitUntil?: (prom: Promise<void>) => void },
 ) => Promise<void>
 
+// Next.js machinery
+const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
+
+// Netlify Adapter machinery (just for integration tests resetting global state in-between tests)
+// TODO(adapter): figure out something better, we should not expose test-only globals in the actual adapter code
+const NetlifyAdapterTestReset = Symbol.for('@netlify/adapter-test-reset')
+
 // Cache loaded handler functions
 const nodeHandlerCache = new Map<string, NodeHandlerFn>()
 
-globalThis['@netlify/node-handler-cache'] = nodeHandlerCache
+const extendedGlobalThis = globalThis as typeof globalThis & {
+  [RouterServerContextSymbol]?: RouterServerContext
+
+  // just for reset in-between tests, see tests/utils/fixture.ts
+  [NetlifyAdapterTestReset]: () => void
+}
+
+extendedGlobalThis[RouterServerContextSymbol] = {
+  // TODO(adapter): monorepo?
+  '': {
+    nextConfig,
+    revalidate: async (args) => {
+      const { urlPath, revalidateHeaders } = args
+      const requestContext = getRequestContext()
+      if (!requestContext) {
+        throw new Error('revalidate called outside of request context')
+      }
+
+      if (!requestContext.originalRequest) {
+        throw new Error('original request not set in request context')
+      }
+
+      if (!requestContext.originalContext) {
+        throw new Error('original context not set in request context')
+      }
+
+      const normalizeRevalidateHeaders = new Headers()
+      for (const [headerName, headerValueOrValues] of Object.entries(revalidateHeaders)) {
+        const headerValues = Array.isArray(headerValueOrValues)
+          ? headerValueOrValues
+          : [headerValueOrValues]
+        for (const headerValue of headerValues) {
+          normalizeRevalidateHeaders.append(headerName, headerValue)
+        }
+      }
+
+      const revalidateRequest = new Request(new URL(urlPath, requestContext.originalRequest.url), {
+        headers: normalizeRevalidateHeaders,
+      })
+
+      console.log('[revalidate]', { args, revalidateRequest })
+      const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
+      requestContext.trackBackgroundWork(revalidatePromise)
+      return revalidatePromise
+        .catch((revalidateError) => {
+          console.error('Revalidation failed', revalidateError)
+        })
+        .then(() => {
+          // no-op
+        })
+    },
+  },
+}
+
+extendedGlobalThis[NetlifyAdapterTestReset] = () => {
+  nodeHandlerCache.clear()
+}
 
 function preferDefault(mod: unknown): unknown {
   return mod && typeof mod === 'object' && 'default' in mod ? mod.default : mod
@@ -319,61 +382,4 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // which would require setting correct netlify-vary header.
     return new Response('Not Found', { status: 404 })
   })
-}
-
-const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
-const globalThisWithRouterServerContext = globalThis as typeof globalThis & {
-  [RouterServerContextSymbol]?: RouterServerContext
-}
-
-if (!globalThisWithRouterServerContext[RouterServerContextSymbol]) {
-  globalThisWithRouterServerContext[RouterServerContextSymbol] = {
-    // TODO(adapter): monorepo?
-    '': {
-      nextConfig,
-      revalidate: async (args) => {
-        const { urlPath, revalidateHeaders } = args
-        const requestContext = getRequestContext()
-        if (!requestContext) {
-          throw new Error('revalidate called outside of request context')
-        }
-
-        if (!requestContext.originalRequest) {
-          throw new Error('original request not set in request context')
-        }
-
-        if (!requestContext.originalContext) {
-          throw new Error('original context not set in request context')
-        }
-
-        const normalizeRevalidateHeaders = new Headers()
-        for (const [headerName, headerValueOrValues] of Object.entries(revalidateHeaders)) {
-          const headerValues = Array.isArray(headerValueOrValues)
-            ? headerValueOrValues
-            : [headerValueOrValues]
-          for (const headerValue of headerValues) {
-            normalizeRevalidateHeaders.append(headerName, headerValue)
-          }
-        }
-
-        const revalidateRequest = new Request(
-          new URL(urlPath, requestContext.originalRequest.url),
-          {
-            headers: normalizeRevalidateHeaders,
-          },
-        )
-
-        console.log('[revalidate]', { args, revalidateRequest })
-        const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
-        requestContext.trackBackgroundWork(revalidatePromise)
-        return revalidatePromise
-          .catch((revalidateError) => {
-            console.error('Revalidation failed', revalidateError)
-          })
-          .finally(() => {
-            // no-op
-          })
-      },
-    },
-  }
 }

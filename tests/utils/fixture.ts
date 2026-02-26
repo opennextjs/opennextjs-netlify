@@ -117,10 +117,12 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
   // from any previous function invocations that might have run in the same process
   delete globalThis[Symbol.for('next.server.manifests')]
 
-  // Netlify Adapter globals cleanup
+  // Netlify Adapter used Next.js inner machinery
   delete globalThis[Symbol.for('@next/router-server-methods')]
-  if (globalThis['@netlify/node-handler-cache']) {
-    globalThis['@netlify/node-handler-cache'].clear()
+
+  // Netlify Adapter specific global to reset between tests
+  if (globalThis[Symbol.for('@netlify/adapter-test-reset')]) {
+    globalThis[Symbol.for('@netlify/adapter-test-reset')]()
   }
 
   // require hook leaves modified "require" and "require.resolve" modified - we restore here to original
