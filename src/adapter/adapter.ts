@@ -48,6 +48,7 @@ const adapter: NextAdapter = {
     const rewriteOutputs = <T extends { filePath: string }>(outputs: T[]): T[] =>
       outputs.map((output) => ({ ...output, filePath: toRelPath(output.filePath) }))
 
+    // TODO(adapter): make this minimal needed set
     const serialized: SerializedAdapterOutput = {
       routing: ctx.routing,
       outputs: {
@@ -56,7 +57,7 @@ const adapter: NextAdapter = {
         appPages: rewriteOutputs(ctx.outputs.appPages),
         appRoutes: rewriteOutputs(ctx.outputs.appRoutes),
         prerenders: ctx.outputs.prerenders,
-        staticFiles: ctx.outputs.staticFiles,
+        staticFiles: rewriteOutputs(ctx.outputs.staticFiles),
         middleware: ctx.outputs.middleware,
       },
       projectDir: ctx.projectDir,

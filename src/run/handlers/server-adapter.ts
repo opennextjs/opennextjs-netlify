@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { inspect } from 'node:util'
 
+import type { Span } from '@opentelemetry/api'
+import type { AdapterOutput } from 'next-with-adapters'
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 
@@ -51,23 +54,80 @@ if (!('AsyncLocalStorage' in globalThis)) {
   globals.AsyncLocalStorage = AsyncLocalStorage
 }
 
-// Build a map of pathname -> output for quick lookup at request time
-const outputsByPathname = new Map<string, { filePath: string; runtime: string }>()
+type CommonHandlerArg = {
+  request: Request
+  requestContext: RequestContext
+  resolution: ResolveRoutesResult
+  tracer: ReturnType<typeof getTracer>
+  span?: Span
+}
 
+type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
+
+// // Build a map of pathname -> handler output for quick lookup at request time
+const handlerDefsByPathname = new Map<string, Handler>()
+
+type InvokeHandlerArg = {
+  entrypoint: string
+  runtime: 'nodejs' | 'edge'
+  sourcePage: string
+}
+
+function createInvokeHandler(
+  output:
+    | AdapterOutput['PAGES']
+    | AdapterOutput['PAGES_API']
+    | AdapterOutput['APP_PAGE']
+    | AdapterOutput['APP_ROUTE'],
+): Handler {
+  return invokeHandler.bind(null, {
+    entrypoint: output.filePath,
+    runtime: output.runtime,
+    sourcePage: output.sourcePage,
+  })
+}
+
+// outputs that invoke compute
 for (const output of manifest.outputs.pages) {
-  outputsByPathname.set(output.pathname, output)
+  handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
 }
 for (const output of manifest.outputs.pagesApi) {
-  outputsByPathname.set(output.pathname, output)
+  handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
 }
 for (const output of manifest.outputs.appPages) {
-  outputsByPathname.set(output.pathname, output)
+  handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
 }
 for (const output of manifest.outputs.appRoutes) {
-  outputsByPathname.set(output.pathname, output)
+  handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
 }
 
-const allPathnames = [...outputsByPathname.keys()]
+// serve static files
+type StaticFileHandlerArg = {
+  filePath: string
+}
+function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
+  return serverStaticFile.bind(null, output)
+}
+
+for (const output of manifest.outputs.staticFiles) {
+  handlerDefsByPathname.set(
+    output.pathname,
+    createStaticFileHandler({
+      filePath: output.filePath,
+    }),
+  )
+}
+
+const allPathnames = [...handlerDefsByPathname.keys()]
+
+console.log(
+  inspect(
+    {
+      allPathnames,
+    },
+    { depth: null },
+  ),
+)
 
 type NodeHandlerFn = (
   req: IncomingMessage,
@@ -193,6 +253,108 @@ function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
   return Boolean(resolution.resolvedHeaders?.get('location'))
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHandlerArg) {
+  return new Response(`This will be static asset: ${filePath}`, {
+    headers: {
+      // handle CDN Cache Control on static files
+      'cache-control': 'public, max-age=0, must-revalidate',
+      'netlify-cdn-cache-control': 'max-age=31536000, durable',
+    },
+  })
+}
+
+async function invokeHandler(
+  { entrypoint, runtime, sourcePage }: InvokeHandlerArg,
+  { tracer, request, requestContext, span }: CommonHandlerArg,
+) {
+  span?.setAttribute('matched.sourcePage', sourcePage)
+  span?.setAttribute('matched.runtime', runtime)
+  return await withActiveSpan(tracer, 'invoke route handler', async (invokeSpan) => {
+    if (runtime !== 'nodejs') {
+      return new Response(`Not yet supported runtime: ${runtime}`, {
+        status: 500,
+      })
+    }
+
+    try {
+      const handler = await loadHandler(entrypoint)
+
+      // Convert Web Request to Node.js IncomingMessage/ServerResponse
+      const { req, res } = toReqRes(request)
+
+      // Invoke the route handler using the Node.js handler signature
+      // as defined by the Next.js adapter contract:
+      // handler(req: IncomingMessage, res: ServerResponse, ctx)
+      const nextHandlerPromise = handler(req, res, {
+        waitUntil: requestContext.trackBackgroundWork,
+      })
+
+      // below is for now copied from standalone handler (without some extras, that generally could also be removed from standalone)
+      // but will be nice to extract common handling to shared module and cleanup some things
+
+      // Contrary to the docs, this resolves when the headers are available, not when the stream closes.
+      // See https://github.com/fastly/http-compute-js/blob/main/src/http-compute-js/http-server.ts#L168-L173
+      const response = await toComputeResponse(res)
+
+      invokeSpan?.setAttribute('http.status_code', response.status)
+
+      const nextCache = response.headers.get('x-nextjs-cache')
+      const isServedFromNextCache = nextCache === 'HIT' || nextCache === 'STALE'
+
+      if (isServedFromNextCache) {
+        await adjustDateHeader({
+          headers: response.headers,
+          request,
+          span: invokeSpan,
+          requestContext,
+        })
+      }
+      setCacheControlHeaders(response, request, requestContext)
+      setCacheTagsHeaders(response.headers, requestContext)
+      setVaryHeaders(
+        response.headers,
+        request,
+        manifest.config as Parameters<typeof setVaryHeaders>[2],
+      )
+      setCacheStatusHeader(response.headers, nextCache)
+
+      // eslint-disable-next-line no-inner-declarations
+      async function waitForBackgroundWork() {
+        // it's important to keep the stream open until the next handler has finished
+        await nextHandlerPromise
+
+        // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
+        // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
+        // otherwise Next would never run the callback variant of `next/after`
+        res.emit('close')
+
+        // We have to keep response stream open until tracked background promises that are don't use `context.waitUntil`
+        // are resolved. If `context.waitUntil` is available, `requestContext.backgroundWorkPromise` will be empty
+        // resolved promised and so awaiting it is no-op
+        await requestContext.backgroundWorkPromise
+      }
+
+      const keepOpenUntilNextFullyRendered = new TransformStream({
+        async flush() {
+          await waitForBackgroundWork()
+        },
+      })
+
+      if (!response.body) {
+        await waitForBackgroundWork()
+      }
+
+      return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
+    } catch (error) {
+      console.error('route handler error', error)
+      getLogger().withError(error).error('route handler error')
+      invokeSpan?.setAttribute('http.status_code', 500)
+      return new Response('Internal Server Error', { status: 500 })
+    }
+  })
+}
+
 export default async function ServerHandler(request: Request, requestContext: RequestContext) {
   const tracer = getTracer()
 
@@ -285,95 +447,23 @@ export default async function ServerHandler(request: Request, requestContext: Re
 
     // Handle matched route
     if (resolution.matchedPathname) {
-      const matchedOutput = outputsByPathname.get(resolution.matchedPathname)
-      if (!matchedOutput) {
+      span?.setAttribute('matched.pathname', resolution.matchedPathname)
+      const matchedHandler = handlerDefsByPathname.get(resolution.matchedPathname)
+      if (!matchedHandler) {
         return new Response('Routing matched but no matched output exists', { status: 500 })
       }
 
-      if (matchedOutput.runtime !== 'nodejs') {
-        return new Response(`Not yet supported runtime ${matchedOutput.runtime}`, { status: 500 })
-      }
-
-      span?.setAttribute('matched.pathname', resolution.matchedPathname)
-      span?.setAttribute('matched.filePath', matchedOutput.filePath)
-
-      return await withActiveSpan(tracer, 'invoke route handler', async (invokeSpan) => {
-        try {
-          const handler = await loadHandler(matchedOutput.filePath)
-
-          // Convert Web Request to Node.js IncomingMessage/ServerResponse
-          const { req, res } = toReqRes(request)
-
-          // Invoke the route handler using the Node.js handler signature
-          // as defined by the Next.js adapter contract:
-          // handler(req: IncomingMessage, res: ServerResponse, ctx)
-          const nextHandlerPromise = handler(req, res, {
-            waitUntil: requestContext.trackBackgroundWork,
-          })
-
-          // below is for now copied from standalone handler (without some extras, that generally could also be removed from standalone)
-          // but will be nice to extract common handling to shared module and cleanup some things
-
-          // Contrary to the docs, this resolves when the headers are available, not when the stream closes.
-          // See https://github.com/fastly/http-compute-js/blob/main/src/http-compute-js/http-server.ts#L168-L173
-          const response = await toComputeResponse(res)
-
-          invokeSpan?.setAttribute('http.status_code', response.status)
-
-          const nextCache = response.headers.get('x-nextjs-cache')
-          const isServedFromNextCache = nextCache === 'HIT' || nextCache === 'STALE'
-
-          if (isServedFromNextCache) {
-            await adjustDateHeader({
-              headers: response.headers,
-              request,
-              span,
-              requestContext,
-            })
-          }
-          setCacheControlHeaders(response, request, requestContext)
-          setCacheTagsHeaders(response.headers, requestContext)
-          setVaryHeaders(
-            response.headers,
-            request,
-            manifest.config as Parameters<typeof setVaryHeaders>[2],
-          )
-          setCacheStatusHeader(response.headers, nextCache)
-
-          // eslint-disable-next-line no-inner-declarations
-          async function waitForBackgroundWork() {
-            // it's important to keep the stream open until the next handler has finished
-            await nextHandlerPromise
-
-            // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
-            // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
-            // otherwise Next would never run the callback variant of `next/after`
-            res.emit('close')
-
-            // We have to keep response stream open until tracked background promises that are don't use `context.waitUntil`
-            // are resolved. If `context.waitUntil` is available, `requestContext.backgroundWorkPromise` will be empty
-            // resolved promised and so awaiting it is no-op
-            await requestContext.backgroundWorkPromise
-          }
-
-          const keepOpenUntilNextFullyRendered = new TransformStream({
-            async flush() {
-              await waitForBackgroundWork()
-            },
-          })
-
-          if (!response.body) {
-            await waitForBackgroundWork()
-          }
-
-          return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
-        } catch (error) {
-          console.error('route handler error', error)
-          getLogger().withError(error).error('route handler error')
-          invokeSpan?.setAttribute('http.status_code', 500)
-          return new Response('Internal Server Error', { status: 500 })
-        }
-      })
+      return applyResolutionToResponse(
+        await matchedHandler({
+          request,
+          requestContext,
+          resolution,
+          tracer,
+          span,
+        }),
+        resolution,
+        resolution.status,
+      )
     }
 
     // No match found — 404
