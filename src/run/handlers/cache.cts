@@ -35,7 +35,7 @@ import {
 } from './tags-handler.cjs'
 import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
 
-const NEXT_CACHE_TAGS_HEADER = `"x-next-cache-tags"`
+const NEXT_CACHE_TAGS_HEADER = 'x-next-cache-tags'
 
 let memoizedPrerenderManifest: PrerenderManifest
 
