@@ -68,7 +68,7 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
   })
 
   if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
-    process.env.NEXT_ADAPTER_PATH = fileURLToPath(new URL(`./adapter/adapter.js`, import.meta.url))
+    process.env.NEXT_ADAPTER_PATH = fileURLToPath(new URL(`adapter/adapter.js`, import.meta.url))
   }
 }
 
