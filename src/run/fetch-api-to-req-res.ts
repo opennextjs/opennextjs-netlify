@@ -27,6 +27,31 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
   }
 }
 
+/**
+ * Prevent .appendHeader calls for location header to add duplicate values
+ */
+const avoidDoubleLocationHeader = (res: ComputeJsOutgoingMessage) => {
+  const originalAppendHeader = res.appendHeader
+  res.appendHeader = function appendHeader(
+    ...args: Parameters<ComputeJsOutgoingMessage['appendHeader']>
+  ) {
+    if (typeof args[0] === 'string' && (args[0] === 'location' || args[0] === 'Location')) {
+      let existing = res.getHeader('location')
+      if (typeof existing !== 'undefined') {
+        if (!Array.isArray(existing)) {
+          existing = [String(existing)]
+        }
+        if (existing.includes(String(args[1]))) {
+          // if we already have that location header - bail early
+          // appendHeader should return the target for chaining
+          return res
+        }
+      }
+    }
+    return originalAppendHeader.apply(this, args)
+  }
+}
+
 export const toReqRes = (request: Request) => {
   const { req, res } = toInitialReqRes(request)
 
@@ -43,6 +68,7 @@ export const toReqRes = (request: Request) => {
   })
 
   disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
+  avoidDoubleLocationHeader(res as unknown as ComputeJsOutgoingMessage)
 
   return { req, res }
 }
