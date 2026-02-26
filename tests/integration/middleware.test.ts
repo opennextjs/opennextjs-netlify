@@ -50,7 +50,8 @@ for (const {
 ].filter(function isDefined<T>(argument: T | undefined): argument is T {
   return typeof argument !== 'undefined'
 })) {
-  describe(label, () => {
+  // TODO(adapter): middleware bundling for adapter not yet implemented
+  describe.skipIf(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER)(label, () => {
     test<FixtureTestContext>('should add request/response headers', async (ctx) => {
       await createFixture('middleware', ctx)
       await runPlugin(ctx, runPluginConstants)
