@@ -10,10 +10,10 @@
 // import and can safely use top-level `await`.
 //
 // See also: docs/architecture.md "CJS isolation pattern"
-export { resolveRoutes } from '@next/routing'
+export { resolveRoutes } from 'next-routing'
 export type {
   ResolveRoutesParams,
   ResolveRoutesResult,
   MiddlewareContext,
   MiddlewareResult,
-} from '@next/routing'
+} from 'next-routing'
