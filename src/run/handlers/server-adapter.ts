@@ -8,6 +8,7 @@ import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-sh
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
+import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
@@ -20,13 +21,17 @@ import {
 } from '../headers.js'
 import { resolveRoutes } from '../routing.cjs'
 import type { ResolveRoutesParams, ResolveRoutesResult } from '../routing.cjs'
-import { setFetchBeforeNextPatchedIt } from '../storage/storage.cjs'
+import {
+  getMemoizedKeyValueStoreBackedByRegionalBlobStore,
+  setFetchBeforeNextPatchedIt,
+} from '../storage/storage.cjs'
 
 import { getRequestContext, type RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
+import { relative, resolve } from 'node:path/posix'
 
 // Read the adapter manifest written at build time (same path resolution as getRunConfig)
 let manifest: Awaited<ReturnType<typeof getAdapterManifest>>
@@ -256,12 +261,32 @@ function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHandlerArg) {
-  return new Response(`This will be static asset: ${filePath}`, {
-    headers: {
-      // handle CDN Cache Control on static files
-      'cache-control': 'public, max-age=0, must-revalidate',
-      'netlify-cdn-cache-control': 'max-age=31536000, durable',
-    },
+  const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
+
+  const blobKey = relative(resolve(manifest.config.distDir, 'server/pages'), filePath)
+
+  const htmlFile = await cacheStore.get<HtmlBlob>(blobKey, 'staticHtml.get')
+
+  const headers = new Headers()
+  let body = 'Not found static file'
+  let status = 404
+
+  console.log('htmlFile', { htmlFile, filePath, blobKey })
+
+  if (htmlFile) {
+    body = htmlFile.html
+    status = 200
+    headers.set('Content-Type', 'text/html; charset=utf-8')
+    if (htmlFile.isFullyStaticPage) {
+      // handle CDN Cache Control on fully static pages
+      headers.set('cache-control', 'public, max-age=0, must-revalidate')
+      headers.set('netlify-cdn-cache-control', 'max-age=31536000, durable')
+    }
+  }
+
+  return new Response(body, {
+    headers,
+    status,
   })
 }
 
