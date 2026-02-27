@@ -230,7 +230,7 @@ test.skipIf(nextVersionSatisfies('>=15.0.0-canary.187'))<FixtureTestContext>(
   },
 )
 
-test.only<FixtureTestContext>('404 responses for PHP pages should be cached indefinitely', async (ctx) => {
+test<FixtureTestContext>('404 responses for PHP pages should be cached indefinitely', async (ctx) => {
   await createFixture('simple', ctx)
   await runPlugin(ctx)
   const index = await invokeFunction(ctx, { url: '/admin.php' })
