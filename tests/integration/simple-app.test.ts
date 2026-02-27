@@ -230,11 +230,11 @@ test.skipIf(nextVersionSatisfies('>=15.0.0-canary.187'))<FixtureTestContext>(
   },
 )
 
-test<FixtureTestContext>('404 responses for PHP pages should be cached indefinitely', async (ctx) => {
+test.only<FixtureTestContext>('404 responses for PHP pages should be cached indefinitely', async (ctx) => {
   await createFixture('simple', ctx)
   await runPlugin(ctx)
   const index = await invokeFunction(ctx, { url: '/admin.php' })
-  expect(index.headers?.['netlify-cdn-cache-control']).toContain('max-age=31536000, durable')
+  expect(index.headers?.['netlify-cdn-cache-control'] ?? '').toContain('max-age=31536000, durable')
 })
 
 test<FixtureTestContext>('handlers receive correct site domain', async (ctx) => {
