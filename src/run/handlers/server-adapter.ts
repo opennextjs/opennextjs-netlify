@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { inspect } from 'node:util'
+import { relative, resolve } from 'node:path/posix'
 
 import type { Span } from '@opentelemetry/api'
 import type { AdapterOutput } from 'next-with-adapters'
@@ -31,7 +31,6 @@ import { getLogger } from './request-context.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
-import { relative, resolve } from 'node:path/posix'
 
 // Read the adapter manifest written at build time (same path resolution as getRunConfig)
 let manifest: Awaited<ReturnType<typeof getAdapterManifest>>
