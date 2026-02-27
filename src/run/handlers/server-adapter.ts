@@ -12,6 +12,7 @@ import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
   adjustDateHeader,
+  notFoundHeuristics,
   setCacheControlHeaders,
   setCacheStatusHeader,
   setCacheTagsHeaders,
@@ -473,6 +474,8 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // TODO(adapter): this can be cached forever because it will never match any routes
     // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
     // which would require setting correct netlify-vary header.
-    return new Response('Not Found', { status: 404 })
+    const headers = new Headers()
+    notFoundHeuristics(request, headers, requestContext)
+    return new Response('Not Found', { status: 404, headers })
   })
 }
