@@ -106,6 +106,19 @@ for (const output of manifest.outputs.appPages) {
 for (const output of manifest.outputs.appRoutes) {
   handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
 }
+for (const output of manifest.outputs.prerenders) {
+  const parentHandler = handlerDefsByPathname.get(output.parentOutputId)
+  if (!parentHandler) {
+    throw new Error(
+      `Prerender output ${output.id} has parentOutputId ${output.parentOutputId} which does not exist`,
+    )
+  }
+  handlerDefsByPathname.set(output.pathname, parentHandler)
+}
+
+console.log({
+  pathnames: [...handlerDefsByPathname.keys()],
+})
 
 // serve static files
 type StaticFileHandlerArg = {
@@ -192,6 +205,8 @@ extendedGlobalThis[RouterServerContextSymbol] = {
       })
 
       console.log('[revalidate]', { args, revalidateRequest })
+      // ensure to trigger cache-tag revalidation after storing cache entries in cache handler
+      requestContext.didPagesRouterOnDemandRevalidate = true
       const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
       requestContext.trackBackgroundWork(revalidatePromise)
       return revalidatePromise
@@ -416,6 +431,15 @@ export default async function ServerHandler(request: Request, requestContext: Re
 
     // TODO(adapter): what's up with resolution.resolvedHeaders
     // They contain request headers, but also response headers ...
+    if (resolution.resolvedHeaders) {
+      const actuallyResolvedHeaders = new Headers()
+      for (const [key, value] of resolution.resolvedHeaders.entries()) {
+        if (request.headers.get(key) !== value) {
+          actuallyResolvedHeaders.set(key, value)
+        }
+      }
+      resolution.resolvedHeaders = actuallyResolvedHeaders
+    }
 
     console.log({ url, resolution })
 
