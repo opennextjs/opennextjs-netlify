@@ -6,6 +6,7 @@ import type { Span } from '@opentelemetry/api'
 import type { AdapterOutput } from 'next-with-adapters'
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
+import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
@@ -120,19 +121,19 @@ for (const output of manifest.outputs.staticFiles) {
 
 const allPathnames = [...handlerDefsByPathname.keys()]
 
-console.log(
-  inspect(
-    {
-      allPathnames,
-    },
-    { depth: null },
-  ),
-)
+// console.log(
+//   inspect(
+//     {
+//       allPathnames,
+//     },
+//     { depth: null },
+//   ),
+// )
 
 type NodeHandlerFn = (
   req: IncomingMessage,
   res: ServerResponse,
-  ctx?: { waitUntil?: (prom: Promise<void>) => void },
+  ctx?: { waitUntil?: (prom: Promise<void>) => void; requestMeta?: RequestMeta },
 ) => Promise<void>
 
 // Next.js machinery
@@ -208,7 +209,6 @@ function preferDefault(mod: unknown): unknown {
 }
 
 async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
-  // Resolve relative paths against process.cwd() (set by handler template)
   const resolvedPath = `../../../../${filePath}`
   const cached = nodeHandlerCache.get(resolvedPath)
   if (cached) {
@@ -288,6 +288,9 @@ async function invokeHandler(
       // handler(req: IncomingMessage, res: ServerResponse, ctx)
       const nextHandlerPromise = handler(req, res, {
         waitUntil: requestContext.trackBackgroundWork,
+        requestMeta: {
+          initURL: request.url,
+        },
       })
 
       // below is for now copied from standalone handler (without some extras, that generally could also be removed from standalone)
