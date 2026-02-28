@@ -72,6 +72,7 @@ type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
 
 // // Build a map of pathname -> handler output for quick lookup at request time
 const handlerDefsByPathname = new Map<string, Handler>()
+const handlerDefsId = new Map<string, Handler>()
 
 type InvokeHandlerArg = {
   entrypoint: string
@@ -95,19 +96,31 @@ function createInvokeHandler(
 
 // outputs that invoke compute
 for (const output of manifest.outputs.pages) {
-  handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
+  const handler = createInvokeHandler(output)
+  handlerDefsId.set(output.id, handler)
+  handlerDefsByPathname.set(output.pathname, handler)
 }
 for (const output of manifest.outputs.pagesApi) {
-  handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
+  const handler = createInvokeHandler(output)
+  handlerDefsId.set(output.id, handler)
+  handlerDefsByPathname.set(output.pathname, handler)
 }
 for (const output of manifest.outputs.appPages) {
-  handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
+  const handler = createInvokeHandler(output)
+  handlerDefsId.set(output.id, handler)
+  handlerDefsByPathname.set(output.pathname, handler)
 }
 for (const output of manifest.outputs.appRoutes) {
-  handlerDefsByPathname.set(output.pathname, createInvokeHandler(output))
+  const handler = createInvokeHandler(output)
+  handlerDefsId.set(output.id, handler)
+  handlerDefsByPathname.set(output.pathname, handler)
 }
+console.log({
+  pathnames: [...handlerDefsByPathname.keys()],
+  outputIds: [...handlerDefsId.keys()],
+})
 for (const output of manifest.outputs.prerenders) {
-  const parentHandler = handlerDefsByPathname.get(output.parentOutputId)
+  const parentHandler = handlerDefsId.get(output.parentOutputId)
   if (!parentHandler) {
     throw new Error(
       `Prerender output ${output.id} has parentOutputId ${output.parentOutputId} which does not exist`,
@@ -115,10 +128,6 @@ for (const output of manifest.outputs.prerenders) {
   }
   handlerDefsByPathname.set(output.pathname, parentHandler)
 }
-
-console.log({
-  pathnames: [...handlerDefsByPathname.keys()],
-})
 
 // serve static files
 type StaticFileHandlerArg = {
@@ -200,9 +209,12 @@ extendedGlobalThis[RouterServerContextSymbol] = {
         }
       }
 
-      const revalidateRequest = new Request(new URL(urlPath, requestContext.originalRequest.url), {
-        headers: normalizeRevalidateHeaders,
-      })
+      const revalidateRequest = new Request(
+        new URL(`${manifest.config.basePath}${urlPath}`, requestContext.originalRequest.url),
+        {
+          headers: normalizeRevalidateHeaders,
+        },
+      )
 
       console.log('[revalidate]', { args, revalidateRequest })
       // ensure to trigger cache-tag revalidation after storing cache entries in cache handler
@@ -236,7 +248,7 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   }
   // eslint-disable-next-line import/no-dynamic-require
   const mod = await import(`${resolvedPath}`)
-  const { handler } = preferDefault(mod) as { handler: NodeHandlerFn }
+  const { handler } = (await preferDefault(mod)) as { handler: NodeHandlerFn }
   nodeHandlerCache.set(resolvedPath, handler)
   return handler
 }
