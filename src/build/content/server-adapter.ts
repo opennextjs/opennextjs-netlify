@@ -71,7 +71,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContext): Promise
       const destPath = join(ctx.serverHandlerRootDir, relPath)
       copyPromises.push(
         mkdir(dirname(destPath), { recursive: true }).then(() =>
-          cp(absPath, destPath, { recursive: true, force: true }),
+          cp(absPath, destPath, { recursive: true, force: true, verbatimSymlinks: true }),
         ),
       )
     }
