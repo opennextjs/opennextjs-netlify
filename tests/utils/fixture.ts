@@ -626,9 +626,17 @@ export async function invokeSandboxedFunction(
   return result
 }
 
-export const EDGE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-middleware'
+const ADAPTER_EDGE_FUNCTION_NAME = '___netlify-edge-handler-adapter-middleware'
+
+export const EDGE_MIDDLEWARE_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : '___netlify-edge-handler-middleware'
 // Turbopack has different output than webpack
-export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = hasDefaultTurbopackBuilds()
+export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : hasDefaultTurbopackBuilds()
   ? EDGE_MIDDLEWARE_FUNCTION_NAME
   : '___netlify-edge-handler-src-middleware'
-export const NODE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-node-middleware'
+export const NODE_MIDDLEWARE_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : '___netlify-edge-handler-node-middleware'

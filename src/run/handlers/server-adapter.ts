@@ -8,8 +8,8 @@ import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-sh
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
-import { resolveRoutes } from '../../../compiled/next-routing.js'
-import type { ResolveRoutesParams, ResolveRoutesResult } from '../../../compiled/next-routing.js'
+import { resolveRoutes } from '../../adapter-runtime-shared/next-routing.js'
+import type { ResolveRoutesParams, ResolveRoutesResult } from '../../adapter-runtime-shared/next-routing.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'

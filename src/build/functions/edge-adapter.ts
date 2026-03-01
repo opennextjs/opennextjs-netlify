@@ -7,7 +7,7 @@ import type { AdapterOutput } from 'next-with-adapters'
 import type { SerializedAdapterOutput } from '../../adapter/adapter-output.js'
 import { EDGE_HANDLER_NAME, PluginContext } from '../plugin-context.js'
 
-import { copyRuntime, writeEdgeManifest } from './edge.js'
+import { writeEdgeManifest } from './edge.js'
 
 type MiddlewareOutput = AdapterOutput['MIDDLEWARE']
 
@@ -36,17 +36,40 @@ export const createEdgeHandlersFromAdapter = async (ctx: PluginContext): Promise
   const handlerName = getAdapterHandlerName()
   const handlerDirectory = join(ctx.edgeFunctionsDir, handlerName)
 
-  // Copy edge-runtime support files
-  await copyRuntime(ctx, handlerDirectory)
-
-  // Copy the pre-bundled next-routing ESM module (built by tools/build.js)
-  // so the edge function can import it locally without needing npm resolution.
-  // Preserves the same path hierarchy as in the repo: compiled/next-routing.js
-  await mkdir(join(handlerDirectory, 'compiled'), { recursive: true })
-  await cp(
-    join(ctx.pluginDir, 'compiled/next-routing.js'),
-    join(handlerDirectory, 'compiled/next-routing.js'),
+  // Copy:
+  // - adapter-runtime-edge source files (Deno runs .ts directly)
+  // - adapter-runtime-shared modules (built by tools/build.js, used by both serverless and edge runtimes)
+  // - adapter-runtime-chunks (built by tools/build.js, dependencies of source files)
+  await Promise.all(
+    ['adapter-runtime-edge', 'adapter-runtime-shared', 'adapter-runtime-chunks'].map((dirName) =>
+      cp(join(ctx.pluginDir, 'dist', dirName), join(handlerDirectory, dirName), {
+        recursive: true,
+      }),
+    ),
   )
+
+  // await cp(
+  //   join(ctx.pluginDir, 'src/adapter-runtime-edge'),
+  //   join(handlerDirectory, 'adapter-runtime-edge'),
+  //   { recursive: true },
+  // )
+
+  // await cp(
+  //   join(ctx.pluginDir, 'dist/adapter-runtime-shared'),
+  //   join(handlerDirectory, 'adapter-runtime-shared'),
+  //   { recursive: true },
+  // )
+
+  // Copy edge-runtime shim files and cjs.ts needed for middleware bundling
+  const edgeRuntimeDir = join(ctx.pluginDir, 'edge-runtime')
+  const handlerEdgeRuntimeDir = join(handlerDirectory, 'edge-runtime')
+  await mkdir(join(handlerEdgeRuntimeDir, 'shim'), { recursive: true })
+  await mkdir(join(handlerEdgeRuntimeDir, 'lib'), { recursive: true })
+  await Promise.all([
+    cp(join(edgeRuntimeDir, 'shim/edge.js'), join(handlerEdgeRuntimeDir, 'shim/edge.js')),
+    cp(join(edgeRuntimeDir, 'shim/node.js'), join(handlerEdgeRuntimeDir, 'shim/node.js')),
+    cp(join(edgeRuntimeDir, 'lib/cjs.ts'), join(handlerEdgeRuntimeDir, 'lib/cjs.ts')),
+  ])
 
   console.log('middleware runtime', middlewareOutput.runtime)
   // Bundle the middleware handler
@@ -238,7 +261,11 @@ async function writeRoutingEdgeFunctionEntry(
 
   await writeFile(join(handlerDirectory, 'routing-config.json'), JSON.stringify(routingConfig))
 
-  // Write minimal next config for middleware request building
+  // Build matcher regexes from middleware config
+  const matchers = middlewareOutput.config?.matchers ?? []
+  const matcherRegexes = matchers.map((matcher) => matcher.sourceRegex)
+
+  // Minimal next config for middleware request building — inlined in the entry template
   const minimalNextConfig = {
     basePath: nextConfig.basePath,
     i18n: nextConfig.i18n,
@@ -247,34 +274,15 @@ async function writeRoutingEdgeFunctionEntry(
       nextConfig.skipProxyUrlNormalize ?? nextConfig.skipMiddlewareUrlNormalize,
   }
 
-  const handlerRuntimeDirectory = join(handlerDirectory, 'edge-runtime')
-  await writeFile(
-    join(handlerRuntimeDirectory, 'next.config.json'),
-    JSON.stringify(minimalNextConfig),
-  )
-
-  // Build matcher regexes from middleware config
-  const matchers = middlewareOutput.config?.matchers ?? []
-  const matcherRegexes = matchers.map((matcher) => matcher.sourceRegex)
-
-  // Also write matchers.json for the existing handleMiddleware (fallback)
-  // We re-use the same format the standalone middleware uses
-  const edgeStyleMatchers = matchers.map((matcher) => ({
-    regexp: matcher.sourceRegex,
-    originalSource: matcher.source,
-    has: matcher.has,
-    missing: matcher.missing,
-  }))
-  await writeFile(join(handlerRuntimeDirectory, 'matchers.json'), JSON.stringify(edgeStyleMatchers))
-
   // Write the entry file
   await writeFile(
     join(handlerDirectory, `${handlerName}.js`),
     `
-    import { runNextRouting } from './edge-runtime/routing.ts';
+    import { runNextRouting } from './adapter-runtime-edge/middleware.js';
     import middlewareHandler from './server/middleware.js';
     import routingConfig from './routing-config.json' with { type: 'json' };
-    import nextConfig from './edge-runtime/next.config.json' with { type: 'json' };
+
+    const nextConfig = ${JSON.stringify(minimalNextConfig)};
 
     const matcherRegexes = ${JSON.stringify(matcherRegexes)}.map(re => new RegExp(re));
 

@@ -6,11 +6,29 @@
  * 2. Handles redirects, external rewrites, and middleware responses at the edge
  * 3. For matched routes, serializes the resolution into a header and forwards
  *    the request to the server handler (or CDN for static assets)
+ *
+ * Unlike edge-runtime/routing.ts, this module has NO dependency on the
+ * standalone edge-runtime directory. Middleware invocation constructs
+ * RequestData directly (no geo/ip, no URL normalization — matching the
+ * AWS adapter pattern).
  */
 import type { Context } from '@netlify/edge-functions'
 
-import { handleMiddlewareRaw, type NextHandler } from './middleware.ts'
-import type { RequestData } from './lib/next-request.ts'
+import {
+  resolveRoutes,
+  responseToMiddlewareResult,
+} from '../adapter-runtime-shared/next-routing.js'
+
+interface Route {
+  source?: string
+  sourceRegex: string
+  destination?: string
+  headers?: Record<string, string>
+  has?: Array<{ type: string; key?: string; value?: string }>
+  missing?: Array<{ type: string; key?: string; value?: string }>
+  status?: number
+  priority?: boolean
+}
 
 interface RoutingConfig {
   buildId: string
@@ -39,16 +57,24 @@ interface RoutingConfig {
   skipProxyUrlNormalize?: boolean
 }
 
-interface Route {
-  source?: string
-  sourceRegex: string
-  destination?: string
-  headers?: Record<string, string>
-  has?: Array<{ type: string; key?: string; value?: string }>
-  missing?: Array<{ type: string; key?: string; value?: string }>
-  status?: number
-  priority?: boolean
+interface RequestData {
+  headers: Record<string, string>
+  method: string
+  url: string
+  body?: ReadableStream<Uint8Array>
+  nextConfig?: {
+    basePath?: string
+    i18n?: {
+      defaultLocale: string
+      localeDetection?: false
+      locales: string[]
+    } | null
+    trailingSlash?: boolean
+    skipMiddlewareUrlNormalize?: boolean
+  }
 }
+
+type NextHandler = (params: { request: RequestData }) => Promise<{ response: Response }>
 
 interface MiddlewareConfig {
   enabled: boolean
@@ -66,23 +92,11 @@ interface ResolveRoutesResult {
   routeMatches?: Record<string, string>
 }
 
-type MiddlewareResult = {
-  bodySent?: boolean
-  requestHeaders?: Headers
-  responseHeaders?: Headers
-  redirect?: { url: URL; status: number }
-  rewrite?: URL
-}
-
 interface MiddlewareContext {
   url: URL
   headers: Headers
   requestBody: ReadableStream
 }
-
-// Pre-bundled ESM module built by tools/build.js and copied to the handler
-// directory at site build time by edge-adapter.ts.
-import { resolveRoutes, responseToMiddlewareResult } from '../compiled/next-routing.js'
 
 /**
  * Serialize a ResolveRoutesResult into a header value for the server handler.
@@ -160,6 +174,7 @@ function applyResolutionToResponse(
 /**
  * Main entry point for the routing + middleware edge function.
  */
+// eslint-disable-next-line max-params
 export async function runNextRouting(
   request: Request,
   context: Context,
@@ -173,6 +188,9 @@ export async function runNextRouting(
   const url = new URL(request.url)
   let middlewareResponse: Response | undefined
 
+  // Cast config values — local type definitions are intentionally loose
+  // since this file runs in Deno without type-checking. The next-routing
+  // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
   const resolution = await resolveRoutes({
     url,
     buildId: routingConfig.buildId,
@@ -180,8 +198,8 @@ export async function runNextRouting(
     requestBody: request.body ?? new ReadableStream(),
     headers: new Headers(request.headers),
     pathnames: routingConfig.pathnames,
-    i18n: routingConfig.i18n ?? undefined,
-    routes: routingConfig.routes,
+    i18n: (routingConfig.i18n ?? undefined) as Parameters<typeof resolveRoutes>[0]['i18n'],
+    routes: routingConfig.routes as Parameters<typeof resolveRoutes>[0]['routes'],
     invokeMiddleware: async (middlewareCtx: MiddlewareContext) => {
       const shouldNormalize = routingConfig.routes.shouldNormalizeNextData
 
@@ -204,18 +222,23 @@ export async function runNextRouting(
         return {}
       }
 
-      // Load and invoke middleware
+      // Load and invoke middleware directly — construct RequestData inline
+      // instead of going through handleMiddlewareRaw/buildNextRequest which
+      // would double-normalize URLs (routing library already normalizes).
       const handler = await middlewareConfig.load()
 
-      // Build a Request from the middleware context to pass to handleMiddlewareRaw
       const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
-      const middlewareRequest = new Request(middlewareRequestUrl, {
-        headers: new Headers(middlewareCtx.headers),
-        method: request.method,
-        ...(hasBody ? { body: middlewareCtx.requestBody, duplex: 'half' } : {}),
+      const result = await handler({
+        request: {
+          headers: Object.fromEntries(new Headers(middlewareCtx.headers).entries()),
+          method: request.method,
+          url: middlewareRequestUrl,
+          body: hasBody ? middlewareCtx.requestBody : undefined,
+          nextConfig,
+        },
       })
+      const rawResponse = result.response
 
-      const rawResponse = await handleMiddlewareRaw(middlewareRequest, context, handler, nextConfig)
       console.log({ rawResponse })
 
       // Convert the raw Next.js middleware response to a MiddlewareResult
@@ -238,10 +261,6 @@ export async function runNextRouting(
   const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
 
   console.log('resolution', { resolution, middlewareResponse })
-
-  // if (middlewareResponse) {
-  //   return applyResolutionToThisResponse(middlewareResponse)
-  // }
 
   // Handle redirect — return directly from edge, no lambda needed
   if (resolution.redirect) {
@@ -313,7 +332,6 @@ export async function runNextRouting(
   }
 
   // Matched a pathname — forward to server handler or CDN with resolution header
-  // if (resolution.matchedPathname) {
   const serialized = serializeResolution(resolution)
 
   // Clone the request, potentially adjusting URL for rewrites
@@ -342,9 +360,4 @@ export async function runNextRouting(
   })
   // context.next() forwards to the origin (server handler or CDN)
   return applyResolutionToThisResponse(await context.next(forwardRequest))
-  // }
-
-  // No match — pass through (edge function returns undefined = passthrough)
-  // console.log('no match')
-  // return applyResolutionToThisResponse(new Response('Not found (middleware)', { status: 404 }))
 }
