@@ -50,8 +50,7 @@ for (const {
 ].filter(function isDefined<T>(argument: T | undefined): argument is T {
   return typeof argument !== 'undefined'
 })) {
-  // TODO(adapter): middleware bundling for adapter not yet implemented
-  describe.skipIf(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER)(label, () => {
+  describe(label, () => {
     test<FixtureTestContext>('should add request/response headers', async (ctx) => {
       await createFixture('middleware', ctx)
       await runPlugin(ctx, runPluginConstants)
@@ -412,7 +411,13 @@ for (const {
           url: `/api/edge-headers`,
         })
         const res = await response.json()
-        expect(res.url).toBe('/api/edge-headers')
+        expect(res.url).toBe(
+          process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+            ? // trailing slash handling redirect is part of routing in adapter middleware
+              // so middleware response is different than standalone handling which offloads this to server handler
+              '/api/edge-headers/'
+            : '/api/edge-headers',
+        )
         expect(response.status).toBe(200)
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })
@@ -439,7 +444,13 @@ for (const {
         })
         const res = await response.json()
         const url = new URL(res.url, 'http://n/')
-        expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
+        expect(url.pathname).toBe(
+          process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+            ? // adapter use normalized data url, we still should see a rewrite from ssr-page to ssr-page-2
+              '/ssr-page-2/'
+            : // standalone mode uses denormalized data url
+              '/_next/data/build-id/ssr-page-2.json',
+        )
         expect(res.headers['x-nextjs-data']).toBe('1')
         expect(response.status).toBe(200)
         expect(response.headers.get('x-nextjs-rewrite')).toBe('/ssr-page-2/')

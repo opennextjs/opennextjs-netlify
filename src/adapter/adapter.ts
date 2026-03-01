@@ -58,7 +58,9 @@ const adapter: NextAdapter = {
         appRoutes: rewriteOutputs(ctx.outputs.appRoutes),
         prerenders: ctx.outputs.prerenders,
         staticFiles: rewriteOutputs(ctx.outputs.staticFiles),
-        middleware: ctx.outputs.middleware,
+        middleware: ctx.outputs.middleware
+          ? { ...ctx.outputs.middleware, filePath: toRelPath(ctx.outputs.middleware.filePath) }
+          : undefined,
       },
       projectDir: ctx.projectDir,
       repoRoot: ctx.repoRoot,

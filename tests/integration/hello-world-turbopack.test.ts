@@ -71,7 +71,7 @@ afterEach(() => {
 // allowing to run this test on both stable and canary versions of Next.js
 describe.skipIf(
   // TODO(adapter): unskip when middleware is handled in the adapter
-  !nextVersionSatisfies('>=15.3.0-canary.43') || process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER,
+  !nextVersionSatisfies('>=15.3.0-canary.43'),
 )('Test that the hello-world-turbopack next app is working', () => {
   test<FixtureTestContext>('regular page is working', async (ctx) => {
     await createFixture('hello-world-turbopack', ctx)

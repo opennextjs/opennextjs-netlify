@@ -13,7 +13,7 @@ import {
   type MiddlewareRouteMatch,
 } from './lib/routing.ts'
 
-type NextHandler = (params: { request: RequestData }) => Promise<FetchEventResult>
+export type NextHandler = (params: { request: RequestData }) => Promise<FetchEventResult>
 
 const matchesMiddleware: MiddlewareRouteMatch = getMiddlewareRouteMatcher(matchers || [])
 
@@ -70,4 +70,28 @@ export async function handleMiddleware(
 
     return new Response(error.message, { status: 500 })
   }
+}
+
+/**
+ * Invokes a Next.js middleware handler and returns the **raw** Response.
+ *
+ * Unlike `handleMiddleware`, this does NOT run `buildResponse` — the returned
+ * Response still contains internal Next.js headers (x-middleware-rewrite,
+ * x-middleware-next, etc.) that `responseToMiddlewareResult` from next-routing
+ * expects.
+ *
+ * Used by the routing edge function where `resolveRoutes` handles the
+ * full request lifecycle (redirects, rewrites, static routing) and only
+ * needs the raw middleware result.
+ */
+export async function handleMiddlewareRaw(
+  request: Request,
+  context: Context,
+  nextHandler: NextHandler,
+  nextConfigOverride?: RequestData['nextConfig'],
+): Promise<Response> {
+  const cfg = nextConfigOverride ?? nextConfig
+  const nextRequest = buildNextRequest(request, context, cfg)
+  const result = await nextHandler({ request: nextRequest })
+  return result.response
 }

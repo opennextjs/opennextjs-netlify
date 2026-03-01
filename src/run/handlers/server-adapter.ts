@@ -8,6 +8,8 @@ import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-sh
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
+import { resolveRoutes } from '../../../compiled/next-routing.js'
+import type { ResolveRoutesParams, ResolveRoutesResult } from '../../../compiled/next-routing.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
@@ -19,8 +21,6 @@ import {
   setCacheTagsHeaders,
   setVaryHeaders,
 } from '../headers.js'
-import { resolveRoutes } from '../routing.cjs'
-import type { ResolveRoutesParams, ResolveRoutesResult } from '../routing.cjs'
 import {
   getMemoizedKeyValueStoreBackedByRegionalBlobStore,
   setFetchBeforeNextPatchedIt,
@@ -253,10 +253,12 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   return handler
 }
 
-// grabbed from Reference AWS Adapter
+// grabbed from Reference AWS Adapter and modified (fixed?)
+// TODO: dedupe
 function applyResolutionToResponse(
-  response: Response,
+  request: Request,
   resolution: ResolveRoutesResult,
+  response: Response,
   explicitStatus?: number,
 ): Response {
   const headers = new Headers(response.headers)
@@ -265,6 +267,10 @@ function applyResolutionToResponse(
     for (const [key, value] of resolution.resolvedHeaders.entries()) {
       const normalizedKey = key.toLowerCase()
       if (normalizedKey === 'cache-control' && hasExplicitCacheControl) {
+        continue
+      }
+      if (request.headers.get(key) === value) {
+        // skip echoing request headers back in response
         continue
       }
       headers.set(key, value)
@@ -410,6 +416,56 @@ async function invokeHandler(
   })
 }
 
+/**
+ * Deserialize a ResolveRoutesResult from the `x-next-route-resolution` header.
+ * The routing edge function serializes the resolution as JSON with
+ * Headers → plain object, URL → string conversions.
+ */
+function deserializeResolution(serialized: string): ResolveRoutesResult {
+  const parsed = JSON.parse(serialized) as {
+    matchedPathname: string | null
+    routeMatches: Record<string, string> | null
+    resolvedHeaders: Record<string, string> | null
+    status: number | null
+    redirect: { url: string; status: number } | null
+    externalRewrite: string | null
+    middlewareResponded: boolean
+  }
+
+  const resolution: ResolveRoutesResult = {}
+
+  if (parsed.matchedPathname !== null) {
+    resolution.matchedPathname = parsed.matchedPathname
+  }
+  if (parsed.routeMatches !== null) {
+    resolution.routeMatches = parsed.routeMatches
+  }
+  if (parsed.status !== null) {
+    resolution.status = parsed.status
+  }
+  if (parsed.middlewareResponded) {
+    resolution.middlewareResponded = parsed.middlewareResponded
+  }
+  if (parsed.resolvedHeaders !== null) {
+    const headers = new Headers()
+    for (const [key, value] of Object.entries(parsed.resolvedHeaders)) {
+      headers.set(key, value)
+    }
+    resolution.resolvedHeaders = headers
+  }
+  if (parsed.redirect !== null) {
+    resolution.redirect = {
+      url: new URL(parsed.redirect.url),
+      status: parsed.redirect.status,
+    }
+  }
+  if (parsed.externalRewrite !== null) {
+    resolution.externalRewrite = new URL(parsed.externalRewrite)
+  }
+
+  return resolution
+}
+
 export default async function ServerHandler(request: Request, requestContext: RequestContext) {
   const tracer = getTracer()
 
@@ -417,41 +473,39 @@ export default async function ServerHandler(request: Request, requestContext: Re
     const url = new URL(request.url)
 
     let resolution: ResolveRoutesResult
-    try {
-      resolution = await resolveRoutes({
-        url,
-        buildId: manifest.buildId,
-        basePath: manifest.config.basePath || '',
-        requestBody: request.body ?? new ReadableStream(),
-        headers: new Headers(request.headers),
-        pathnames: allPathnames,
-        // Cast i18n config — next-with-adapters uses readonly arrays while @next/routing expects mutable
-        i18n: (manifest.config.i18n ?? undefined) as ResolveRoutesParams['i18n'],
-        routes: manifest.routing,
-        invokeMiddleware: async () => {
-          // Middleware runs in Netlify Edge Function before the serverless function.
-          // By the time the request reaches this handler, middleware has already executed.
-          // Return a no-op result.
-          return {}
-        },
-      })
-    } catch (error) {
-      console.error('route resolution error', error)
-      getLogger().withError(error).error('route resolution error')
-      return new Response('Internal Server Error', { status: 500 })
+
+    const serializedResolution = request.headers.get('x-next-route-resolution')
+    if (serializedResolution) {
+      // Resolution was computed by the routing edge function — skip resolveRoutes
+      resolution = deserializeResolution(serializedResolution)
+    } else {
+      // No edge function (standalone mode fallback, or edge function not deployed)
+      try {
+        resolution = await resolveRoutes({
+          url,
+          buildId: manifest.buildId,
+          basePath: manifest.config.basePath || '',
+          requestBody: request.body ?? new ReadableStream(),
+          headers: new Headers(request.headers),
+          pathnames: allPathnames,
+          // Cast i18n config — next-with-adapters uses readonly arrays while @next/routing expects mutable
+          i18n: (manifest.config.i18n ?? undefined) as ResolveRoutesParams['i18n'],
+          routes: manifest.routing,
+          invokeMiddleware: async () => {
+            // Middleware runs in Netlify Edge Function before the serverless function.
+            // By the time the request reaches this handler, middleware has already executed.
+            // Return a no-op result.
+            return {}
+          },
+        })
+      } catch (error) {
+        console.error('route resolution error', error)
+        getLogger().withError(error).error('route resolution error')
+        return new Response('Internal Server Error', { status: 500 })
+      }
     }
 
-    // TODO(adapter): what's up with resolution.resolvedHeaders
-    // They contain request headers, but also response headers ...
-    if (resolution.resolvedHeaders) {
-      const actuallyResolvedHeaders = new Headers()
-      for (const [key, value] of resolution.resolvedHeaders.entries()) {
-        if (request.headers.get(key) !== value) {
-          actuallyResolvedHeaders.set(key, value)
-        }
-      }
-      resolution.resolvedHeaders = actuallyResolvedHeaders
-    }
+    const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
 
     console.log({ url, resolution })
 
@@ -461,10 +515,12 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // TODO(adapter): this can be cached forever
       // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
       // which would require setting correct netlify-vary header.
-      return new Response(null, {
-        status,
-        headers: { location: redirectUrl.toString() },
-      })
+      return applyResolutionToThisResponse(
+        new Response(null, {
+          status,
+          headers: { location: redirectUrl.toString() },
+        }),
+      )
     }
 
     // Handle external rewrite
@@ -487,10 +543,12 @@ export default async function ServerHandler(request: Request, requestContext: Re
         headers.delete('transfer-encoding')
         headers.delete('content-encoding')
         headers.delete('content-length')
-        return new Response(fetchResp.body, {
-          ...fetchResp,
-          headers,
-        })
+        return applyResolutionToThisResponse(
+          new Response(fetchResp.body, {
+            ...fetchResp,
+            headers,
+          }),
+        )
       } catch (error) {
         console.error('external rewrite fetch error', error)
         getLogger().withError(error).error('external rewrite fetch error')
@@ -502,9 +560,8 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // TODO(adapter): this can be cached forever
       // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
       // which would require setting correct netlify-vary header.
-      return applyResolutionToResponse(
+      return applyResolutionToThisResponse(
         new Response(null, { status: resolution.status }),
-        resolution,
         resolution.status,
       )
     }
@@ -514,10 +571,12 @@ export default async function ServerHandler(request: Request, requestContext: Re
       span?.setAttribute('matched.pathname', resolution.matchedPathname)
       const matchedHandler = handlerDefsByPathname.get(resolution.matchedPathname)
       if (!matchedHandler) {
-        return new Response('Routing matched but no matched output exists', { status: 500 })
+        return applyResolutionToThisResponse(
+          new Response('Routing matched but no matched output exists', { status: 500 }),
+        )
       }
 
-      return applyResolutionToResponse(
+      return applyResolutionToThisResponse(
         await matchedHandler({
           request,
           requestContext,
@@ -525,7 +584,6 @@ export default async function ServerHandler(request: Request, requestContext: Re
           tracer,
           span,
         }),
-        resolution,
         resolution.status,
       )
     }
@@ -536,6 +594,8 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // which would require setting correct netlify-vary header.
     const headers = new Headers()
     notFoundHeuristics(request, headers, requestContext)
-    return new Response('Not Found', { status: 404, headers })
+    return applyResolutionToThisResponse(
+      new Response('Not Found (server-handler)', { status: 404, headers }),
+    )
   })
 }

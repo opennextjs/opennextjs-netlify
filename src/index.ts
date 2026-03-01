@@ -15,6 +15,7 @@ import {
   setHeadersConfig,
   unpublishStaticDir,
 } from './build/content/static.js'
+import { createEdgeHandlersFromAdapter } from './build/functions/edge-adapter.js'
 import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/edge.js'
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
 import { setImageConfig } from './build/image-cdn.js'
@@ -103,7 +104,7 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
       copyStaticContent(ctx),
       copyPrerenderedContent(ctx),
       createServerHandler(ctx),
-      createEdgeHandlers(ctx),
+      ctx.useAdapter ? createEdgeHandlersFromAdapter(ctx) : createEdgeHandlers(ctx),
       setHeadersConfig(ctx),
       setImageConfig(ctx),
     ])

@@ -22,7 +22,7 @@ function nodeMiddlewareDefinitionHasMatcher(
   return Array.isArray(definition.matchers)
 }
 
-type EdgeOrNodeMiddlewareDefinition = {
+export type EdgeOrNodeMiddlewareDefinition = {
   runtime: 'nodejs' | 'edge'
   // hoisting shared properties from underlying definitions for common handling
   name: string
@@ -38,12 +38,12 @@ type EdgeOrNodeMiddlewareDefinition = {
     }
 )
 
-const writeEdgeManifest = async (ctx: PluginContext, manifest: Manifest) => {
+export const writeEdgeManifest = async (ctx: PluginContext, manifest: Manifest) => {
   await mkdir(ctx.edgeFunctionsDir, { recursive: true })
   await writeFile(join(ctx.edgeFunctionsDir, 'manifest.json'), JSON.stringify(manifest, null, 2))
 }
 
-const copyRuntime = async (ctx: PluginContext, handlerDirectory: string): Promise<void> => {
+export const copyRuntime = async (ctx: PluginContext, handlerDirectory: string): Promise<void> => {
   const files = await glob('edge-runtime/**/*', {
     cwd: ctx.pluginDir,
     ignore: ['**/*.test.ts'],
@@ -62,7 +62,7 @@ const copyRuntime = async (ctx: PluginContext, handlerDirectory: string): Promis
  * the locale to ensure that the edge function can handle it.
  * We don't need to do this for data routes because they always have the locale.
  */
-const augmentMatchers = (
+export const augmentMatchers = (
   matchers: EdgeMiddlewareDefinition['matchers'],
   ctx: PluginContext,
 ): EdgeMiddlewareDefinition['matchers'] => {
@@ -93,7 +93,7 @@ const augmentMatchers = (
   })
 }
 
-const writeHandlerFile = async (
+export const writeHandlerFile = async (
   ctx: PluginContext,
   { matchers, name }: EdgeOrNodeMiddlewareDefinition,
 ) => {
@@ -183,7 +183,6 @@ const copyHandlerDependenciesForEdgeMiddleware = async (
   await writeFile(outputFile, parts.join('\n'))
 }
 
-const NODE_MIDDLEWARE_NAME = 'node-middleware'
 const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
   const name = NODE_MIDDLEWARE_NAME
 
@@ -300,10 +299,12 @@ const createEdgeHandler = async (
   await writeHandlerFile(ctx, definition)
 }
 
-const getHandlerName = ({ name }: Pick<EdgeMiddlewareDefinition, 'name'>): string =>
+export const getHandlerName = ({ name }: Pick<EdgeMiddlewareDefinition, 'name'>): string =>
   `${EDGE_HANDLER_NAME}-${name.replace(/\W/g, '-')}`
 
-const buildHandlerDefinition = (
+export const NODE_MIDDLEWARE_NAME = 'node-middleware'
+
+export const buildHandlerDefinition = (
   ctx: PluginContext,
   def: EdgeOrNodeMiddlewareDefinition,
 ): Array<ManifestFunction> => {
@@ -320,6 +321,11 @@ export const clearStaleEdgeHandlers = async (ctx: PluginContext) => {
 }
 
 export const createEdgeHandlers = async (ctx: PluginContext) => {
+  console.log('running old stuff')
+  if (ctx.useAdapter) {
+    throw new Error('createEdgeHandlers should not be used when adapter is enabled')
+  }
+
   // Edge middleware
   const nextManifest = await ctx.getMiddlewareManifest()
   const middlewareDefinitions: EdgeOrNodeMiddlewareDefinition[] = [

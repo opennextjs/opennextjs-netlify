@@ -115,10 +115,33 @@ async function generateHtmlRewriterWasmModule() {
 const args = new Set(process.argv.slice(2))
 const watch = args.has('--watch') || args.has('-w')
 
+/**
+ * Bundle next-routing into a standalone ESM file for use in edge functions.
+ * Uses esbuild's stdin to avoid needing a source file — just re-exports
+ * the functions we need from the next-routing package.
+ */
+async function bundleNextRouting() {
+  await build({
+    stdin: {
+      contents:
+        'export { resolveRoutes, responseToMiddlewareResult } from "next-routing"',
+      resolveDir: repoDirectory,
+    },
+    outfile: 'compiled/next-routing.js',
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    banner: {
+      js: `import { dirname as __banner_dirname } from "node:path";import { fileURLToPath as __banner_fileURLToPath } from "node:url";var __dirname = __banner_dirname(__banner_fileURLToPath(import.meta.url));`,
+    },
+  })
+}
+
 await Promise.all([
   vendorMiddlewareDenoModules().then(generateHtmlRewriterWasmModule),
   bundle(entryPointsESM, 'esm', watch),
   ...entryPointsCJS.map((entry) => bundle([entry], 'cjs', watch)),
+  bundleNextRouting(),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
 ])
 

@@ -29,8 +29,7 @@ beforeEach<FixtureTestContext>(async (ctx) => {
   await startMockBlobStore(ctx)
 })
 
-// TODO(adapter): unskip once middleware is handled
-describe.skipIf(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER).each([
+describe.each([
   { fixture: 'wasm', edgeHandlerFunction: EDGE_MIDDLEWARE_FUNCTION_NAME },
   { fixture: 'wasm-src', edgeHandlerFunction: EDGE_MIDDLEWARE_SRC_FUNCTION_NAME },
 ])('$fixture', ({ fixture, edgeHandlerFunction }) => {
