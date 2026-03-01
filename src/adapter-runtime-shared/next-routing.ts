@@ -22,6 +22,10 @@ export function applyResolutionToResponse(
       if (normalizedKey === 'cache-control' && hasExplicitCacheControl) {
         continue
       }
+      if (normalizedKey === 'location' && resolution.redirect) {
+        headers.set(key, resolution.redirect.url.toString())
+        continue
+      }
       if (request.headers.get(key) === value) {
         // skip echoing request headers back in response
         continue

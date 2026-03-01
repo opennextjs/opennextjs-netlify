@@ -14,7 +14,7 @@ export type AdapterBuildCompleteContext = NonNullable<
 export function normalizeAndFixAdapterOutput(
   onBuildCompleteAdapterCtx: AdapterBuildCompleteContext,
 ): AdapterBuildCompleteContext {
-  return fixAdapterOutput(normalizeAdapterOutput(onBuildCompleteAdapterCtx))
+  return fixAdapterOutputForNextRouting(normalizeAdapterOutput(onBuildCompleteAdapterCtx))
 }
 
 function normalizeAdapterOutput(
@@ -52,7 +52,38 @@ function normalizeAdapterOutput(
 // so this is meant to massage things a bit so it works - ideally this is eventually removed
 // once things are either fixed upstream ... or maybe assumptions we've made about hot it should
 // are proven incorrect and we'll adjust usage to fit.
-function fixAdapterOutput(
+// this primarily focus on those rules:
+
+// @next/routing doesn't interpolate Location headers, just "destination"
+//   {
+//     "source": "/:file((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+)/",
+//     "sourceRegex": "^(?:\\/((?!\\.well-known(?:\\/.*)?)(?:[^/]+\\/)*[^/]+\\.\\w+))\\/$",
+//     "headers": {
+//       "Location": "/$1"
+//     },
+//     "status": 308,
+//     "missing": [
+//       {
+//         "type": "header",
+//         "key": "x-nextjs-data"
+//       }
+//     ],
+//     "priority": true
+//   },
+
+// this seems to match on next-data request due to processing order in @next/routing - it normalizes
+// data request before handling redirects, so those /_next/data requests match on this rule
+//   {
+//     "source": "/:notfile((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+)",
+//     "sourceRegex": "^(?:\\/((?!\\.well-known(?:\\/.*)?)(?:[^/]+\\/)*[^/\\.]+))$",
+//     "headers": {
+//       "Location": "/$1/"
+//     },
+//     "status": 308,
+//     "priority": true
+//   }
+// ],
+function fixAdapterOutputForNextRouting(
   onBuildCompleteAdapterCtx: AdapterBuildCompleteContext,
 ): AdapterBuildCompleteContext {
   return {
@@ -60,9 +91,11 @@ function fixAdapterOutput(
     routing: {
       ...onBuildCompleteAdapterCtx.routing,
       beforeMiddleware: onBuildCompleteAdapterCtx.routing.beforeMiddleware.map((rule) => {
-        // trailing slash redirect should always ignore /_next/data requests
+        let maybeConvertedRule = rule
+        // due to ordering process in @next/routing, this rule DOES match on data requests,
+        // even if it shouldn't (/_next/data/build-id/page.json -> /page)
         if (rule.source?.startsWith('/:notfile')) {
-          return {
+          maybeConvertedRule = {
             ...rule,
             missing: [
               {
@@ -72,7 +105,27 @@ function fixAdapterOutput(
             ],
           }
         }
-        return rule
+
+        if (
+          maybeConvertedRule.status &&
+          maybeConvertedRule.headers &&
+          maybeConvertedRule.status >= 300 &&
+          maybeConvertedRule.status < 400
+        ) {
+          // rewrite location header to be destination, so it gets interpolated by @next/routing
+          const locationHeaderName = Object.keys(maybeConvertedRule.headers).find(
+            (headerName) => headerName.toLowerCase() === 'location',
+          )
+          if (locationHeaderName) {
+            const locationValue = maybeConvertedRule.headers[locationHeaderName]
+            maybeConvertedRule = {
+              ...maybeConvertedRule,
+              destination: locationValue,
+            }
+          }
+        }
+
+        return maybeConvertedRule
       }),
     },
   }

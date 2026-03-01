@@ -249,17 +249,8 @@ export async function runNextRouting(
 
   // Handle redirect — return directly from edge, no lambda needed
   if (resolution.redirect) {
-    const { url: redirectUrl, status } = resolution.redirect
-    const headers = new Headers()
-    headers.set('location', redirectUrl.toString())
-    if (resolution.resolvedHeaders) {
-      for (const [key, value] of resolution.resolvedHeaders.entries()) {
-        if (key.toLowerCase() !== 'location') {
-          headers.set(key, value)
-        }
-      }
-    }
-    return applyResolutionToThisResponse(new Response(null, { status, headers }))
+    const { status } = resolution.redirect
+    return applyResolutionToThisResponse(new Response(null, { status }))
   }
 
   // Handle external rewrite — fetch directly from edge
