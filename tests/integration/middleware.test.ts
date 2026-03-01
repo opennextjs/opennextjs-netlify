@@ -374,7 +374,7 @@ for (const {
           functions: [edgeFunctionNameRoot],
           origin,
           redirect: 'manual',
-          url: '/_next/data/dJvEyLV8MW7CBLFf0Ecbk/test/redirect-with-headers.json',
+          url: '/_next/data/build-id/test/redirect-with-headers.json',
         })
 
         ctx.cleanup?.push(() => origin.stop())
