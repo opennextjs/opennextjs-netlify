@@ -646,9 +646,6 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
   })
 }
 
-// TODO(adapter): don't skip once we look into middleware handling
-const adaptertest = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER ? test.skip : test
-
 // this test is using pinned next version that doesn't support node middleware
 test("requests with x-middleware-subrequest don't skip middleware (GHSA-f82v-jwr5-mffw)", async ({
   middlewareSubrequestVuln,

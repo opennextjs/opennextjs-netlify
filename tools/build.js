@@ -83,16 +83,7 @@ async function bundle(entryPoints, bundleOptions) {
 
   if (bundleOptions.format === 'esm') {
     options.outdir = OUT_DIR
-    // options.chunkNames = `${chunkNamesPrefix}-chunks/[name]-[hash]`
     options.splitting = true
-    // options.banner = {
-    //   js: `
-    //   var require = await (async () => {
-    //     var { createRequire } = await import("node:module");
-    //     return createRequire(import.meta.url);
-    //   })();
-    // `,
-    // }
   } else {
     options.outfile = entryPoints[0].replace('src', OUT_DIR).replace('cts', 'cjs')
   }

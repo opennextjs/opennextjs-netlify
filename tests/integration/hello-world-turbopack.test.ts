@@ -69,44 +69,44 @@ afterEach(() => {
 
 // https://github.com/vercel/next.js/pull/77808 makes turbopack builds no longer gated only to canaries
 // allowing to run this test on both stable and canary versions of Next.js
-describe.skipIf(
-  // TODO(adapter): unskip when middleware is handled in the adapter
-  !nextVersionSatisfies('>=15.3.0-canary.43'),
-)('Test that the hello-world-turbopack next app is working', () => {
-  test<FixtureTestContext>('regular page is working', async (ctx) => {
-    await createFixture('hello-world-turbopack', ctx)
-    await runPlugin(ctx)
+describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.43'))(
+  'Test that the hello-world-turbopack next app is working',
+  () => {
+    test<FixtureTestContext>('regular page is working', async (ctx) => {
+      await createFixture('hello-world-turbopack', ctx)
+      await runPlugin(ctx)
 
-    // test the function call
-    const home = await invokeFunction(ctx)
-    expect(home.statusCode).toBe(200)
-    expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
-  })
-
-  test<FixtureTestContext>('edge page is working', async (ctx) => {
-    await createFixture('hello-world-turbopack', ctx)
-    await runPlugin(ctx)
-
-    // test the function call
-    const home = await invokeFunction(ctx, { url: '/edge-page' })
-    expect(home.statusCode).toBe(200)
-    expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
-  })
-
-  test<FixtureTestContext>('middleware is working', async (ctx) => {
-    await createFixture('hello-world-turbopack', ctx)
-    await runPlugin(ctx)
-
-    const pathname = '/middleware/test'
-
-    const response = await invokeEdgeFunction(ctx, {
-      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
-      url: pathname,
+      // test the function call
+      const home = await invokeFunction(ctx)
+      expect(home.statusCode).toBe(200)
+      expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
     })
 
-    expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({
-      message: `Hello from middleware at ${pathname}`,
+    test<FixtureTestContext>('edge page is working', async (ctx) => {
+      await createFixture('hello-world-turbopack', ctx)
+      await runPlugin(ctx)
+
+      // test the function call
+      const home = await invokeFunction(ctx, { url: '/edge-page' })
+      expect(home.statusCode).toBe(200)
+      expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
     })
-  })
-})
+
+    test<FixtureTestContext>('middleware is working', async (ctx) => {
+      await createFixture('hello-world-turbopack', ctx)
+      await runPlugin(ctx)
+
+      const pathname = '/middleware/test'
+
+      const response = await invokeEdgeFunction(ctx, {
+        functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+        url: pathname,
+      })
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        message: `Hello from middleware at ${pathname}`,
+      })
+    })
+  },
+)

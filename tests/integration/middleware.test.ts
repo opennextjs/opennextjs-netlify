@@ -458,13 +458,7 @@ for (const {
         })
         const res = await response.json()
         const url = new URL(res.url, 'http://n/')
-        expect(url.pathname).toBe(
-          process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
-            ? // adapter use normalized data url, we still should see a rewrite from ssr-page to ssr-page-2
-              '/ssr-page-2/'
-            : // standalone mode uses denormalized data url
-              '/_next/data/build-id/ssr-page-2.json',
-        )
+        expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
         expect(res.headers['x-nextjs-data']).toBe('1')
         expect(response.status).toBe(200)
         expect(response.headers.get('x-nextjs-rewrite')).toBe('/ssr-page-2/')
