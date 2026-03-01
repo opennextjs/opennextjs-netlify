@@ -40,7 +40,7 @@ export function applyResolutionToResponse(
     headers,
   })
 
-  console.log('final response', { inputResponse: response, finalResponse })
+  // console.log('final response', { inputResponse: response, finalResponse })
 
   return finalResponse
 }

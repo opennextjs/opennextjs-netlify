@@ -16,10 +16,12 @@ import type { Context } from '@netlify/edge-functions'
 
 import {
   applyResolutionToResponse,
+  matchRoute,
   normalizeNextDataUrl,
   resolveRoutes,
   responseToMiddlewareResult,
 } from '../adapter-runtime-shared/next-routing.js'
+// import { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
 interface Route {
   source?: string
@@ -32,7 +34,7 @@ interface Route {
   priority?: boolean
 }
 
-interface RoutingConfig {
+export interface RoutingConfig {
   buildId: string
   basePath: string
   i18n: {
@@ -57,6 +59,7 @@ interface RoutingConfig {
   }
   pathnames: string[]
   skipProxyUrlNormalize?: boolean
+  middlewareMatchers: Route[]
 }
 
 interface RequestData {
@@ -78,9 +81,8 @@ interface RequestData {
 
 type NextHandler = (params: { request: RequestData }) => Promise<{ response: Response }>
 
-interface MiddlewareConfig {
+export interface MiddlewareConfig {
   enabled: boolean
-  matchers?: RegExp[]
   load?: () => Promise<NextHandler>
 }
 
@@ -168,9 +170,9 @@ export async function runNextRouting(
     i18n: (routingConfig.i18n ?? undefined) as Parameters<typeof resolveRoutes>[0]['i18n'],
     routes: routingConfig.routes as Parameters<typeof resolveRoutes>[0]['routes'],
     invokeMiddleware: async (middlewareCtx: MiddlewareContext) => {
-      const shouldNormalize = routingConfig.routes.shouldNormalizeNextData
+      // const shouldNormalize = routingConfig.routes.shouldNormalizeNextData
 
-      console.log('invokeMiddleware', { middlewareConfig, middlewareCtx, shouldNormalize })
+      // console.log('invokeMiddleware', { middlewareConfig, middlewareCtx, shouldNormalize })
       if (!middlewareConfig.enabled || !middlewareConfig.load) {
         return {}
       }
@@ -186,13 +188,13 @@ export async function runNextRouting(
         matchingUrl.pathname += '/'
       }
 
-      console.log('middleware matching', { matchingUrl })
+      const matchesAny = routingConfig.middlewareMatchers.some((matcher) => {
+        // @ts-expect-error matcher types
+        const { matched } = matchRoute(matcher, middlewareCtx.url, middlewareCtx.headers)
+        return matched
+      })
 
-      // Check if request URL matches any middleware matcher
-      const matchesAny = middlewareConfig.matchers?.some((re) =>
-        re.test(new URL(matchingUrl).pathname),
-      )
-      console.log({ matchesAny })
+      // console.log({ matchingUrl, matchers: routingConfig.middlewareMatchers, matchesAny })
       if (!matchesAny) {
         return {}
       }
@@ -218,7 +220,7 @@ export async function runNextRouting(
       })
       const rawResponse = result.response
 
-      console.log({ rawResponse })
+      // console.log({ rawResponse })
 
       // Convert the raw Next.js middleware response to a MiddlewareResult
       // that resolveRoutes understands
@@ -228,7 +230,7 @@ export async function runNextRouting(
         middlewareCtx.url,
       )
 
-      console.log({ middlewareResult })
+      // console.log({ middlewareResult })
 
       if (middlewareResult.bodySent) {
         // Store for later use if middleware sent a body response
@@ -241,11 +243,11 @@ export async function runNextRouting(
 
   const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
 
-  console.log('resolution', {
-    resolution,
-    middlewareResponse,
-    body: await middlewareResponse?.clone().text(),
-  })
+  // console.log('resolution', {
+  //   resolution,
+  //   middlewareResponse,
+  //   body: await middlewareResponse?.clone().text(),
+  // })
 
   // Handle redirect — return directly from edge, no lambda needed
   if (resolution.redirect) {
@@ -330,10 +332,10 @@ export async function runNextRouting(
     // @ts-expect-error duplex is needed for streaming bodies
     duplex: 'half',
   })
-  console.log('context.next() with forwarded request', {
-    url: forwardRequest.url,
-    headers: Object.fromEntries(forwardRequest.headers.entries()),
-  })
+  // console.log('context.next() with forwarded request', {
+  //   url: forwardRequest.url,
+  //   headers: Object.fromEntries(forwardRequest.headers.entries()),
+  // })
   // context.next() forwards to the origin (server handler or CDN)
   return applyResolutionToThisResponse(await context.next(forwardRequest))
 }

@@ -5,6 +5,7 @@ import type { Manifest } from '@netlify/edge-functions'
 import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
+import { RoutingConfig } from '../../adapter-runtime-edge/middleware.js'
 import { EDGE_HANDLER_NAME, PluginContextAdapter } from '../plugin-context.js'
 
 import { writeEdgeManifest } from './edge.js'
@@ -239,19 +240,19 @@ async function writeRoutingEdgeFunctionEntry(
   const routingConfig = {
     buildId: ctx.adapterOutput.buildId,
     basePath: ctx.adapterOutput.config.basePath || '',
+    // @ts-expect-error ugh
     i18n: ctx.adapterOutput.config.i18n ?? null,
     routes: ctx.adapterOutput.routing,
     pathnames: collectAllPathnames(ctx.adapterOutput),
-    skipProxyUrlNormalize:
-      ctx.adapterOutput.config.skipProxyUrlNormalize ??
-      ctx.adapterOutput.config.skipMiddlewareUrlNormalize,
-  }
+    skipProxyUrlNormalize: ctx.adapterOutput.config.skipProxyUrlNormalize,
+    middlewareMatchers: middlewareOutput.config?.matchers ?? [],
+  } satisfies RoutingConfig
 
   await writeFile(join(handlerDirectory, 'routing-config.json'), JSON.stringify(routingConfig))
 
   // Build matcher regexes from middleware config
-  const matchers = middlewareOutput.config?.matchers ?? []
-  const matcherRegexes = matchers.map((matcher) => matcher.sourceRegex)
+  // const matchers = middlewareOutput.config?.matchers ?? []
+  // const matcherRegexes = matchers.map((matcher) => matcher.sourceRegex)
 
   // Minimal next config for middleware request building — inlined in the entry template
   const minimalNextConfig = {
@@ -272,11 +273,8 @@ async function writeRoutingEdgeFunctionEntry(
 
     const nextConfig = ${JSON.stringify(minimalNextConfig)};
 
-    const matcherRegexes = ${JSON.stringify(matcherRegexes)}.map(re => new RegExp(re));
-
     const middlewareConfig = {
       enabled: true,
-      matchers: matcherRegexes,
       load: () => Promise.resolve(middlewareHandler),
     };
 

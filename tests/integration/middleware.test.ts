@@ -357,9 +357,7 @@ for (const {
 
         ctx.cleanup?.push(() => origin.stop())
 
-        const redirectLocation = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
-          ? response.headers.get('x-nextjs-redirect')
-          : response.headers.get('location')
+        const redirectLocation = response.headers.get('x-nextjs-redirect')
 
         expect(response.status).toBe(307)
         expect(redirectLocation, 'added a location header').toBeTypeOf('string')
@@ -389,9 +387,7 @@ for (const {
 
         ctx.cleanup?.push(() => origin.stop())
 
-        const redirectLocation = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
-          ? response.headers.get('x-nextjs-redirect')
-          : response.headers.get('location')
+        const redirectLocation = response.headers.get('x-nextjs-redirect')
 
         expect(response.status).toBe(307)
         expect(redirectLocation, 'added a location header').toBeTypeOf('string')
