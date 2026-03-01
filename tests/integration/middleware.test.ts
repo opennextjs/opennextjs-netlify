@@ -349,15 +349,22 @@ for (const {
           functions: [edgeFunctionNameRoot],
           origin,
           redirect: 'manual',
-          url: '/_next/data/dJvEyLV8MW7CBLFf0Ecbk/test/redirect-with-headers.json',
+          url: '/_next/data/build-id/test/redirect-with-headers.json',
+          headers: {
+            'x-nextjs-data': '1',
+          },
         })
 
         ctx.cleanup?.push(() => origin.stop())
 
+        const redirectLocation = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+          ? response.headers.get('x-nextjs-redirect')
+          : response.headers.get('location')
+
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(redirectLocation, 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(redirectLocation as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -375,14 +382,21 @@ for (const {
           origin,
           redirect: 'manual',
           url: '/_next/data/build-id/test/redirect-with-headers.json',
+          headers: {
+            'x-nextjs-data': '1',
+          },
         })
 
         ctx.cleanup?.push(() => origin.stop())
 
+        const redirectLocation = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+          ? response.headers.get('x-nextjs-redirect')
+          : response.headers.get('location')
+
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(redirectLocation, 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(redirectLocation as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')

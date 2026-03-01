@@ -4,8 +4,8 @@ import { dirname, join } from 'node:path/posix'
 import type { Manifest } from '@netlify/edge-functions'
 import type { AdapterOutput } from 'next-with-adapters'
 
-import type { SerializedAdapterOutput } from '../../adapter/adapter-output.js'
-import { EDGE_HANDLER_NAME, PluginContext } from '../plugin-context.js'
+import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
+import { EDGE_HANDLER_NAME, PluginContextAdapter } from '../plugin-context.js'
 
 import { writeEdgeManifest } from './edge.js'
 
@@ -21,7 +21,7 @@ const ADAPTER_MIDDLEWARE_FUNCTION_NAME = 'adapter-middleware'
  * redirects/rewrites resolve at the edge, static asset requests go directly
  * to CDN, and only compute-requiring requests reach the server handler.
  */
-export const createEdgeHandlersFromAdapter = async (ctx: PluginContext): Promise<void> => {
+export const createEdgeHandlersFromAdapter = async (ctx: PluginContextAdapter): Promise<void> => {
   console.log('running new stuff')
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const adapterOutput = ctx.adapterOutput!
@@ -48,18 +48,6 @@ export const createEdgeHandlersFromAdapter = async (ctx: PluginContext): Promise
     ),
   )
 
-  // await cp(
-  //   join(ctx.pluginDir, 'src/adapter-runtime-edge'),
-  //   join(handlerDirectory, 'adapter-runtime-edge'),
-  //   { recursive: true },
-  // )
-
-  // await cp(
-  //   join(ctx.pluginDir, 'dist/adapter-runtime-shared'),
-  //   join(handlerDirectory, 'adapter-runtime-shared'),
-  //   { recursive: true },
-  // )
-
   // Copy edge-runtime shim files and cjs.ts needed for middleware bundling
   const edgeRuntimeDir = join(ctx.pluginDir, 'edge-runtime')
   const handlerEdgeRuntimeDir = join(handlerDirectory, 'edge-runtime')
@@ -78,7 +66,7 @@ export const createEdgeHandlersFromAdapter = async (ctx: PluginContext): Promise
     : copyNodeMiddlewareDependenciesFromAdapter(ctx, middlewareOutput, handlerDirectory))
 
   // Write the routing edge function entry file
-  await writeRoutingEdgeFunctionEntry(ctx, adapterOutput, middlewareOutput, handlerDirectory)
+  await writeRoutingEdgeFunctionEntry(ctx, middlewareOutput, handlerDirectory)
 
   // Write edge manifest — match all requests
   const manifest: Manifest = {
@@ -104,7 +92,7 @@ function getAdapterHandlerName(): string {
  * Same concatenation pattern as standalone but using adapter asset paths.
  */
 async function copyEdgeMiddlewareDependenciesFromAdapter(
-  ctx: PluginContext,
+  ctx: PluginContextAdapter,
   middlewareOutput: MiddlewareOutput,
   handlerDirectory: string,
 ): Promise<void> {
@@ -159,7 +147,7 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
  * Same virtual-module pattern as standalone but using adapter asset paths.
  */
 async function copyNodeMiddlewareDependenciesFromAdapter(
-  ctx: PluginContext,
+  ctx: PluginContextAdapter,
   middlewareOutput: MiddlewareOutput,
   handlerDirectory: string,
 ): Promise<void> {
@@ -240,8 +228,7 @@ async function copyNodeMiddlewareDependenciesFromAdapter(
  * at request time.
  */
 async function writeRoutingEdgeFunctionEntry(
-  ctx: PluginContext,
-  adapterOutput: SerializedAdapterOutput,
+  ctx: PluginContextAdapter,
   middlewareOutput: MiddlewareOutput,
   handlerDirectory: string,
 ): Promise<void> {
@@ -250,13 +237,14 @@ async function writeRoutingEdgeFunctionEntry(
 
   // Write the routing config as a JSON file for the edge function to import
   const routingConfig = {
-    buildId: adapterOutput.buildId,
-    basePath: adapterOutput.config.basePath || '',
-    i18n: adapterOutput.config.i18n ?? null,
-    routes: adapterOutput.routing,
-    pathnames: collectAllPathnames(adapterOutput),
+    buildId: ctx.adapterOutput.buildId,
+    basePath: ctx.adapterOutput.config.basePath || '',
+    i18n: ctx.adapterOutput.config.i18n ?? null,
+    routes: ctx.adapterOutput.routing,
+    pathnames: collectAllPathnames(ctx.adapterOutput),
     skipProxyUrlNormalize:
-      adapterOutput.config.skipProxyUrlNormalize ?? adapterOutput.config.skipMiddlewareUrlNormalize,
+      ctx.adapterOutput.config.skipProxyUrlNormalize ??
+      ctx.adapterOutput.config.skipMiddlewareUrlNormalize,
   }
 
   await writeFile(join(handlerDirectory, 'routing-config.json'), JSON.stringify(routingConfig))
@@ -301,7 +289,7 @@ async function writeRoutingEdgeFunctionEntry(
 /**
  * Collect all pathnames from the adapter output for route resolution.
  */
-function collectAllPathnames(adapterOutput: SerializedAdapterOutput): string[] {
+function collectAllPathnames(adapterOutput: AdapterBuildCompleteContext): string[] {
   const pathnames = new Set<string>()
 
   for (const output of adapterOutput.outputs.pages) {

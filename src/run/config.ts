@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
-import type { SerializedAdapterOutput } from '../adapter/adapter-output.js'
+import type { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
 import { ADAPTER_MANIFEST_FILE, PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
 import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
@@ -19,7 +19,7 @@ export type RunConfig = {
  * Subset of the adapter output that is needed at runtime for route resolution
  */
 export type AdapterManifest = Pick<
-  SerializedAdapterOutput,
+  AdapterBuildCompleteContext,
   'routing' | 'outputs' | 'buildId' | 'config'
 >
 

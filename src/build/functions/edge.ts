@@ -322,7 +322,7 @@ export const clearStaleEdgeHandlers = async (ctx: PluginContext) => {
 
 export const createEdgeHandlers = async (ctx: PluginContext) => {
   console.log('running old stuff')
-  if (ctx.useAdapter) {
+  if (ctx.hasAdapter()) {
     throw new Error('createEdgeHandlers should not be used when adapter is enabled')
   }
 

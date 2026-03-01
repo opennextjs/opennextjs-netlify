@@ -15,6 +15,8 @@
 import type { Context } from '@netlify/edge-functions'
 
 import {
+  applyResolutionToResponse,
+  normalizeNextDataUrl,
   resolveRoutes,
   responseToMiddlewareResult,
 } from '../adapter-runtime-shared/next-routing.js'
@@ -136,41 +138,6 @@ function serializeResolution(resolution: ResolveRoutesResult): string {
   return JSON.stringify(serialized)
 }
 
-// grabbed from Reference AWS Adapter and modified (fixed?)
-// TODO: dedupe
-function applyResolutionToResponse(
-  request: Request,
-  resolution: ResolveRoutesResult,
-  response: Response,
-  explicitStatus?: number,
-): Response {
-  const headers = new Headers(response.headers)
-  const hasExplicitCacheControl = headers.has('cache-control')
-  if (resolution.resolvedHeaders) {
-    for (const [key, value] of resolution.resolvedHeaders.entries()) {
-      const normalizedKey = key.toLowerCase()
-      if (normalizedKey === 'cache-control' && hasExplicitCacheControl) {
-        continue
-      }
-      if (request.headers.get(key) === value) {
-        // skip echoing request headers back in response
-        continue
-      }
-      headers.set(key, value)
-    }
-  }
-
-  const finalResponse = new Response(response.body, {
-    status: explicitStatus ?? resolution.status ?? response.status,
-    statusText: response.statusText,
-    headers,
-  })
-
-  console.log('final response', { inputResponse: response, finalResponse })
-
-  return finalResponse
-}
-
 /**
  * Main entry point for the routing + middleware edge function.
  */
@@ -208,14 +175,22 @@ export async function runNextRouting(
         return {}
       }
 
-      // TODO(adapter): should this be upstreamed?
-      const middlewareRequestUrl = routingConfig.skipProxyUrlNormalize
-        ? request.url
-        : middlewareCtx.url.toString()
+      // matching is done by testing normalized url
+      const matchingUrl = normalizeNextDataUrl(
+        middlewareCtx.url,
+        routingConfig.basePath,
+        routingConfig.buildId,
+      )
+
+      if (nextConfig?.trailingSlash && !matchingUrl.pathname.endsWith('/')) {
+        matchingUrl.pathname += '/'
+      }
+
+      console.log('middleware matching', { matchingUrl })
 
       // Check if request URL matches any middleware matcher
       const matchesAny = middlewareConfig.matchers?.some((re) =>
-        re.test(new URL(middlewareRequestUrl).pathname),
+        re.test(new URL(matchingUrl).pathname),
       )
       console.log({ matchesAny })
       if (!matchesAny) {
@@ -227,12 +202,16 @@ export async function runNextRouting(
       // would double-normalize URLs (routing library already normalizes).
       const handler = await middlewareConfig.load()
 
+      const middlewareRequestUrl = nextConfig?.skipMiddlewareUrlNormalize
+        ? middlewareCtx.url
+        : matchingUrl
+
       const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
       const result = await handler({
         request: {
           headers: Object.fromEntries(new Headers(middlewareCtx.headers).entries()),
           method: request.method,
-          url: middlewareRequestUrl,
+          url: middlewareRequestUrl.href,
           body: hasBody ? middlewareCtx.requestBody : undefined,
           nextConfig,
         },
@@ -249,6 +228,8 @@ export async function runNextRouting(
         middlewareCtx.url,
       )
 
+      console.log({ middlewareResult })
+
       if (middlewareResult.bodySent) {
         // Store for later use if middleware sent a body response
         middlewareResponse = rawResponse
@@ -260,7 +241,11 @@ export async function runNextRouting(
 
   const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
 
-  console.log('resolution', { resolution, middlewareResponse })
+  console.log('resolution', {
+    resolution,
+    middlewareResponse,
+    body: await middlewareResponse?.clone().text(),
+  })
 
   // Handle redirect — return directly from edge, no lambda needed
   if (resolution.redirect) {

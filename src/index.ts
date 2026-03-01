@@ -104,7 +104,7 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
       copyStaticContent(ctx),
       copyPrerenderedContent(ctx),
       createServerHandler(ctx),
-      ctx.useAdapter ? createEdgeHandlersFromAdapter(ctx) : createEdgeHandlers(ctx),
+      ctx.hasAdapter() ? createEdgeHandlersFromAdapter(ctx) : createEdgeHandlers(ctx),
       setHeadersConfig(ctx),
       setImageConfig(ctx),
     ])

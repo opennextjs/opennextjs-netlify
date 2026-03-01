@@ -82,7 +82,7 @@ const writeHandlerManifest = async (ctx: PluginContext) => {
     join(ctx.serverHandlerRootDir, `${SERVER_HANDLER_NAME}.json`),
     JSON.stringify({
       config: {
-        name: ctx.useAdapter ? 'Next.js Adapter Server Handler' : 'Next.js Server Handler',
+        name: ctx.hasAdapter() ? 'Next.js Adapter Server Handler' : 'Next.js Server Handler',
         generator: `${ctx.pluginName}@${ctx.pluginVersion}`,
         nodeBundler: 'none',
         // the folders can vary in monorepos based on the folder structure of the user so we have to glob all
@@ -110,7 +110,7 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
   }
 
   // Adapter mode uses a dedicated template that works for both monorepo and non-monorepo setups
-  if (ctx.useAdapter) {
+  if (ctx.hasAdapter()) {
     const template = await readFile(join(templatesDir, 'handler-adapter.tmpl.js'), 'utf-8')
     templateVariables['{{cwd}}'] =
       // eslint-disable-next-line no-negated-condition
@@ -151,7 +151,7 @@ export const createServerHandler = async (ctx: PluginContext) => {
   await tracer.withActiveSpan('createServerHandler', async () => {
     await mkdir(join(ctx.serverHandlerRuntimeModulesDir), { recursive: true })
 
-    if (ctx.useAdapter) {
+    if (ctx.hasAdapter()) {
       await copyNextServerCodeFromAdapter(ctx)
     } else {
       await copyNextServerCode(ctx)
@@ -162,7 +162,7 @@ export const createServerHandler = async (ctx: PluginContext) => {
     await writeHandlerManifest(ctx)
     await writeHandlerFile(ctx)
 
-    if (!ctx.useAdapter) {
+    if (!ctx.hasAdapter()) {
       await verifyHandlerDirStructure(ctx)
     }
   })

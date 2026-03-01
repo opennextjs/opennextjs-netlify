@@ -20,8 +20,11 @@ import type {
 } from 'next-with-cache-handler-v2/dist/build/index.js'
 import { satisfies } from 'semver'
 
-import { ADAPTER_OUTPUT_FILE } from '../adapter/adapter-output.js'
-import type { SerializedAdapterOutput } from '../adapter/adapter-output.js'
+import {
+  ADAPTER_OUTPUT_FILE,
+  type AdapterBuildCompleteContext,
+  normalizeAndFixAdapterOutput,
+} from '../adapter/adapter-output.js'
 
 const MODULE_DIR = fileURLToPath(new URL('.', import.meta.url))
 const PLUGIN_DIR = join(MODULE_DIR, '../..')
@@ -91,7 +94,7 @@ export class PluginContext {
    * The root directory for output file tracing. Paths inside standalone directory preserve paths of project, relative to this directory.
    */
   get outputFileTracingRoot(): string {
-    if (this.useAdapter) {
+    if (this.hasAdapter()) {
       throw new Error('outputFileTracingRoot is not available in adapter mode')
     }
     // Up until https://github.com/vercel/next.js/pull/86812 we had direct access to computed value of it with following
@@ -140,7 +143,7 @@ export class PluginContext {
    * Retrieves the root of the `.next/standalone` directory
    */
   get standaloneRootDir(): string {
-    if (this.useAdapter) {
+    if (this.hasAdapter()) {
       throw new Error('standaloneRootDir is not available in adapter mode')
     }
     return join(this.publishDir, 'standalone')
@@ -171,7 +174,7 @@ export class PluginContext {
 
   /** Retrieves the `.next/standalone/` directory monorepo aware */
   get standaloneDir(): string {
-    if (this.useAdapter) {
+    if (this.hasAdapter()) {
       throw new Error('standaloneDir is not available in adapter mode')
     }
     // the standalone directory mimics the structure of the publish directory
@@ -228,14 +231,14 @@ export class PluginContext {
   }
 
   get serverHandlerDir(): string {
-    if (this.relativeAppDir.length === 0 || this.useAdapter) {
+    if (this.relativeAppDir.length === 0 || this.hasAdapter()) {
       return this.serverHandlerRootDir
     }
     return join(this.serverHandlerRootDir, this.distDirParent)
   }
 
   get serverHandlerRuntimeModulesDir(): string {
-    if (this.useAdapter) {
+    if (this.hasAdapter()) {
       return join(this.serverHandlerRootDir, '.netlify')
     }
 
@@ -277,16 +280,17 @@ export class PluginContext {
     this.utils = options.utils
   }
 
-  #adapterOutput: SerializedAdapterOutput | null | undefined = undefined
+  #adapterOutput: AdapterBuildCompleteContext | null | undefined = undefined
 
   /** Read and cache the adapter output JSON from publishDir if it exists */
-  get adapterOutput(): SerializedAdapterOutput | null {
-    if (this.#adapterOutput === undefined) {
+  get adapterOutput(): AdapterBuildCompleteContext | null {
+    if (typeof this.#adapterOutput === 'undefined') {
       const adapterOutputPath = join(this.publishDir, ADAPTER_OUTPUT_FILE)
       if (existsSync(adapterOutputPath)) {
-        this.#adapterOutput = JSON.parse(
+        const originalAdapterOutput = JSON.parse(
           readFileSync(adapterOutputPath, 'utf-8'),
-        ) as SerializedAdapterOutput
+        ) as AdapterBuildCompleteContext
+        this.#adapterOutput = normalizeAndFixAdapterOutput(originalAdapterOutput)
       } else {
         this.#adapterOutput = null
       }
@@ -295,7 +299,8 @@ export class PluginContext {
   }
 
   /** Whether the adapter API was used during the Next.js build */
-  get useAdapter(): boolean {
+  // eslint-disable-next-line no-use-before-define
+  hasAdapter(): this is PluginContextAdapter {
     return this.adapterOutput !== null
   }
 
@@ -368,9 +373,8 @@ export class PluginContext {
   /** Get RequiredServerFiles manifest from build output **/
   get requiredServerFiles(): RequiredServerFilesManifest {
     if (!this._requiredServerFiles) {
-      if (this.useAdapter) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const adapter = this.adapterOutput!
+      if (this.hasAdapter()) {
+        const adapter = this.adapterOutput
         this._requiredServerFiles = {
           version: 1,
           // The adapter's NextConfigComplete comes from next-with-adapters which is a different
@@ -443,9 +447,8 @@ export class PluginContext {
    */
   get nextVersion(): string | null {
     if (this.#nextVersion === undefined) {
-      if (this.useAdapter) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        this.#nextVersion = this.adapterOutput!.nextVersion
+      if (this.hasAdapter()) {
+        this.#nextVersion = this.adapterOutput.nextVersion
       } else {
         try {
           const serverHandlerRequire = createRequire(
@@ -552,3 +555,5 @@ export class PluginContext {
     return this.utils.build.failBuild(message, error instanceof Error ? { error } : undefined)
   }
 }
+
+export type PluginContextAdapter = PluginContext & { adapterOutput: AdapterBuildCompleteContext }

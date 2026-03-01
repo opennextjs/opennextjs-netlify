@@ -8,8 +8,14 @@ import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-sh
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
-import { resolveRoutes } from '../../adapter-runtime-shared/next-routing.js'
-import type { ResolveRoutesParams, ResolveRoutesResult } from '../../adapter-runtime-shared/next-routing.js'
+import {
+  applyResolutionToResponse,
+  resolveRoutes,
+} from '../../adapter-runtime-shared/next-routing.js'
+import type {
+  ResolveRoutesParams,
+  ResolveRoutesResult,
+} from '../../adapter-runtime-shared/next-routing.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
@@ -253,38 +259,6 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   return handler
 }
 
-// grabbed from Reference AWS Adapter and modified (fixed?)
-// TODO: dedupe
-function applyResolutionToResponse(
-  request: Request,
-  resolution: ResolveRoutesResult,
-  response: Response,
-  explicitStatus?: number,
-): Response {
-  const headers = new Headers(response.headers)
-  const hasExplicitCacheControl = headers.has('cache-control')
-  if (resolution.resolvedHeaders) {
-    for (const [key, value] of resolution.resolvedHeaders.entries()) {
-      const normalizedKey = key.toLowerCase()
-      if (normalizedKey === 'cache-control' && hasExplicitCacheControl) {
-        continue
-      }
-      if (request.headers.get(key) === value) {
-        // skip echoing request headers back in response
-        continue
-      }
-      headers.set(key, value)
-    }
-  }
-
-  return new Response(response.body, {
-    status: explicitStatus ?? resolution.status ?? response.status,
-    statusText: response.statusText,
-    headers,
-  })
-}
-
-// grabbed from Reference AWS Adapter
 function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
   if (!resolution.status) return false
   if (resolution.status < 300 || resolution.status >= 400) return false
@@ -575,6 +549,18 @@ export default async function ServerHandler(request: Request, requestContext: Re
           new Response('Routing matched but no matched output exists', { status: 500 }),
         )
       }
+
+      // const invokeUrl = new URL(request.url)
+      // invokeUrl.pathname = resolution.matchedPathname
+      // if (resolution.routeMatches) {
+      //   for (const [key, value] of Object.entries(resolution.routeMatches)) {
+      //     invokeUrl.searchParams.set(key, value)
+      //   }
+      // }
+
+      // console.log({ invokeUrl})
+
+      // const adjustedRequest = new Request(invokeUrl, request)
 
       return applyResolutionToThisResponse(
         await matchedHandler({
