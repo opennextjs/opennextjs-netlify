@@ -121,10 +121,7 @@ for (const output of manifest.outputs.appRoutes) {
   handlerDefsId.set(output.id, handler)
   handlerDefsByPathname.set(output.pathname, handler)
 }
-console.log({
-  pathnames: [...handlerDefsByPathname.keys()],
-  outputIds: [...handlerDefsId.keys()],
-})
+
 for (const output of manifest.outputs.prerenders) {
   const parentHandler = handlerDefsId.get(output.parentOutputId)
   if (!parentHandler) {
@@ -153,6 +150,11 @@ for (const output of manifest.outputs.staticFiles) {
 }
 
 const allPathnames = [...handlerDefsByPathname.keys()]
+
+console.log({
+  pathnames: allPathnames,
+  outputIds: [...handlerDefsId.keys()],
+})
 
 // console.log(
 //   inspect(

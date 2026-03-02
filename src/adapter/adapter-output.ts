@@ -83,9 +83,21 @@ function normalizeAdapterOutput(
 //     "priority": true
 //   }
 // ],
+
+// additionally, when trailingSlash: true, the pathname matching for static files is not working
 function fixAdapterOutputForNextRouting(
   onBuildCompleteAdapterCtx: AdapterBuildCompleteContext,
 ): AdapterBuildCompleteContext {
+  const beforeFiles = [...onBuildCompleteAdapterCtx.routing.beforeFiles]
+  if (onBuildCompleteAdapterCtx.config.trailingSlash) {
+    // normalizing trailing slash path to one without it to fix the output matching
+    beforeFiles.push({
+      source: '/:path+/',
+      sourceRegex: '^(?:\\/((?:[^\\/]+?)(?:\\/(?:[^\\/]+?))*))\\/$',
+      destination: '/$1',
+    })
+  }
+
   return {
     ...onBuildCompleteAdapterCtx,
     routing: {
@@ -127,6 +139,7 @@ function fixAdapterOutputForNextRouting(
 
         return maybeConvertedRule
       }),
+      beforeFiles,
     },
   }
 }
