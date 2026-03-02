@@ -576,6 +576,14 @@ export default async function ServerHandler(request: Request, requestContext: Re
       )
     }
 
+    if (
+      request.headers.has('x-nextjs-data') &&
+      manifest.routing.shouldNormalizeNextData &&
+      url.pathname.startsWith(`${manifest.config.basePath}/_next/data/${manifest.buildId}/`)
+    ) {
+      return Response.json({})
+    }
+
     // No match found — 404
     // TODO(adapter): this can be cached forever because it will never match any routes
     // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
