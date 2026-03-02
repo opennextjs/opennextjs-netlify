@@ -1,12 +1,10 @@
-import type { OutgoingHttpHeaders } from 'http'
-
-import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
 import type { Context } from '@netlify/functions'
 import type { Span } from '@netlify/otel/opentelemetry'
 import type { WorkerRequestHandler } from 'next/dist/server/lib/types.js'
 
 import { augmentNextResponse } from '../augment-next-response.js'
 import { getRunConfig, setRunConfig } from '../config.js'
+import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
   adjustDateHeader,
   setCacheControlHeaders,
@@ -35,29 +33,6 @@ const nextImportPromise = import('../next.cjs')
 
 let nextHandler: WorkerRequestHandler
 
-/**
- * When Next.js proxies requests externally, it writes the response back as-is.
- * In some cases, this includes Transfer-Encoding: chunked.
- * This triggers behaviour in @fastly/http-compute-js to separate chunks with chunk delimiters, which is not what we want at this level.
- * We want Lambda to control the behaviour around chunking, not this.
- * This workaround removes the Transfer-Encoding header, which makes the library send the response as-is.
- */
-const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) => {
-  const originalStoreHeader = res._storeHeader
-  res._storeHeader = function _storeHeader(firstLine, headers) {
-    if (headers) {
-      if (Array.isArray(headers)) {
-        // eslint-disable-next-line no-param-reassign
-        headers = headers.filter(([header]) => header.toLowerCase() !== 'transfer-encoding')
-      } else {
-        delete (headers as OutgoingHttpHeaders)['transfer-encoding']
-      }
-    }
-
-    return originalStoreHeader.call(this, firstLine, headers)
-  }
-}
-
 export default async (
   request: Request,
   _context: Context,
@@ -82,20 +57,6 @@ export default async (
 
   return await withActiveSpan(tracer, 'generate response', async (span) => {
     const { req, res } = toReqRes(request)
-
-    // Work around a bug in http-proxy in next@<14.0.2
-    Object.defineProperty(req, 'connection', {
-      get() {
-        return {}
-      },
-    })
-    Object.defineProperty(req, 'socket', {
-      get() {
-        return {}
-      },
-    })
-
-    disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
 
     const resProxy = augmentNextResponse(res, requestContext)
 

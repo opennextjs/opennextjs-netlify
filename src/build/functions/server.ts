@@ -6,6 +6,7 @@ import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import { glob } from 'fast-glob'
 
+import { copyNextServerCodeFromAdapter } from '../content/server-adapter.js'
 import {
   copyNextDependencies,
   copyNextServerCode,
@@ -81,7 +82,7 @@ const writeHandlerManifest = async (ctx: PluginContext) => {
     join(ctx.serverHandlerRootDir, `${SERVER_HANDLER_NAME}.json`),
     JSON.stringify({
       config: {
-        name: 'Next.js Server Handler',
+        name: ctx.hasAdapter() ? 'Next.js Adapter Server Handler' : 'Next.js Server Handler',
         generator: `${ctx.pluginName}@${ctx.pluginVersion}`,
         nodeBundler: 'none',
         // the folders can vary in monorepos based on the folder structure of the user so we have to glob all
@@ -107,6 +108,16 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
   const templateVariables: Record<string, string> = {
     '{{useRegionalBlobs}}': ctx.useRegionalBlobs.toString(),
   }
+
+  // Adapter mode uses a dedicated template that works for both monorepo and non-monorepo setups
+  if (ctx.hasAdapter()) {
+    const template = await readFile(join(templatesDir, 'handler-adapter.tmpl.js'), 'utf-8')
+    templateVariables['{{cwd}}'] =
+      // eslint-disable-next-line no-negated-condition
+      ctx.relativeAppDir.length !== 0 ? posixJoin(ctx.distDirParent) : ''
+    return applyTemplateVariables(template, templateVariables)
+  }
+
   // In this case it is a monorepo and we need to use a own template for it
   // as we have to change the process working directory
   if (ctx.relativeAppDir.length !== 0) {
@@ -140,12 +151,19 @@ export const createServerHandler = async (ctx: PluginContext) => {
   await tracer.withActiveSpan('createServerHandler', async () => {
     await mkdir(join(ctx.serverHandlerRuntimeModulesDir), { recursive: true })
 
-    await copyNextServerCode(ctx)
-    await copyNextDependencies(ctx)
+    if (ctx.hasAdapter()) {
+      await copyNextServerCodeFromAdapter(ctx)
+    } else {
+      await copyNextServerCode(ctx)
+      await copyNextDependencies(ctx)
+    }
+
     await copyHandlerDependencies(ctx)
     await writeHandlerManifest(ctx)
     await writeHandlerFile(ctx)
 
-    await verifyHandlerDirStructure(ctx)
+    if (!ctx.hasAdapter()) {
+      await verifyHandlerDirStructure(ctx)
+    }
   })
 }

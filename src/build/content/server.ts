@@ -36,6 +36,29 @@ function isError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error
 }
 
+// write our run-config.json to the root dir so that we can easily get the runtime config of the required-server-files.json
+// without the need to know about the monorepo or distDir configuration upfront.
+export const writeRunConfig = async (
+  ctx: PluginContext,
+  nextConfig = ctx.buildConfig,
+): Promise<void> => {
+  await writeFile(
+    join(ctx.serverHandlerDir, RUN_CONFIG_FILE),
+    JSON.stringify({
+      nextConfig,
+      nextVersion: ctx.nextVersion,
+      // only enable setting up 'use cache' handler when Next.js supports CacheHandlerV2 as we don't have V1 compatible implementation
+      // see https://github.com/vercel/next.js/pull/76687 first released in v15.3.0-canary.13
+      enableUseCacheHandler: ctx.nextVersion
+        ? satisfies(ctx.nextVersion, '>=15.3.0-canary.13', {
+            includePrerelease: true,
+          })
+        : false,
+    } satisfies RunConfig),
+    'utf-8',
+  )
+}
+
 /**
  * Copy App/Pages Router Javascript needed by the server handler
  */
@@ -79,22 +102,7 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
 
     // ensure the directory exists before writing to it
     await mkdir(ctx.serverHandlerDir, { recursive: true })
-    // write our run-config.json to the root dir so that we can easily get the runtime config of the required-server-files.json
-    // without the need to know about the monorepo or distDir configuration upfront.
-    await writeFile(
-      join(ctx.serverHandlerDir, RUN_CONFIG_FILE),
-      JSON.stringify({
-        nextConfig: reqServerFiles.config,
-        // only enable setting up 'use cache' handler when Next.js supports CacheHandlerV2 as we don't have V1 compatible implementation
-        // see https://github.com/vercel/next.js/pull/76687 first released in v15.3.0-canary.13
-        enableUseCacheHandler: ctx.nextVersion
-          ? satisfies(ctx.nextVersion, '>=15.3.0-canary.13', {
-              includePrerelease: true,
-            })
-          : false,
-      } satisfies RunConfig),
-      'utf-8',
-    )
+    await writeRunConfig(ctx, reqServerFiles.config)
 
     const srcDir = join(ctx.standaloneDir, ctx.nextDistDir)
     // if the distDir got resolved and altered use the nextDistDir instead

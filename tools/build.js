@@ -1,3 +1,5 @@
+// @ts-check
+
 import { cp, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,17 +18,43 @@ await rm(OUT_DIR, { force: true, recursive: true })
 
 const repoDirectory = dirname(resolve(fileURLToPath(import.meta.url), '..'))
 
-const entryPointsESM = await glob('src/**/*.ts', { ignore: ['**/*.test.ts'] })
+const adapterEdgeAndSharedEntryPointsGlob = 'src/adapter-runtime-*/**/*'
+const entryPointsESM = await glob('src/**/*.ts', {
+  ignore: ['**/*.test.ts', adapterEdgeAndSharedEntryPointsGlob],
+})
+
 const entryPointsCJS = await glob('src/**/*.cts')
+
+const adapterEdgeAndSharedRuntimeEntryPointsEsm = await glob(adapterEdgeAndSharedEntryPointsGlob, {
+  ignore: ['**/*.test.ts'],
+})
+
+// this shim is needed for cjs modules that are imported in ESM :(
+// explicitly use var as it might be already defined in some cases
+const bannerRequireShim = `
+var require = await (async () => {
+  var { createRequire } = await import("node:module");
+  return createRequire(import.meta.url);
+})();
+`
+
+// this shim is needed for some cjs modules that are imported in ESM :(
+// explicitly use var as it might be already defined in some cases
+const bannerDirnameShim = `
+var __dirname = await (async () => {
+  const { dirname: __banner_dirname } = await import("node:path");
+  const { fileURLToPath: __banner_fileURLToPath } = await import("node:url");
+  return __banner_dirname(__banner_fileURLToPath(import.meta.url));
+})();
+`
 
 /**
  *
  * @param {string[]} entryPoints
- * @param {'esm' | 'cjs'} format
- * @param {boolean=} watch
+ * @param {Omit<import('esbuild').BuildOptions, 'entryPoints' | 'outdir' | 'outfile' | 'splitting'> & Required<Pick<import('esbuild').BuildOptions, 'format'>} bundleOptions
  * @returns
  */
-async function bundle(entryPoints, format, watch) {
+async function bundle(entryPoints, bundleOptions) {
   /** @type {import('esbuild').BuildOptions} */
   const options = {
     entryPoints,
@@ -34,7 +62,6 @@ async function bundle(entryPoints, format, watch) {
     bundle: true,
     platform: 'node',
     target: 'node18',
-    format,
     external: ['next'], // don't try to bundle next
     allowOverwrite: watch,
     plugins: [
@@ -51,22 +78,12 @@ async function bundle(entryPoints, format, watch) {
         },
       },
     ],
+    ...bundleOptions,
   }
 
-  if (format === 'esm') {
+  if (bundleOptions.format === 'esm') {
     options.outdir = OUT_DIR
-    options.chunkNames = 'esm-chunks/[name]-[hash]'
     options.splitting = true
-    options.banner = {
-      // this shim is needed for cjs modules that are imported in ESM :(
-      // explicitly use var as it might be already defined in some cases
-      js: `
-      var require = await (async () => {
-        var { createRequire } = await import("node:module");
-        return createRequire(import.meta.url);
-      })();
-    `,
-    }
   } else {
     options.outfile = entryPoints[0].replace('src', OUT_DIR).replace('cts', 'cjs')
   }
@@ -117,8 +134,17 @@ const watch = args.has('--watch') || args.has('-w')
 
 await Promise.all([
   vendorMiddlewareDenoModules().then(generateHtmlRewriterWasmModule),
-  bundle(entryPointsESM, 'esm', watch),
-  ...entryPointsCJS.map((entry) => bundle([entry], 'cjs', watch)),
+  bundle(entryPointsESM, {
+    format: 'esm',
+    chunkNames: 'esm-chunks/[name]-[hash]',
+    banner: { js: bannerRequireShim },
+  }),
+  ...entryPointsCJS.map((entry) => bundle([entry], { format: 'cjs' })),
+  bundle(adapterEdgeAndSharedRuntimeEntryPointsEsm, {
+    format: 'esm',
+    chunkNames: 'adapter-runtime-chunks/[name]-[hash]',
+    banner: { js: `${bannerRequireShim}${bannerDirnameShim}` },
+  }),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
 ])
 

@@ -349,15 +349,20 @@ for (const {
           functions: [edgeFunctionNameRoot],
           origin,
           redirect: 'manual',
-          url: '/_next/data/dJvEyLV8MW7CBLFf0Ecbk/test/redirect-with-headers.json',
+          url: '/_next/data/build-id/test/redirect-with-headers.json',
+          headers: {
+            'x-nextjs-data': '1',
+          },
         })
 
         ctx.cleanup?.push(() => origin.stop())
 
+        const redirectLocation = response.headers.get('x-nextjs-redirect')
+
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(redirectLocation, 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(redirectLocation as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -374,15 +379,20 @@ for (const {
           functions: [edgeFunctionNameRoot],
           origin,
           redirect: 'manual',
-          url: '/_next/data/dJvEyLV8MW7CBLFf0Ecbk/test/redirect-with-headers.json',
+          url: '/_next/data/build-id/test/redirect-with-headers.json',
+          headers: {
+            'x-nextjs-data': '1',
+          },
         })
 
         ctx.cleanup?.push(() => origin.stop())
 
+        const redirectLocation = response.headers.get('x-nextjs-redirect')
+
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(redirectLocation, 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(redirectLocation as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -411,7 +421,13 @@ for (const {
           url: `/api/edge-headers`,
         })
         const res = await response.json()
-        expect(res.url).toBe('/api/edge-headers')
+        expect(res.url).toBe(
+          process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+            ? // trailing slash handling redirect is part of routing in adapter middleware
+              // so middleware response is different than standalone handling which offloads this to server handler
+              '/api/edge-headers/'
+            : '/api/edge-headers',
+        )
         expect(response.status).toBe(200)
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })

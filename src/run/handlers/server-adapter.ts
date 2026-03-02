@@ -1,0 +1,589 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { relative, resolve } from 'node:path/posix'
+
+import type { Span } from '@opentelemetry/api'
+import type { AdapterOutput } from 'next-with-adapters'
+import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
+import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
+import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
+
+import {
+  applyResolutionToResponse,
+  resolveRoutes,
+} from '../../adapter-runtime-shared/next-routing.js'
+import type {
+  ResolveRoutesParams,
+  ResolveRoutesResult,
+} from '../../adapter-runtime-shared/next-routing.js'
+import { HtmlBlob } from '../../shared/blob-types.cjs'
+import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
+import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
+import {
+  adjustDateHeader,
+  notFoundHeuristics,
+  setCacheControlHeaders,
+  setCacheStatusHeader,
+  setCacheTagsHeaders,
+  setVaryHeaders,
+} from '../headers.js'
+import {
+  getMemoizedKeyValueStoreBackedByRegionalBlobStore,
+  setFetchBeforeNextPatchedIt,
+} from '../storage/storage.cjs'
+
+import { getRequestContext, type RequestContext } from './request-context.cjs'
+import { getLogger } from './request-context.cjs'
+import { getTracer, withActiveSpan } from './tracer.cjs'
+import { configureUseCacheHandlers } from './use-cache-handler.js'
+import { setupWaitUntil } from './wait-until.cjs'
+
+// Read the adapter manifest written at build time (same path resolution as getRunConfig)
+let manifest: Awaited<ReturnType<typeof getAdapterManifest>>
+try {
+  manifest = await getAdapterManifest()
+} catch (error) {
+  console.error('Failed to load adapter manifest', error)
+  throw error
+}
+
+// make use of global fetch before Next.js applies any patching
+setFetchBeforeNextPatchedIt(globalThis.fetch)
+// configure globals that Next.js make use of before we start importing any Next.js code
+// as some globals are consumed at import time
+const { nextConfig: initialNextConfig, enableUseCacheHandler } = await getRunConfig()
+if (enableUseCacheHandler) {
+  configureUseCacheHandlers()
+}
+const nextConfig = setRunConfig(initialNextConfig) as unknown as NextConfigRuntime
+setupWaitUntil()
+
+// Next.js checks globalThis.AsyncLocalStorage to decide whether to use real
+// or fake (throwing) AsyncLocalStorage. Must be set before any Next.js code loads
+// (the dynamic import() of route entrypoints happens at request time, after this).
+if (!('AsyncLocalStorage' in globalThis)) {
+  const globals = globalThis as unknown as Record<string, unknown>
+  globals.AsyncLocalStorage = AsyncLocalStorage
+}
+
+type CommonHandlerArg = {
+  request: Request
+  requestContext: RequestContext
+  resolution: ResolveRoutesResult
+  tracer: ReturnType<typeof getTracer>
+  span?: Span
+}
+
+type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
+
+// // Build a map of pathname -> handler output for quick lookup at request time
+const handlerDefsByPathname = new Map<string, Handler>()
+const handlerDefsId = new Map<string, Handler>()
+
+type InvokeHandlerArg = {
+  entrypoint: string
+  runtime: 'nodejs' | 'edge'
+  sourcePage: string
+}
+
+function createInvokeHandler(
+  output:
+    | AdapterOutput['PAGES']
+    | AdapterOutput['PAGES_API']
+    | AdapterOutput['APP_PAGE']
+    | AdapterOutput['APP_ROUTE'],
+): Handler {
+  return invokeHandler.bind(null, {
+    entrypoint: output.filePath,
+    runtime: output.runtime,
+    sourcePage: output.sourcePage,
+  })
+}
+
+// outputs that invoke compute
+for (const output of manifest.outputs.pages) {
+  const handler = createInvokeHandler(output)
+  handlerDefsId.set(output.id, handler)
+  handlerDefsByPathname.set(output.pathname, handler)
+}
+for (const output of manifest.outputs.pagesApi) {
+  const handler = createInvokeHandler(output)
+  handlerDefsId.set(output.id, handler)
+  handlerDefsByPathname.set(output.pathname, handler)
+}
+for (const output of manifest.outputs.appPages) {
+  const handler = createInvokeHandler(output)
+  handlerDefsId.set(output.id, handler)
+  handlerDefsByPathname.set(output.pathname, handler)
+}
+for (const output of manifest.outputs.appRoutes) {
+  const handler = createInvokeHandler(output)
+  handlerDefsId.set(output.id, handler)
+  handlerDefsByPathname.set(output.pathname, handler)
+}
+
+for (const output of manifest.outputs.prerenders) {
+  const parentHandler = handlerDefsId.get(output.parentOutputId)
+  if (!parentHandler) {
+    throw new Error(
+      `Prerender output ${output.id} has parentOutputId ${output.parentOutputId} which does not exist`,
+    )
+  }
+  handlerDefsByPathname.set(output.pathname, parentHandler)
+}
+
+// serve static files
+type StaticFileHandlerArg = {
+  filePath: string
+}
+function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
+  return serverStaticFile.bind(null, output)
+}
+
+for (const output of manifest.outputs.staticFiles) {
+  handlerDefsByPathname.set(
+    output.pathname,
+    createStaticFileHandler({
+      filePath: output.filePath,
+    }),
+  )
+}
+
+const allPathnames = [...handlerDefsByPathname.keys()]
+
+console.log({
+  pathnames: allPathnames,
+  outputIds: [...handlerDefsId.keys()],
+})
+
+// console.log(
+//   inspect(
+//     {
+//       allPathnames,
+//     },
+//     { depth: null },
+//   ),
+// )
+
+type NodeHandlerFn = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx?: { waitUntil?: (prom: Promise<void>) => void; requestMeta?: RequestMeta },
+) => Promise<void>
+
+// Next.js machinery
+const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
+
+// Netlify Adapter machinery (just for integration tests resetting global state in-between tests)
+// TODO(adapter): figure out something better, we should not expose test-only globals in the actual adapter code
+const NetlifyAdapterTestReset = Symbol.for('@netlify/adapter-test-reset')
+
+// Cache loaded handler functions
+const nodeHandlerCache = new Map<string, NodeHandlerFn>()
+
+const extendedGlobalThis = globalThis as typeof globalThis & {
+  [RouterServerContextSymbol]?: RouterServerContext
+
+  // just for reset in-between tests, see tests/utils/fixture.ts
+  [NetlifyAdapterTestReset]: () => void
+}
+
+extendedGlobalThis[RouterServerContextSymbol] = {
+  // TODO(adapter): monorepo?
+  '': {
+    nextConfig,
+    revalidate: async (args) => {
+      const { urlPath, revalidateHeaders } = args
+      const requestContext = getRequestContext()
+      if (!requestContext) {
+        throw new Error('revalidate called outside of request context')
+      }
+
+      if (!requestContext.originalRequest) {
+        throw new Error('original request not set in request context')
+      }
+
+      if (!requestContext.originalContext) {
+        throw new Error('original context not set in request context')
+      }
+
+      const normalizeRevalidateHeaders = new Headers()
+      for (const [headerName, headerValueOrValues] of Object.entries(revalidateHeaders)) {
+        const headerValues = Array.isArray(headerValueOrValues)
+          ? headerValueOrValues
+          : [headerValueOrValues]
+        for (const headerValue of headerValues) {
+          normalizeRevalidateHeaders.append(headerName, headerValue)
+        }
+      }
+
+      const revalidateRequest = new Request(
+        new URL(`${manifest.config.basePath}${urlPath}`, requestContext.originalRequest.url),
+        {
+          headers: normalizeRevalidateHeaders,
+        },
+      )
+
+      console.log('[revalidate]', { args, revalidateRequest })
+      // ensure to trigger cache-tag revalidation after storing cache entries in cache handler
+      requestContext.didPagesRouterOnDemandRevalidate = true
+      const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
+      requestContext.trackBackgroundWork(revalidatePromise)
+      return revalidatePromise
+        .catch((revalidateError) => {
+          console.error('Revalidation failed', revalidateError)
+        })
+        .then(() => {
+          // no-op
+        })
+    },
+  },
+}
+
+extendedGlobalThis[NetlifyAdapterTestReset] = () => {
+  nodeHandlerCache.clear()
+}
+
+function preferDefault(mod: unknown): unknown {
+  return mod && typeof mod === 'object' && 'default' in mod ? mod.default : mod
+}
+
+async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
+  const resolvedPath = `../../../../${filePath}`
+  const cached = nodeHandlerCache.get(resolvedPath)
+  if (cached) {
+    return cached
+  }
+  // eslint-disable-next-line import/no-dynamic-require
+  const mod = await import(`${resolvedPath}`)
+  const { handler } = (await preferDefault(mod)) as { handler: NodeHandlerFn }
+  nodeHandlerCache.set(resolvedPath, handler)
+  return handler
+}
+
+function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
+  if (!resolution.status) return false
+  if (resolution.status < 300 || resolution.status >= 400) return false
+  return Boolean(resolution.resolvedHeaders?.get('location'))
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHandlerArg) {
+  const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
+
+  const blobKey = relative(resolve(manifest.config.distDir, 'server/pages'), filePath)
+
+  const htmlFile = await cacheStore.get<HtmlBlob>(blobKey, 'staticHtml.get')
+
+  const headers = new Headers()
+  let body = 'Not found static file'
+  let status = 404
+
+  console.log('htmlFile', { htmlFile, filePath, blobKey })
+
+  if (htmlFile) {
+    body = htmlFile.html
+    status = 200
+    headers.set('Content-Type', 'text/html; charset=utf-8')
+    if (htmlFile.isFullyStaticPage) {
+      // handle CDN Cache Control on fully static pages
+      headers.set('cache-control', 'public, max-age=0, must-revalidate')
+      headers.set('netlify-cdn-cache-control', 'max-age=31536000, durable')
+    }
+  }
+
+  return new Response(body, {
+    headers,
+    status,
+  })
+}
+
+async function invokeHandler(
+  { entrypoint, runtime, sourcePage }: InvokeHandlerArg,
+  { tracer, request, requestContext, span }: CommonHandlerArg,
+) {
+  span?.setAttribute('matched.sourcePage', sourcePage)
+  span?.setAttribute('matched.runtime', runtime)
+  return await withActiveSpan(tracer, 'invoke route handler', async (invokeSpan) => {
+    if (runtime !== 'nodejs') {
+      return new Response(`Not yet supported runtime: ${runtime}`, {
+        status: 500,
+      })
+    }
+
+    try {
+      const handler = await loadHandler(entrypoint)
+
+      // Convert Web Request to Node.js IncomingMessage/ServerResponse
+      const { req, res } = toReqRes(request)
+
+      // Invoke the route handler using the Node.js handler signature
+      // as defined by the Next.js adapter contract:
+      // handler(req: IncomingMessage, res: ServerResponse, ctx)
+      const nextHandlerPromise = handler(req, res, {
+        waitUntil: requestContext.trackBackgroundWork,
+        requestMeta: {
+          initURL: request.url,
+        },
+      })
+
+      // below is for now copied from standalone handler (without some extras, that generally could also be removed from standalone)
+      // but will be nice to extract common handling to shared module and cleanup some things
+
+      // Contrary to the docs, this resolves when the headers are available, not when the stream closes.
+      // See https://github.com/fastly/http-compute-js/blob/main/src/http-compute-js/http-server.ts#L168-L173
+      const response = await toComputeResponse(res)
+
+      invokeSpan?.setAttribute('http.status_code', response.status)
+
+      const nextCache = response.headers.get('x-nextjs-cache')
+      const isServedFromNextCache = nextCache === 'HIT' || nextCache === 'STALE'
+
+      if (isServedFromNextCache) {
+        await adjustDateHeader({
+          headers: response.headers,
+          request,
+          span: invokeSpan,
+          requestContext,
+        })
+      }
+      setCacheControlHeaders(response, request, requestContext)
+      setCacheTagsHeaders(response.headers, requestContext)
+      setVaryHeaders(
+        response.headers,
+        request,
+        manifest.config as Parameters<typeof setVaryHeaders>[2],
+      )
+      setCacheStatusHeader(response.headers, nextCache)
+
+      // eslint-disable-next-line no-inner-declarations
+      async function waitForBackgroundWork() {
+        // it's important to keep the stream open until the next handler has finished
+        await nextHandlerPromise
+
+        // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
+        // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
+        // otherwise Next would never run the callback variant of `next/after`
+        res.emit('close')
+
+        // We have to keep response stream open until tracked background promises that are don't use `context.waitUntil`
+        // are resolved. If `context.waitUntil` is available, `requestContext.backgroundWorkPromise` will be empty
+        // resolved promised and so awaiting it is no-op
+        await requestContext.backgroundWorkPromise
+      }
+
+      const keepOpenUntilNextFullyRendered = new TransformStream({
+        async flush() {
+          await waitForBackgroundWork()
+        },
+      })
+
+      if (!response.body) {
+        await waitForBackgroundWork()
+      }
+
+      return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
+    } catch (error) {
+      console.error('route handler error', error)
+      getLogger().withError(error).error('route handler error')
+      invokeSpan?.setAttribute('http.status_code', 500)
+      return new Response('Internal Server Error', { status: 500 })
+    }
+  })
+}
+
+/**
+ * Deserialize a ResolveRoutesResult from the `x-next-route-resolution` header.
+ * The routing edge function serializes the resolution as JSON with
+ * Headers → plain object, URL → string conversions.
+ */
+function deserializeResolution(serialized: string): ResolveRoutesResult {
+  const parsed = JSON.parse(serialized) as {
+    matchedPathname: string | null
+    routeMatches: Record<string, string> | null
+    resolvedHeaders: Record<string, string> | null
+    status: number | null
+    redirect: { url: string; status: number } | null
+    externalRewrite: string | null
+    middlewareResponded: boolean
+  }
+
+  const resolution: ResolveRoutesResult = {}
+
+  if (parsed.matchedPathname !== null) {
+    resolution.matchedPathname = parsed.matchedPathname
+  }
+  if (parsed.routeMatches !== null) {
+    resolution.routeMatches = parsed.routeMatches
+  }
+  if (parsed.status !== null) {
+    resolution.status = parsed.status
+  }
+  if (parsed.middlewareResponded) {
+    resolution.middlewareResponded = parsed.middlewareResponded
+  }
+  if (parsed.resolvedHeaders !== null) {
+    const headers = new Headers()
+    for (const [key, value] of Object.entries(parsed.resolvedHeaders)) {
+      headers.set(key, value)
+    }
+    resolution.resolvedHeaders = headers
+  }
+  if (parsed.redirect !== null) {
+    resolution.redirect = {
+      url: new URL(parsed.redirect.url),
+      status: parsed.redirect.status,
+    }
+  }
+  if (parsed.externalRewrite !== null) {
+    resolution.externalRewrite = new URL(parsed.externalRewrite)
+  }
+
+  return resolution
+}
+
+export default async function ServerHandler(request: Request, requestContext: RequestContext) {
+  const tracer = getTracer()
+
+  return await withActiveSpan(tracer, 'adapter route resolution', async (span) => {
+    const url = new URL(request.url)
+
+    let resolution: ResolveRoutesResult
+
+    const serializedResolution = request.headers.get('x-next-route-resolution')
+    if (serializedResolution) {
+      // Resolution was computed by the routing edge function — skip resolveRoutes
+      resolution = deserializeResolution(serializedResolution)
+    } else {
+      // No edge function (standalone mode fallback, or edge function not deployed)
+      try {
+        resolution = await resolveRoutes({
+          url,
+          buildId: manifest.buildId,
+          basePath: manifest.config.basePath || '',
+          requestBody: request.body ?? new ReadableStream(),
+          headers: new Headers(request.headers),
+          pathnames: allPathnames,
+          // Cast i18n config — next-with-adapters uses readonly arrays while @next/routing expects mutable
+          i18n: (manifest.config.i18n ?? undefined) as ResolveRoutesParams['i18n'],
+          routes: manifest.routing,
+          invokeMiddleware: async () => {
+            // Middleware runs in Netlify Edge Function before the serverless function.
+            // By the time the request reaches this handler, middleware has already executed.
+            // Return a no-op result.
+            return {}
+          },
+        })
+      } catch (error) {
+        console.error('route resolution error', error)
+        getLogger().withError(error).error('route resolution error')
+        return new Response('Internal Server Error', { status: 500 })
+      }
+    }
+
+    const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
+
+    console.log({ url, resolution })
+
+    if (resolution.redirect) {
+      // Handle explicit redirect
+      const { url: redirectUrl, status } = resolution.redirect
+      // TODO(adapter): this can be cached forever
+      // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
+      // which would require setting correct netlify-vary header.
+      return applyResolutionToThisResponse(
+        new Response(null, {
+          status,
+          headers: { location: redirectUrl.toString() },
+        }),
+      )
+    }
+
+    // Handle external rewrite
+    if (resolution.externalRewrite) {
+      try {
+        const proxyRequest = new Request(resolution.externalRewrite.toString(), request)
+        // Remove Netlify internal headers
+        for (const key of request.headers.keys()) {
+          if (key.startsWith('x-nf-')) {
+            proxyRequest.headers.delete(key)
+          }
+        }
+
+        const fetchResp = await fetch(proxyRequest, { redirect: 'manual' })
+        // fetch() returns immutable headers — create a new Response with mutable headers
+        const headers = new Headers(fetchResp.headers)
+        // fetch() transparently decompresses the body but keeps the original
+        // content-encoding/transfer-encoding headers. Strip them so the browser
+        // doesn't try to decompress an already-decompressed body.
+        headers.delete('transfer-encoding')
+        headers.delete('content-encoding')
+        headers.delete('content-length')
+        return applyResolutionToThisResponse(
+          new Response(fetchResp.body, {
+            ...fetchResp,
+            headers,
+          }),
+        )
+      } catch (error) {
+        console.error('external rewrite fetch error', error)
+        getLogger().withError(error).error('external rewrite fetch error')
+        return new Response('Bad Gateway', { status: 502 })
+      }
+    }
+
+    if (isRedirectResolution(resolution)) {
+      // TODO(adapter): this can be cached forever
+      // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
+      // which would require setting correct netlify-vary header.
+      return applyResolutionToThisResponse(
+        new Response(null, { status: resolution.status }),
+        resolution.status,
+      )
+    }
+
+    // Handle matched route
+    if (resolution.matchedPathname) {
+      span?.setAttribute('matched.pathname', resolution.matchedPathname)
+      const matchedHandler = handlerDefsByPathname.get(resolution.matchedPathname)
+      if (!matchedHandler) {
+        return applyResolutionToThisResponse(
+          new Response('Routing matched but no matched output exists', { status: 500 }),
+        )
+      }
+
+      // const invokeUrl = new URL(request.url)
+      // invokeUrl.pathname = resolution.matchedPathname
+      // if (resolution.routeMatches) {
+      //   for (const [key, value] of Object.entries(resolution.routeMatches)) {
+      //     invokeUrl.searchParams.set(key, value)
+      //   }
+      // }
+
+      // console.log({ invokeUrl})
+
+      // const adjustedRequest = new Request(invokeUrl, request)
+
+      return applyResolutionToThisResponse(
+        await matchedHandler({
+          request,
+          requestContext,
+          resolution,
+          tracer,
+          span,
+        }),
+        resolution.status,
+      )
+    }
+
+    // No match found — 404
+    // TODO(adapter): this can be cached forever because it will never match any routes
+    // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
+    // which would require setting correct netlify-vary header.
+    const headers = new Headers()
+    notFoundHeuristics(request, headers, requestContext)
+    return applyResolutionToThisResponse(
+      new Response('Not Found (server-handler)', { status: 404, headers }),
+    )
+  })
+}

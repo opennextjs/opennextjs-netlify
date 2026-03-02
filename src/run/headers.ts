@@ -212,6 +212,32 @@ function setCacheControlFromRequestContext(
   headers.set('netlify-cdn-cache-control', cdnCacheControl)
 }
 
+export function notFoundHeuristics(
+  request: Request,
+  headers: Headers,
+  requestContext: RequestContext,
+) {
+  if (request.url.endsWith('.php')) {
+    // temporary CDN Cache Control handling for bot probes on PHP files
+    // https://linear.app/netlify/issue/FRB-1344/prevent-excessive-ssr-invocations-due-to-404-routes
+    headers.set('cache-control', 'public, max-age=0, must-revalidate')
+    headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
+    return true
+  }
+
+  if (
+    process.env.CACHE_404_PAGE &&
+    request.url.endsWith('/404') &&
+    ['GET', 'HEAD'].includes(request.method)
+  ) {
+    // handle CDN Cache Control on 404 Page responses
+    setCacheControlFromRequestContext(headers, requestContext.pageHandlerRevalidate)
+    return true
+  }
+
+  return false
+}
+
 /**
  * Ensure stale-while-revalidate and s-maxage don't leak to the client, but
  * assume the user knows what they are doing if CDN cache controls are set
@@ -232,24 +258,8 @@ export const setCacheControlHeaders = (
     return
   }
 
-  if (status === 404) {
-    if (request.url.endsWith('.php')) {
-      // temporary CDN Cache Control handling for bot probes on PHP files
-      // https://linear.app/netlify/issue/FRB-1344/prevent-excessive-ssr-invocations-due-to-404-routes
-      headers.set('cache-control', 'public, max-age=0, must-revalidate')
-      headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
-      return
-    }
-
-    if (
-      process.env.CACHE_404_PAGE &&
-      request.url.endsWith('/404') &&
-      ['GET', 'HEAD'].includes(request.method)
-    ) {
-      // handle CDN Cache Control on 404 Page responses
-      setCacheControlFromRequestContext(headers, requestContext.pageHandlerRevalidate)
-      return
-    }
+  if (status === 404 && notFoundHeuristics(request, headers, requestContext)) {
+    return
   }
 
   const cacheControl = headers.get('cache-control')
