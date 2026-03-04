@@ -84,7 +84,7 @@
     "memfs": "^4.9.2",
     "mock-require": "^3.0.3",
     "msw": "^2.0.7",
-    "netlify-cli": "23.15.1",
+    "netlify-cli": "24.0.1",
     "next": "^15.0.0-canary.28",
     "next-with-cache-handler-v2": "npm:next@15.3.0-canary.13",
     "next-with-cache-handler-v3": "npm:next@16.0.0-beta.0",
