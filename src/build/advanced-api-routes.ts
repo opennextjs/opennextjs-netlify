@@ -218,7 +218,19 @@ const extractConfigFromFile = async (apiFilePath: string, appDir: string): Promi
   const ast = await parseModule(apiFilePath, fileContent)
 
   try {
-    return extractExportedConstValue(ast, 'config') as ApiConfig
+    const extracted = extractExportedConstValue(ast, 'config')
+    if (!extracted || typeof extracted !== 'object') {
+      // https://github.com/vercel/next.js/pull/90510/changes#diff-cf58f3877b2959d246655e68dd18e623fd1b189e3cbe91111f909f71f1d1dba6R224-R254
+      // instead of throwing that we are catching, this will now return `null`, so we normalize it to an empty object
+      // so consumer can have uniform handling
+      return {} as ApiConfig
+    }
+    if ('value' in extracted) {
+      // https://github.com/vercel/next.js/pull/90510/changes#diff-cf58f3877b2959d246655e68dd18e623fd1b189e3cbe91111f909f71f1d1dba6R224-R254
+      // in newer Next.js versions, the extracted value is wrapped in an object with a `value` property, so we need to check for that
+      return extracted.value as ApiConfig
+    }
+    return extracted as ApiConfig
   } catch {
     return {}
   }
