@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.9](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.8...v5.15.9) (2026-03-07)
+
+
+### Bug Fixes
+
+* handle extractExportedConstValue returning null or wrapped object in next@canary ([#3444](https://github.com/opennextjs/opennextjs-netlify/issues/3444)) ([c8808a5](https://github.com/opennextjs/opennextjs-netlify/commit/c8808a5b12cbeb502ef258e931124085c422e988))
+
 ## [5.15.8](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.7...v5.15.8) (2026-02-05)
 
 
