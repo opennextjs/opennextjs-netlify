@@ -117,6 +117,14 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
   // from any previous function invocations that might have run in the same process
   delete globalThis[Symbol.for('next.server.manifests')]
 
+  // Netlify Adapter used Next.js inner machinery
+  delete globalThis[Symbol.for('@next/router-server-methods')]
+
+  // Netlify Adapter specific global to reset between tests
+  if (globalThis[Symbol.for('@netlify/adapter-test-reset')]) {
+    globalThis[Symbol.for('@netlify/adapter-test-reset')]()
+  }
+
   // require hook leaves modified "require" and "require.resolve" modified - we restore here to original
   // https://github.com/vercel/next.js/blob/812c26ab8741f68fbd6e2fe095510e0f03eac4c5/packages/next/src/server/require-hook.ts
   mod.prototype.require = originalRequire
@@ -618,9 +626,17 @@ export async function invokeSandboxedFunction(
   return result
 }
 
-export const EDGE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-middleware'
+const ADAPTER_EDGE_FUNCTION_NAME = '___netlify-edge-handler-adapter-middleware'
+
+export const EDGE_MIDDLEWARE_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : '___netlify-edge-handler-middleware'
 // Turbopack has different output than webpack
-export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = hasDefaultTurbopackBuilds()
-  ? EDGE_MIDDLEWARE_FUNCTION_NAME
-  : '___netlify-edge-handler-src-middleware'
-export const NODE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-node-middleware'
+export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : hasDefaultTurbopackBuilds()
+    ? EDGE_MIDDLEWARE_FUNCTION_NAME
+    : '___netlify-edge-handler-src-middleware'
+export const NODE_MIDDLEWARE_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : '___netlify-edge-handler-node-middleware'

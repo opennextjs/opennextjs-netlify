@@ -199,7 +199,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
       await Promise.all([
         ...Object.entries(manifest.routes).map(
           ([route, meta]): Promise<void> =>
-            limitConcurrentPrerenderContentHandling(async () => {
+            limitConcurrentPrerenderContentHandling(async function writeRouteCacheEntry() {
               const lastModified = meta.initialRevalidateSeconds
                 ? Date.now() - 31536000000
                 : Date.now()
@@ -251,7 +251,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
             }),
         ),
         ...ctx.getFallbacks(manifest).map((route) =>
-          limitConcurrentPrerenderContentHandling(async () => {
+          limitConcurrentPrerenderContentHandling(async function writeFallbackCacheEntry() {
             const key = routeToFilePath(route)
             const value = await buildPagesCacheValue(
               join(ctx.publishDir, 'server/pages', key),
@@ -264,7 +264,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
           }),
         ),
         ...ctx.getShells(manifest).map((route) =>
-          limitConcurrentPrerenderContentHandling(async () => {
+          limitConcurrentPrerenderContentHandling(async function writeShellCacheEntry() {
             const key = routeToFilePath(route)
             const value = await buildAppCacheValue(
               join(ctx.publishDir, 'server/app', key),
