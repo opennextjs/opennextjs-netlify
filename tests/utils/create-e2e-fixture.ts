@@ -356,10 +356,13 @@ export async function deploySiteWithBuildbot(
   const newZip = new AdmZip()
   newZip.addLocalFolder(isolatedFixtureRoot, '', (entry) => {
     if (
-      // don't include node_modules / .git / publish dir in zip
+      // don't include node_modules / .git / publish dir / lock files in zip
       entry.includes('node_modules') ||
       entry.includes('.git') ||
-      entry.startsWith(publishDirectory)
+      entry.startsWith(publishDirectory) ||
+      entry.endsWith('package-lock.json') ||
+      entry.endsWith('yarn.lock') ||
+      entry.endsWith('pnpm-lock.yaml')
     ) {
       return false
     }
