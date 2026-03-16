@@ -308,7 +308,7 @@ export async function deploySiteWithCLI(
   console.log(`🚀 Building and deploying site...`)
 
   const outputFile = 'deploy-output.txt'
-  let cmd = `npx netlify deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
+  let cmd = `npx netlify deploy --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
 
   if (packagePath) {
     cmd += ` --filter ${packagePath}`
