@@ -4,6 +4,7 @@ import type {
 } from 'next/dist/server/lib/incremental-cache/index.js'
 import type {
   CachedFetchValue,
+  CachedRedirectValue,
   CachedRouteValue,
   IncrementalCachedAppPageValue,
   IncrementalCachedPageValue,
@@ -77,6 +78,21 @@ export type NetlifyCachedPageValue = IncrementalCachedPageValueForMultipleVersio
   cacheControl?: CacheControl
 }
 
+/**
+ * Shape of the cache value that is returned from CacheHandler.get or passed to CacheHandler.set
+ */
+type CachedRedirectValueForMultipleVersions = Omit<CachedRedirectValue, 'kind'> & {
+  kind: 'REDIRECT'
+}
+
+/**
+ * Used for storing in blobs and reading from blobs
+ */
+export type NetlifyCachedRedirectValue = CachedRedirectValueForMultipleVersions & {
+  revalidate?: Parameters<CacheHandler['set']>[2]['revalidate']
+  cacheControl?: CacheControl
+}
+
 export type CachedFetchValueForMultipleVersions = Omit<CachedFetchValue, 'kind'> & {
   kind: 'FETCH'
 }
@@ -87,7 +103,9 @@ type CachedRouteValueToNetlify<T> = T extends CachedRouteValue
     ? NetlifyCachedPageValue
     : T extends IncrementalCachedAppPageValue
       ? NetlifyCachedAppPageValue
-      : T
+      : T extends CachedRedirectValue
+        ? NetlifyCachedRedirectValue
+        : T
 
 type MapCachedRouteValueToNetlify<T> = { [K in keyof T]: CachedRouteValueToNetlify<T[K]> } & {
   lastModified: number
@@ -111,11 +129,13 @@ type IncrementalCacheValueToMultipleVersions<T> = T extends CachedRouteValue
       ? IncrementalCachedAppPageValueForMultipleVersions
       : T extends CachedFetchValue
         ? CachedFetchValueForMultipleVersions
-        : T extends CacheHandlerValue
-          ? {
-              [K in keyof T]: IncrementalCacheValueToMultipleVersions<T[K]>
-            }
-          : T
+        : T extends CachedRedirectValue
+          ? CachedRedirectValueForMultipleVersions
+          : T extends CacheHandlerValue
+            ? {
+                [K in keyof T]: IncrementalCacheValueToMultipleVersions<T[K]>
+              }
+            : T
 
 type IncrementalCacheValueForMultipleVersions =
   IncrementalCacheValueToMultipleVersions<IncrementalCacheValue>

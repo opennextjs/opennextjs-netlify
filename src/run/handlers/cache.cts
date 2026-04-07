@@ -152,18 +152,20 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
     if (
       cacheValue.kind === 'PAGE' ||
       cacheValue.kind === 'PAGES' ||
+      cacheValue.kind === 'REDIRECT' ||
       cacheValue.kind === 'APP_PAGE' ||
       cacheValue.kind === 'ROUTE' ||
       cacheValue.kind === 'APP_ROUTE'
     ) {
-      if (cacheValue.headers?.[NEXT_CACHE_TAGS_HEADER]) {
+      if (cacheValue.kind !== 'REDIRECT' && cacheValue.headers?.[NEXT_CACHE_TAGS_HEADER]) {
         const cacheTags = (cacheValue.headers[NEXT_CACHE_TAGS_HEADER] as string)
           .split(/,|%2c/gi)
           .map(encodeURI)
         requestContext.responseCacheTags = cacheTags
       } else if (
-        (cacheValue.kind === 'PAGE' || cacheValue.kind === 'PAGES') &&
-        typeof cacheValue.pageData === 'object'
+        ((cacheValue.kind === 'PAGE' || cacheValue.kind === 'PAGES') &&
+          typeof cacheValue.pageData === 'object') ||
+        (cacheValue.kind === 'REDIRECT' && typeof cacheValue.props === 'object')
       ) {
         // pages router doesn't have cache tags headers in PAGE cache value
         // so we need to generate appropriate cache tags for it
@@ -399,6 +401,14 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
             },
           }
         }
+        case 'REDIRECT': {
+          await this.injectEntryToPrerenderManifest(key, blob.value)
+
+          return {
+            lastModified: blob.lastModified,
+            value: blob.value,
+          }
+        }
         default:
           span?.recordException(new Error(`Unknown cache entry kind: ${blob.value?.kind}`))
       }
@@ -423,7 +433,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       }
     }
 
-    if (isCachedPageValue(data)) {
+    if (isCachedPageValue(data) || data?.kind === 'REDIRECT') {
       return {
         ...data,
         revalidate: context.revalidate ?? context.cacheControl?.revalidate,
@@ -478,7 +488,12 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         }
       }
 
-      if ((!data && !isDataReq) || data?.kind === 'PAGE' || data?.kind === 'PAGES') {
+      if (
+        (!data && !isDataReq) ||
+        data?.kind === 'PAGE' ||
+        data?.kind === 'PAGES' ||
+        data?.kind === 'REDIRECT'
+      ) {
         const requestContext = getRequestContext()
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
