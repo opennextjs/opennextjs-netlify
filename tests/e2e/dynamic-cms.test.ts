@@ -119,14 +119,16 @@ test.describe('Dynamic CMS', () => {
     const postFix = Date.now()
     for (const { label, contentKey, expectedCacheTag, urlPath, pathToRevalidate, isPageData } of [
       {
-        label: 'Invalidates getStaticProps redirect from durable cache (implicit default locale)',
+        label:
+          'Invalidates canonical path getStaticProps redirect from durable cache (implicit default locale)',
         urlPath: `/content/html-implicit-default-locale-${postFix}`,
         contentKey: `html-implicit-default-locale-${postFix}`,
         expectedCacheTag: `_n_t_/en/content/html-implicit-default-locale-${postFix}`,
         isPageData: false,
       },
       {
-        label: 'Invalidates 404 html from durable cache (explicit default locale)',
+        label:
+          'Invalidates canonical path getStaticProps redirect from durable cache (explicit default locale)',
         urlPath: `/en/content/html-explicit-default-locale-${postFix}`,
         contentKey: `html-explicit-default-locale-${postFix}`,
         expectedCacheTag: `_n_t_/en/content/html-explicit-default-locale-${postFix}`,
@@ -134,7 +136,8 @@ test.describe('Dynamic CMS', () => {
       },
       // // json paths don't have implicit locale routing
       {
-        label: 'Invalidates 404 json from durable cache (default locale)',
+        label:
+          'Invalidates page data path getStaticProps redirect from durable cache (default locale)',
         urlPath: `/_next/data/build-id/en/content/json-default-locale-${postFix}.json`,
         // for html, we can use html path as param for revalidate,
         // for json we can't use json path and instead use one of html paths
@@ -146,14 +149,16 @@ test.describe('Dynamic CMS', () => {
         isPageData: true,
       },
       {
-        label: 'Invalidates 404 html from durable cache (non-default locale)',
+        label:
+          'Invalidates canonical path getStaticProps redirect from durable cache (non-default locale)',
         urlPath: `/fr/content/html-non-default-locale-${postFix}`,
         contentKey: `html-non-default-locale-${postFix}`,
         expectedCacheTag: `_n_t_/fr/content/html-non-default-locale-${postFix}`,
         isPageData: false,
       },
       {
-        label: 'Invalidates 404 json from durable cache (non-default locale)',
+        label:
+          'Invalidates page data path getStaticProps redirect from durable cache (non-default locale)',
         urlPath: `/_next/data/build-id/fr/content/json-non-default-locale-${postFix}.json`,
         pathToRevalidate: `/fr/content/json-non-default-locale-${postFix}`,
         contentKey: `json-non-default-locale-${postFix}`,
