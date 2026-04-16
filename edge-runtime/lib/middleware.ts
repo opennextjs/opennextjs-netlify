@@ -38,12 +38,26 @@ export function isMiddlewareResponse(
   return 'dataTransforms' in response
 }
 
+export const hasMiddlewareResponseHeadersToApply = (
+  middlewareResponse: Response,
+  {
+    ignoreHeaders = [],
+  }: {
+    ignoreHeaders?: string[]
+  } = {},
+) => {
+  return (
+    [...middlewareResponse.headers.keys()].filter((header) => !ignoreHeaders.includes(header))
+      .length > 0
+  )
+}
+
 export const addMiddlewareHeaders = async (
   originResponse: Promise<Response> | Response,
   middlewareResponse: Response,
 ) => {
   // If there are extra headers, we need to add them to the response.
-  if ([...middlewareResponse.headers.keys()].length === 0) {
+  if (!hasMiddlewareResponseHeadersToApply(middlewareResponse)) {
     return originResponse
   }
 
