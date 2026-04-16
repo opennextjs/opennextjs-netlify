@@ -82,6 +82,37 @@ for (const {
       expect(origin.calls).toBe(1)
     })
 
+    test<FixtureTestContext>('should add request/response headers when rewriting to self', async (ctx) => {
+      await createFixture('middleware', ctx)
+      await runPlugin(ctx, runPluginConstants)
+
+      const origin = await LocalServer.run(async (req, res) => {
+        expect(req.url).toBe('/test/rewrite-to-self')
+        expect(req.headers['x-hello-from-middleware-req']).toBe('hello')
+
+        res.write('Hello from origin!')
+        res.end()
+      })
+
+      ctx.cleanup?.push(() => origin.stop())
+
+      const response = await invokeEdgeFunction(ctx, {
+        functions: [edgeFunctionNameRoot],
+        origin,
+        url: '/test/rewrite-to-self',
+      })
+      const text = await response.text()
+
+      expect(text).toBe('Hello from origin!')
+      expect(response.status).toBe(200)
+      expect(
+        response.headers.get('x-hello-from-middleware-res'),
+        'added a response header',
+      ).toEqual('hello')
+      expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      expect(origin.calls).toBe(1)
+    })
+
     test<FixtureTestContext>('should add request/response headers when using src dir', async (ctx) => {
       await createFixture('middleware-src', ctx)
       await runPlugin(ctx, runPluginConstants)

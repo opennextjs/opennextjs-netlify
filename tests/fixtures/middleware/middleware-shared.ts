@@ -83,6 +83,14 @@ const getResponse = (request: NextRequest) => {
     })
   }
 
+  if (request.nextUrl.pathname === '/test/rewrite-to-self') {
+    return NextResponse.rewrite(new URL('/test/rewrite-to-self', request.url), {
+      request: {
+        headers: requestHeaders,
+      },
+    })
+  }
+
   if (request.nextUrl.pathname === '/test/rewrite-to-cached-page') {
     return NextResponse.rewrite(new URL('/caching-rewrite-target', request.url))
   }
