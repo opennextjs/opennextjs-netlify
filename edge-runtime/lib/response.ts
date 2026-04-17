@@ -140,7 +140,7 @@ export const buildResponse = async ({
     }
   }
 
-  const edgeResponse = new Response(result.response.body, result.response)
+  let edgeResponse = new Response(result.response.body, result.response)
   request.headers.set('x-nf-next-middleware', 'skip')
 
   let rewrite = edgeResponse.headers.get('x-middleware-rewrite')
@@ -241,8 +241,24 @@ export const buildResponse = async ({
   if (redirect) {
     redirect = normalizeLocalizedTarget({ target: redirect, request, nextConfig })
     if (redirect === request.url) {
-      logger.withFields({ redirect_url: redirect }).debug('Redirect url is same as original url')
-      return
+      if (hasMiddlewareResponseHeadersToApply(edgeResponse, { ignoreHeaders: ['location'] })) {
+        // if we need to apply headers but the redirect is to the same URL, we should remove the location header and apply the other headers,
+        // otherwise we might end up with a redirect loop in the browser with no way for the client to know that something has changed (e.g. cookies have been set)
+        const headersWithoutLocation = new Headers(edgeResponse.headers)
+        headersWithoutLocation.delete('location')
+        headersWithoutLocation.set('x-middleware-next', '1')
+        edgeResponse = new Response(null, {
+          status: 200,
+          headers: headersWithoutLocation,
+        })
+      } else {
+        logger
+          .withFields({ redirect_url: redirect })
+          .debug(
+            'Redirect url is the same as original URL and no response headers need to be applied',
+          )
+        return
+      }
     }
     edgeResponse.headers.set('location', relativizeURL(redirect, request.url))
   }
