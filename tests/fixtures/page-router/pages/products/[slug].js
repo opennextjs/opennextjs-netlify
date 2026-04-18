@@ -8,11 +8,21 @@ const Product = ({ time, slug }) => (
   </div>
 )
 
+/** @type {import('next').GetStaticProps} */
 export async function getStaticProps({ params }) {
   if (params.slug === 'not-found-with-revalidate') {
     return {
       notFound: true,
       revalidate: 600,
+    }
+  }
+
+  if (params.slug === 'redirect') {
+    return {
+      redirect: {
+        permanent: false,
+        destination: '/products/redirected',
+      },
     }
   }
 
