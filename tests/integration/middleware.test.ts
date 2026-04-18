@@ -37,7 +37,7 @@ for (const {
     isNodeMiddleware: false,
     label: 'Edge runtime middleware',
   },
-  false && hasNodeMiddlewareSupport()
+  hasNodeMiddlewareSupport()
     ? {
         edgeFunctionNameRoot: NODE_MIDDLEWARE_FUNCTION_NAME,
         edgeFunctionNameSrc: NODE_MIDDLEWARE_FUNCTION_NAME,
