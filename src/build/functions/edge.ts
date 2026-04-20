@@ -276,7 +276,8 @@ const copyHandlerDependenciesForNodeMiddleware = async (ctx: PluginContext) => {
   parts.push(`registerCJSModules(import.meta.url, virtualModules, virtualSymlinks);
 
     const require = createRequire(import.meta.url);
-    const handlerMod = require("./${join(commonPrefix, entry)}");
+    const middlewareEntrypoint = "${join(commonPrefix, entry)}"
+    const handlerMod = require("./" + middlewareEntrypoint);
     const handler = handlerMod.default || handlerMod;
 
     export default handler
