@@ -17,11 +17,13 @@ const MIN_NEXT_VERSION = '16.2.0-canary.72'
 const adapter: NextAdapter = {
   name: 'Netlify',
   modifyConfig(config, ctx) {
+    console.log('modifyConfig 1', config, ctx)
     if (
       ctx?.phase === 'phase-production-build' &&
       config.output !== 'export' &&
       satisfies(ctx.nextVersion, `>=${MIN_NEXT_VERSION}`)
     ) {
+      console.log('modifyConfig 2')
       // If not export, make sure to not build standalone output to avoid wasteful work
       // @ts-expect-error - types don't allow unsetting output, even if `undefined` is actually a default
       config.output = undefined
@@ -37,11 +39,14 @@ const adapter: NextAdapter = {
     return config
   },
   async onBuildComplete(ctx) {
+    console.log('onBuildComplete 1')
     if (!satisfies(ctx.nextVersion, `>=${MIN_NEXT_VERSION}`)) {
       // if we don't save an adapter manifest and unset the standalone config,
       // we will continue to use standalone mode.
       return
     }
+
+    console.log('onBuildComplete 2')
 
     await writeFile(join(ctx.distDir, ADAPTER_OUTPUT_FILE), JSON.stringify(ctx), 'utf-8')
   },
