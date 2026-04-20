@@ -21,7 +21,7 @@ const adapter: NextAdapter = {
     if (
       ctx?.phase === 'phase-production-build' &&
       config.output !== 'export' &&
-      satisfies(ctx.nextVersion, `>=${MIN_NEXT_VERSION}`)
+      satisfies(ctx.nextVersion, `>=${MIN_NEXT_VERSION}`, { includePrerelease: true })
     ) {
       console.log('modifyConfig 2')
       // If not export, make sure to not build standalone output to avoid wasteful work
@@ -40,7 +40,7 @@ const adapter: NextAdapter = {
   },
   async onBuildComplete(ctx) {
     console.log('onBuildComplete 1')
-    if (!satisfies(ctx.nextVersion, `>=${MIN_NEXT_VERSION}`)) {
+    if (!satisfies(ctx.nextVersion, `>=${MIN_NEXT_VERSION}`, { includePrerelease: true })) {
       // if we don't save an adapter manifest and unset the standalone config,
       // we will continue to use standalone mode.
       return
