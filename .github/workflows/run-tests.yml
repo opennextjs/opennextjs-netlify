@@ -20,6 +20,10 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       os: ${{ steps.set-matrix.outputs.os }}
+      shardsE2E: ${{ steps.set-matrix.outputs.shardsE2E }}
+      extraE2EIncludes: ${{ steps.set-adapters-includes.outputs.extraE2EIncludes }}
+      extraIntegrationIncludes: ${{ steps.set-adapters-includes.outputs.extraIntegrationIncludes }}
+      extraMergeReportsIncludes: ${{ steps.set-adapters-includes.outputs.extraMergeReportsIncludes }}
     steps:
       - name: Check PR labels
         if: github.event_name == 'pull_request'
@@ -87,6 +91,55 @@ jobs:
               core.setOutput('os', '["ubuntu-latest"]');
             }
 
+            core.setOutput('shardsE2E', '["1", "2", "3", "4", "5"]');
+      - name: Set adapter test includes
+        id: set-adapters-includes
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const versionMatrix = '${{ steps.set-matrix.outputs.matrix }}';
+            const versions = versionMatrix ? JSON.parse(versionMatrix) : []
+
+            const shardsE2E = '${{ steps.set-matrix.outputs.shardsE2E }}';
+            const shardArray = shardsE2E ? JSON.parse(shardsE2E) : []
+
+            const runsCanary = versions.includes('canary');
+
+            const testShards = [1, 2, 3, 4, 5, 6, 7, 8];
+
+            if (runsCanary) {
+              core.setOutput('extraE2EIncludes', JSON.stringify(
+                shardArray.map(shard => ({
+                  version: 'canary',
+                  shard,
+                  mode: 'adapter'
+                }))
+              ));
+              core.setOutput('extraIntegrationIncludes', JSON.stringify(
+                testShards.map(shard => ({
+                  version: 'canary',
+                  shard,
+                  os: 'ubuntu-latest',
+                  mode: 'adapter'
+                }))
+              ));
+              core.setOutput('extraMergeReportsIncludes', JSON.stringify([
+                {
+                  version: 'canary',
+                  mode: 'adapter'
+                }
+              ]));
+            } else {
+              core.setOutput('extraE2EIncludes', '[]');
+              core.setOutput('extraIntegrationIncludes', '[]');
+              core.setOutput('extraMergeReportsIncludes', '[]');
+            }
+      - name: Debug outputs
+        run: |
+          echo "extraE2EIncludes: ${{ steps.set-adapters-includes.outputs.extraE2EIncludes }}"
+          echo "extraIntegrationIncludes: ${{ steps.set-adapters-includes.outputs.extraIntegrationIncludes }}"
+          echo "extraMergeReportsIncludes: ${{ steps.set-adapters-includes.outputs.extraMergeReportsIncludes }}"
+
   e2e:
     needs: setup
     runs-on: ubuntu-latest
@@ -94,7 +147,9 @@ jobs:
       fail-fast: false
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
-        shard: [1, 2, 3, 4, 5]
+        shard: ${{ fromJson(needs.setup.outputs.shardsE2E) }}
+        mode: ["standalone"]
+        include: ${{ fromJson(needs.setup.outputs.extraE2EIncludes) }}
 
     steps:
       - uses: actions/checkout@v6
@@ -155,6 +210,17 @@ jobs:
       - name: Install Playwright Browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
+      - name: Is Adapter Test?
+        id: is-adapter-test
+        shell: bash
+        run: |
+          if [[ "${{ matrix.mode }}" == "adapter" ]]; then
+            echo "NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true" >> $GITHUB_OUTPUT
+            echo "BLOB_REPORT_KEY=adapter" >> $GITHUB_OUTPUT
+          else
+            echo "NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=" >> $GITHUB_OUTPUT
+            echo "BLOB_REPORT_KEY=standalone" >> $GITHUB_OUTPUT
+          fi
       - name: Run Playwright tests
         run: npm run test:ci:e2e -- --shard=${{ matrix.shard }}/5
         env:
@@ -162,11 +228,12 @@ jobs:
           NEXT_VERSION: ${{ matrix.version }}
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           NODE_OPTIONS: --import file://${{ github.workspace }}/tools/fetch-retry.mjs
+          NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ steps.is-adapter-test.outputs.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER }}
       - name: Upload blob report to GitHub Actions Artifacts
         uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: blob-report-${{matrix.version}}-${{ matrix.shard }}
+          name: blob-report-${{ steps.is-adapter-test.outputs.BLOB_REPORT_KEY }}-${{matrix.version}}-${{ matrix.shard }}
           path: blob-report
           retention-days: 1
 
@@ -178,6 +245,7 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
         os: ${{ fromJson(needs.setup.outputs.os) }}
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
+        mode: ["standalone"]
         exclude:
           - os: windows-2025
             version: "13.5.1"
@@ -185,6 +253,7 @@ jobs:
             version: "14.2.35"
           - os: windows-2025
             version: "15.5.9"
+        include: ${{ fromJson(needs.setup.outputs.extraIntegrationIncludes) }}
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -228,6 +297,17 @@ jobs:
         run: npm run build
       - name: "Vendor deno helpers for integration tests"
         run: node tools/vendor-deno-tools.js
+      - name: Is Adapter Test?
+        id: is-adapter-test
+        shell: bash
+        run: |
+          if [[ "${{ matrix.mode }}" == "adapter" ]]; then
+            echo "NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true" >> $GITHUB_OUTPUT
+            echo "FIXTURE_CACHE_PREFIX=adapter" >> $GITHUB_OUTPUT
+          else
+            echo "NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=" >> $GITHUB_OUTPUT
+            echo "FIXTURE_CACHE_PREFIX=standalone" >> $GITHUB_OUTPUT
+          fi
       - name: Compute Fixtures Cache Key
         id: fixture-cache-key
         # Fixtures only need to be rebuilt if either fixture or support files change,
@@ -242,7 +322,7 @@ jobs:
         with:
           path: tests/fixtures
           key:
-            integration-fixtures-${{ runner.os }}-${{steps.resolve-next-version.outputs.version}}-${{
+            integration-fixtures-${{ steps.is-adapter-test.outputs.FIXTURE_CACHE_PREFIX }}-${{ runner.os }}-${{steps.resolve-next-version.outputs.version}}-${{
             steps.fixture-cache-key.outputs.key }}
       - name: "Prepare Fixtures"
         if: steps.cache-fixtures.outputs.cache-hit != 'true'
@@ -251,6 +331,7 @@ jobs:
           NEXT_VERSION: ${{ matrix.version }}
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           NODE_OPTIONS: --import file://${{ github.workspace }}/tools/fetch-retry.mjs
+          NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ steps.is-adapter-test.outputs.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER }}
       - name: "Unit and integration tests"
         run: npm run test:ci:unit-and-integration -- --shard=${{ matrix.shard }}/8
         env:
@@ -259,6 +340,7 @@ jobs:
           NEXT_RESOLVED_VERSION: ${{ steps.resolve-next-version.outputs.version }}
           TEMP: ${{ github.workspace }}/..
           NODE_OPTIONS: --import file://${{ github.workspace }}/tools/fetch-retry.mjs
+          NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ steps.is-adapter-test.outputs.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER }}
 
   smoke:
     if: always()
@@ -328,6 +410,8 @@ jobs:
       fail-fast: false
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
+        mode: ["standalone"]
+        include: ${{ fromJson(needs.setup.outputs.extraMergeReportsIncludes) }}
 
     runs-on: ubuntu-latest
     steps:
@@ -342,7 +426,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: all-blob-reports
-          pattern: blob-report-${{ matrix.version }}-*
+          pattern: blob-report-${{ matrix.mode }}-${{ matrix.version }}-*
           merge-multiple: true
 
       - name: Merge reports
@@ -353,6 +437,6 @@ jobs:
       - name: Upload HTML report
         uses: actions/upload-artifact@v6
         with:
-          name: html-report-${{ matrix.version }}-attempt-${{ github.run_attempt }}
+          name: html-report-${{ matrix.mode }}-${{ matrix.version }}-attempt-${{ github.run_attempt }}
           path: playwright-report
           retention-days: 14
