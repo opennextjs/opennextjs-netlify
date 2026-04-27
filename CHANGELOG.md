@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.15.10](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.9...v5.15.10) (2026-04-27)
+
+
+### Bug Fixes
+
+* don't optimize same-url rewrite if response headers need to be applied ([#3479](https://github.com/opennextjs/opennextjs-netlify/issues/3479)) ([decdc28](https://github.com/opennextjs/opennextjs-netlify/commit/decdc28c99220e70355910c17f08718c7d0a1902))
+* set cache tag for getStaticProps's redirect ([#3476](https://github.com/opennextjs/opennextjs-netlify/issues/3476)) ([9eea3fe](https://github.com/opennextjs/opennextjs-netlify/commit/9eea3fe1dcf26e1e8b4c6fbd856496ea573746bb))
+
 ## [5.15.9](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.8...v5.15.9) (2026-03-09)
 
 
