@@ -413,6 +413,7 @@ test.skipIf(
       '/index',
       '/static-params/1',
       '/static-params/2',
+      '/static-params/[id]',
       '404.html',
       '500.html',
     ].filter(Boolean),

@@ -108,6 +108,24 @@ test.skipIf(platform === 'win32')<FixtureTestContext>(
   },
 )
 
+test<FixtureTestContext>('Should set cache tags when getStaticProps returns a redirect', async (ctx) => {
+  await createFixture('page-router', ctx)
+  await runPlugin(ctx)
+
+  const response = await invokeFunction(ctx, {
+    url: '/products/redirect',
+  })
+
+  expect(response.statusCode).toBe(307)
+  expect(response.headers?.['location']).toBe('/products/redirected')
+
+  expect(response.headers?.['netlify-cache-tag']).toBe('_N_T_/products/redirect')
+  expect(response.headers?.['netlify-cdn-cache-control']).toMatch(
+    /(max-age|s-maxage)=31536000,( stale-while-revalidate=31536000,)? durable/,
+  )
+  expect(response.headers?.['cache-control']).toBe('public, max-age=0, must-revalidate')
+})
+
 test<FixtureTestContext>('Should serve correct locale-aware custom 404 pages', async (ctx) => {
   await createFixture('page-router-base-path-i18n', ctx)
   await runPlugin(ctx)

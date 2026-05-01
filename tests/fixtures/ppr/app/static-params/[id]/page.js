@@ -16,7 +16,7 @@ async function getData(params) {
   return res.json()
 }
 
-async function Content(params) {
+async function FetchedDataContent(params) {
   const data = await getData(params)
 
   return (
@@ -31,15 +31,26 @@ async function Content(params) {
   )
 }
 
-// This is a dynamic page (segment) where all params are statically generated
-export default async function DynamicPageWithStaticParams({ params }) {
+// await params need to be in suspense block https://nextjs.org/docs/messages/blocking-route
+async function Content({ params }) {
   const { id } = await params
 
   return (
-    <main>
+    <>
       <h1>Dynamic Page (static params): {id}</h1>
-      <Suspense fallback={<div>loading...</div>}>
-        <Content id={id} />
+      <Suspense fallback={<div>loading content...</div>}>
+        <FetchedDataContent id={id} />
+      </Suspense>
+    </>
+  )
+}
+
+// This is a dynamic page (segment) where some params are statically generated
+export default async function DynamicPageWithStaticParams({ params }) {
+  return (
+    <main>
+      <Suspense fallback={<div>loading params...</div>}>
+        <Content params={params} />
       </Suspense>
     </main>
   )

@@ -161,6 +161,36 @@ for (const {
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
         expect(origin.calls).toBe(0)
       })
+
+      test<FixtureTestContext>('should skip redirect if redirecting to self and ensure response headers are set', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const origin = await LocalServer.run(async (req, res) => {
+          expect(req.url).toBe('/test/redirect-to-self')
+
+          res.write('Hello from origin!')
+          res.end()
+        })
+
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: '/test/redirect-to-self',
+        })
+        const text = await response.text()
+
+        expect(text).toBe('Hello from origin!')
+        expect(response.status).toBe(200)
+        expect(
+          response.headers.get('x-hello-from-middleware-res'),
+          'added a response header',
+        ).toEqual('hello')
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+        expect(origin.calls).toBe(1)
+      })
     })
 
     describe('rewrite', () => {
@@ -222,6 +252,37 @@ for (const {
         expect(response.status).toBe(302)
         expect(response.headers.get('location')).toBe('http://example.com/redirected')
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+
+      test<FixtureTestContext>('should add request/response headers when rewriting to self', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const origin = await LocalServer.run(async (req, res) => {
+          expect(req.url).toBe('/test/rewrite-to-self')
+          expect(req.headers['x-hello-from-middleware-req']).toBe('hello')
+
+          res.write('Hello from origin!')
+          res.end()
+        })
+
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: '/test/rewrite-to-self',
+        })
+        const text = await response.text()
+
+        expect(text).toBe('Hello from origin!')
+        expect(response.status).toBe(200)
+        expect(
+          response.headers.get('x-hello-from-middleware-res'),
+          'added a response header',
+        ).toEqual('hello')
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+        expect(origin.calls).toBe(1)
       })
     })
 

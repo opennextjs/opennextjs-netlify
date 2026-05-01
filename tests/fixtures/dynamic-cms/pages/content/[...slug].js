@@ -21,11 +21,7 @@ export async function getStaticProps({ params }) {
     }
   }
 
-  return {
-    props: {
-      value,
-    },
-  }
+  return value
 }
 
 export const getStaticPaths = () => {

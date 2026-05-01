@@ -8,6 +8,7 @@ import { updateModifiedHeaders } from './headers.ts'
 import type { StructuredLogger } from './logging.ts'
 import {
   addMiddlewareHeaders,
+  hasMiddlewareResponseHeadersToApply,
   isMiddlewareRequest,
   isMiddlewareResponse,
   mergeMiddlewareCookies,
@@ -139,7 +140,7 @@ export const buildResponse = async ({
     }
   }
 
-  const edgeResponse = new Response(result.response.body, result.response)
+  let edgeResponse = new Response(result.response.body, result.response)
   request.headers.set('x-nf-next-middleware', 'skip')
 
   let rewrite = edgeResponse.headers.get('x-middleware-rewrite')
@@ -164,8 +165,15 @@ export const buildResponse = async ({
 
     const rewriteUrl = new URL(rewrite, request.url)
     const baseUrl = new URL(request.url)
-    if (rewriteUrl.toString() === baseUrl.toString()) {
-      logger.withFields({ rewrite_url: rewrite }).debug('Rewrite url is same as original url')
+    if (
+      rewriteUrl.toString() === baseUrl.toString() &&
+      !hasMiddlewareResponseHeadersToApply(edgeResponse, {
+        ignoreHeaders: ['x-middleware-rewrite'],
+      })
+    ) {
+      logger
+        .withFields({ rewrite_url: rewrite })
+        .debug('Rewrite URL is the same as original URL and no response headers need to be applied')
       return
     }
 
@@ -204,14 +212,23 @@ export const buildResponse = async ({
     }
 
     const target = normalizeLocalizedTarget({ target: rewriteUrl.toString(), request, nextConfig })
-    if (target === request.url) {
-      logger.withFields({ rewrite_url: rewrite }).debug('Rewrite url is same as original url')
+    if (
+      target === request.url &&
+      !hasMiddlewareResponseHeadersToApply(edgeResponse, {
+        ignoreHeaders: ['x-middleware-rewrite'],
+      })
+    ) {
+      logger
+        .withFields({ rewrite_url: rewrite })
+        .debug(
+          'Normalized rewrite URL is the same as original URL and no response headers need to be applied',
+        )
       return
     }
     edgeResponse.headers.set('x-middleware-rewrite', relativeUrl)
     request.headers.set('x-middleware-rewrite', target)
 
-    // coookies set in middleware need to be available during the lambda request
+    // cookies set in middleware need to be available during the lambda request
     const newRequest = await cloneRequest(target, request)
     const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
     if (newRequestCookies) {
@@ -224,8 +241,24 @@ export const buildResponse = async ({
   if (redirect) {
     redirect = normalizeLocalizedTarget({ target: redirect, request, nextConfig })
     if (redirect === request.url) {
-      logger.withFields({ redirect_url: redirect }).debug('Redirect url is same as original url')
-      return
+      if (hasMiddlewareResponseHeadersToApply(edgeResponse, { ignoreHeaders: ['location'] })) {
+        // if we need to apply headers but the redirect is to the same URL, we should remove the location header and apply the other headers,
+        // otherwise we might end up with a redirect loop in the browser with no way for the client to know that something has changed (e.g. cookies have been set)
+        const headersWithoutLocation = new Headers(edgeResponse.headers)
+        headersWithoutLocation.delete('location')
+        headersWithoutLocation.set('x-middleware-next', '1')
+        edgeResponse = new Response(null, {
+          status: 200,
+          headers: headersWithoutLocation,
+        })
+      } else {
+        logger
+          .withFields({ redirect_url: redirect })
+          .debug(
+            'Redirect url is the same as original URL and no response headers need to be applied',
+          )
+        return
+      }
     }
     edgeResponse.headers.set('location', relativizeURL(redirect, request.url))
   }
@@ -245,7 +278,7 @@ export const buildResponse = async ({
   if (edgeResponse.headers.get('x-middleware-next') === '1') {
     edgeResponse.headers.delete('x-middleware-next')
 
-    // coookies set in middleware need to be available during the lambda request
+    // cookies set in middleware need to be available during the lambda request
     const newRequest = await cloneRequest(request.url, request)
     const newRequestCookies = mergeMiddlewareCookies(edgeResponse, newRequest)
     if (newRequestCookies) {
