@@ -255,11 +255,19 @@ async function installRuntime(
       )}`
       env['YARN_ENABLE_SCRIPTS'] = 'false'
       break
-    case 'pnpm':
-      command = `pnpm add file:${relativePathToPackage} ${
+    case 'pnpm': {
+      const rootPkgPath = join(isolatedFixtureRoot, 'package.json')
+      const rootPkg = existsSync(rootPkgPath)
+        ? JSON.parse(await readFile(rootPkgPath, 'utf-8'))
+        : {}
+      // we run tests on Node v18 and v20 and latest pnpm requires v22.13,
+      // so pin to ^10 unless the fixture already declares its own pnpm version
+      const pnpmBin = rootPkg.packageManager?.startsWith('pnpm@') ? 'pnpm' : 'corepack pnpm@^10'
+      command = `${pnpmBin} add file:${relativePathToPackage} ${
         workspaceRelPath ? `--filter ./${workspaceRelPath}` : ''
       } --ignore-scripts`
       break
+    }
     case 'bun':
       command = `bun install ./${packageName}`
       break
@@ -518,6 +526,26 @@ export const fixtureFactories = {
   middlewareI18nExcludedPaths: () => createE2EFixture('middleware-i18n-excluded-paths'),
   middlewareI18nExcludedPathsNode: () =>
     createE2EFixture('middleware-i18n-excluded-paths', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
+  middlewareI18nIncludedPaths: () =>
+    createE2EFixture('middleware-included-paths', {
+      env: {
+        NEXT_I18N: 'true',
+      },
+    }),
+  middlewareI18nIncludedPathsNode: () =>
+    createE2EFixture('middleware-included-paths', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+      env: {
+        NEXT_I18N: 'true',
+      },
+    }),
+  middlewareIncludedPaths: () => createE2EFixture('middleware-included-paths'),
+  middlewareIncludedPathsNode: () =>
+    createE2EFixture('middleware-included-paths', {
       buildCommand: getBuildFixtureVariantCommand('node-middleware'),
       publishDirectory: '.next-node-middleware',
     }),

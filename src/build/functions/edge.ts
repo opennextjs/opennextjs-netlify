@@ -5,7 +5,6 @@ import type { Manifest, ManifestFunction } from '@netlify/edge-functions'
 import { glob } from 'fast-glob'
 import type { FunctionsConfigManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
 import type { EdgeFunctionDefinition as EdgeMiddlewareDefinition } from 'next-with-cache-handler-v2/dist/build/webpack/plugins/middleware-plugin.js'
-import { pathToRegexp } from 'path-to-regexp'
 
 import { EDGE_HANDLER_NAME, PluginContext } from '../plugin-context.js'
 
@@ -56,6 +55,20 @@ const copyRuntime = async (ctx: PluginContext, handlerDirectory: string): Promis
   )
 }
 
+const fixEdgeRuntimeTurbopackMatcherJsonPart = (matchers: EdgeMiddlewareDefinition['matchers']) => {
+  return matchers.map((matcher) => {
+    if (matcher.regexp) {
+      return {
+        ...matcher,
+        // Next.js in some versions produces "\\\\.json" for edge runtime middleware when built with turbopack
+        // with too many escapes preventing proper matching
+        regexp: matcher.regexp.replaceAll('\\\\.json', '\\.json'),
+      }
+    }
+    return matcher
+  })
+}
+
 /**
  * When i18n is enabled the matchers assume that paths _always_ include the
  * locale. We manually add an extra matcher for the original path without
@@ -80,13 +93,18 @@ const augmentMatchers = (
               // Next is producing pretty broad matcher for i18n locale. Presumably rest of their infrastructure protects this broad matcher
               // from matching on non-locale paths. For us this becomes request entry point, so we need to narrow it down to just defined locales
               // otherwise users might get unexpected matches on paths like `/api*`
-              regexp: matcher.regexp.replace(/\[\^\/\.]+/g, `(${i18NConfig.locales.join('|')})`),
+              // additionally we don't have a way to normalize i18n paths for request without locale information, so we need to adjust the regexp to mark locale part as optional
+              regexp: matcher.regexp
+                // replace i18n part matching:
+                //  - target locales only
+                //  - make it optional to allow matching both with and without locale
+                // (?:\\/((?!_next\\/)[^/.]{1,}))
+                .replace(
+                  '(?:\\/((?!_next\\/)[^/.]{1,}))',
+                  `(?:\\/((?!_next\\/)(${i18NConfig.locales.join('|')}){1,}))?`,
+                ),
             }
           : matcher,
-        {
-          ...matcher,
-          regexp: pathToRegexp(matcher.originalSource).source,
-        },
       ]
     }
     return matcher
@@ -330,7 +348,7 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
       runtime: 'edge',
       functionDefinition: edgeDefinition,
       name: edgeDefinition.name,
-      matchers: edgeDefinition.matchers,
+      matchers: fixEdgeRuntimeTurbopackMatcherJsonPart(edgeDefinition.matchers),
     }
   })
 

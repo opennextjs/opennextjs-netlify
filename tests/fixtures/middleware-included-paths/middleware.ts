@@ -1,0 +1,5 @@
+export { middleware } from './middleware-shared'
+
+export const config = {
+  matcher: ['/test', '/link'],
+}
