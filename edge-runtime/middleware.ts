@@ -48,7 +48,12 @@ export async function handleMiddleware(
   if (
     !matchesMiddleware(localizedUrl.pathname, request, searchParamsToUrlQuery(url.searchParams))
   ) {
-    reqLogger.debug('Aborting middleware due to runtime rules')
+    reqLogger
+      .withFields({
+        next_original_url: url,
+        next_localized_url: localizedUrl.href,
+      })
+      .debug('Aborting middleware due to runtime rules')
 
     return
   }
