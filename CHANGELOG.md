@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.11](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.10...v5.15.11) (2026-05-07)
+
+
+### Bug Fixes
+
+* matching on data routes when middleware matcher is using allowed paths ([#3506](https://github.com/opennextjs/opennextjs-netlify/issues/3506)) ([45ef6ae](https://github.com/opennextjs/opennextjs-netlify/commit/45ef6ae050f334b5023f2b7137ccd64099dbc81a))
+
 ## [5.15.10](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.9...v5.15.10) (2026-04-29)
 
 
