@@ -255,12 +255,19 @@ async function installRuntime(
       )}`
       env['YARN_ENABLE_SCRIPTS'] = 'false'
       break
-    case 'pnpm':
-      // we run tests on Node v18 and v20 and latest pnpm requires v22.13
-      command = `corepack pnpm@^10 add file:${relativePathToPackage} ${
+    case 'pnpm': {
+      const rootPkgPath = join(isolatedFixtureRoot, 'package.json')
+      const rootPkg = existsSync(rootPkgPath)
+        ? JSON.parse(await readFile(rootPkgPath, 'utf-8'))
+        : {}
+      // we run tests on Node v18 and v20 and latest pnpm requires v22.13,
+      // so pin to ^10 unless the fixture already declares its own pnpm version
+      const pnpmBin = rootPkg.packageManager?.startsWith('pnpm@') ? 'pnpm' : 'corepack pnpm@^10'
+      command = `${pnpmBin} add file:${relativePathToPackage} ${
         workspaceRelPath ? `--filter ./${workspaceRelPath}` : ''
       } --ignore-scripts`
       break
+    }
     case 'bun':
       command = `bun install ./${packageName}`
       break
