@@ -256,7 +256,8 @@ async function installRuntime(
       env['YARN_ENABLE_SCRIPTS'] = 'false'
       break
     case 'pnpm':
-      command = `pnpm add file:${relativePathToPackage} ${
+      // we run tests on Node v18 and v20 and latest pnpm requires v22.13
+      command = `corepack pnpm@^10 add file:${relativePathToPackage} ${
         workspaceRelPath ? `--filter ./${workspaceRelPath}` : ''
       } --ignore-scripts`
       break
@@ -518,6 +519,26 @@ export const fixtureFactories = {
   middlewareI18nExcludedPaths: () => createE2EFixture('middleware-i18n-excluded-paths'),
   middlewareI18nExcludedPathsNode: () =>
     createE2EFixture('middleware-i18n-excluded-paths', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
+  middlewareI18nIncludedPaths: () =>
+    createE2EFixture('middleware-included-paths', {
+      env: {
+        NEXT_I18N: 'true',
+      },
+    }),
+  middlewareI18nIncludedPathsNode: () =>
+    createE2EFixture('middleware-included-paths', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+      env: {
+        NEXT_I18N: 'true',
+      },
+    }),
+  middlewareIncludedPaths: () => createE2EFixture('middleware-included-paths'),
+  middlewareIncludedPathsNode: () =>
+    createE2EFixture('middleware-included-paths', {
       buildCommand: getBuildFixtureVariantCommand('node-middleware'),
       publishDirectory: '.next-node-middleware',
     }),

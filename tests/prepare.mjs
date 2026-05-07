@@ -25,6 +25,7 @@ const e2eOnlyFixtures = new Set([
   'dist-dir',
   'dynamic-cms',
   'middleware-i18n-excluded-paths',
+  'middleware-included-paths',
   'middleware-node-runtime-specific',
   'middleware-static-asset-matcher',
   'middleware-subrequest-vuln',
