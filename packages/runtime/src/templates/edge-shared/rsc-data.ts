@@ -64,9 +64,18 @@ export const getRscDataRouter = ({ routes: staticRoutes, dynamicRoutes }: Preren
     const debug = request.headers.has('x-next-debug-logging')
     const log = debug ? (...args: unknown[]) => console.log(...args) : noop
     const url = new URL(request.url)
-    // If this is a static RSC request, rewrite to the data route
+    // If this is a static RSC request, rewrite to the data route.
+    // Authenticated RSC requests can contain user-specific flight payloads. If
+    // a broad static catch-all route matches a dynamic page, rewriting an
+    // authenticated request to a cacheable `.rsc` route can allow the first
+    // user's payload to be reused for later users by the CDN/ODB cache. Let
+    // authenticated requests continue to the origin route instead.
     if (request.headers.get('rsc') === '1') {
       log('Is rsc request')
+      if (request.headers.has('cookie') || request.headers.has('authorization')) {
+        log('Skipping RSC data rewrite for authenticated request')
+        return
+      }
       if (matchesRscRoute(url.pathname)) {
         request.headers.set('x-rsc-route', url.pathname)
         const target = rscifyPath(url.pathname)
