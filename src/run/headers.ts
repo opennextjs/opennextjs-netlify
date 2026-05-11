@@ -76,6 +76,13 @@ const omitHeaderValues = (header: string, values: string[]): string => {
   return filteredValues.join(', ')
 }
 
+const getCookieNames = (cookieHeader: string): string[] => {
+  return cookieHeader
+    .split(';')
+    .map((cookie) => cookie.trim().split('=')[0]?.trim())
+    .filter((cookieName): cookieName is string => Boolean(cookieName))
+}
+
 /**
  * Ensure the Netlify CDN varies on things that Next.js varies on,
  * e.g. i18n, preview mode, etc.
@@ -116,6 +123,20 @@ export const setVaryHeaders = (
   if (locales.length > 1 && (path === '/' || path === basePath)) {
     netlifyVaryValues.language.push(...locales)
     netlifyVaryValues.cookie.push(`NEXT_LOCALE`)
+  }
+
+  if (request.headers.get('rsc') === '1') {
+    const cookie = request.headers.get('cookie')
+    if (cookie) {
+      // Auth/session cookies can affect RSC flight payloads. When a RSC response
+      // is made cacheable (for example by middleware or page cache-control), make
+      // sure distinct cookie values do not share the same Netlify cache object.
+      netlifyVaryValues.cookie.push(...getCookieNames(cookie))
+    }
+
+    if (request.headers.has('authorization')) {
+      netlifyVaryValues.header.push('authorization')
+    }
   }
 
   const userNetlifyVary = headers.get('netlify-vary')

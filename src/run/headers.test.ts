@@ -60,6 +60,42 @@ describe('headers', () => {
         )
       })
 
+      test('with RSC request cookies added to avoid sharing user-specific flight data', () => {
+        const headers = new Headers()
+        const request = new Request(defaultUrl, {
+          headers: {
+            RSC: '1',
+            Cookie: 'session=user-a; theme=dark',
+          },
+        })
+        vi.spyOn(headers, 'set')
+
+        setVaryHeaders(headers, request, defaultConfig)
+
+        expect(headers.set).toBeCalledWith(
+          'netlify-vary',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data|session|theme',
+        )
+      })
+
+      test('with RSC request authorization added to avoid sharing authenticated flight data', () => {
+        const headers = new Headers()
+        const request = new Request(defaultUrl, {
+          headers: {
+            RSC: '1',
+            Authorization: 'Bearer user-a',
+          },
+        })
+        vi.spyOn(headers, 'set')
+
+        setVaryHeaders(headers, request, defaultConfig)
+
+        expect(headers.set).toBeCalledWith(
+          'netlify-vary',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|authorization,cookie=__prerender_bypass|__next_preview_data',
+        )
+      })
+
       test('with no languages if i18n config has localeDetection disabled', () => {
         const headers = new Headers()
         const request = new Request(defaultUrl)
