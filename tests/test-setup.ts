@@ -2,6 +2,8 @@ import fs from 'node:fs'
 import { afterEach } from 'vitest'
 import { type FixtureTestContext } from './utils/contexts'
 
+process.env.RUNNING_INTEGRATION_TESTS = 'true'
+
 if (typeof File === 'undefined') {
   const { File } = await import('@web-std/file')
   globalThis.File = File

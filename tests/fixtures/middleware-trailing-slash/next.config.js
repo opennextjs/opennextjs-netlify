@@ -9,6 +9,7 @@ const nextConfig = {
   experimental: {
     nodeMiddleware: true,
   },
+  generateBuildId: () => 'build-id',
   outputFileTracingRoot: __dirname,
 }
 

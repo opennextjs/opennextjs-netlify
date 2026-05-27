@@ -1,4 +1,5 @@
-import { rm } from 'fs/promises'
+import { rm } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 
 import type { NetlifyPluginOptions } from '@netlify/build'
 import { trace } from '@opentelemetry/api'
@@ -14,6 +15,7 @@ import {
   setHeadersConfig,
   unpublishStaticDir,
 } from './build/content/static.js'
+import { createEdgeHandlersFromAdapter } from './build/functions/edge-adapter.js'
 import { clearStaleEdgeHandlers, createEdgeHandlers } from './build/functions/edge.js'
 import { clearStaleServerHandlers, createServerHandler } from './build/functions/server.js'
 import { setImageConfig } from './build/image-cdn.js'
@@ -65,6 +67,11 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
     }
     await setSkewProtection(ctx, span)
   })
+
+  if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+    console.log('set adapter path')
+    process.env.NEXT_ADAPTER_PATH = fileURLToPath(new URL(`adapter/adapter.js`, import.meta.url))
+  }
 }
 
 export const onBuild = async (options: NetlifyPluginOptions) => {
@@ -93,12 +100,14 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
     await verifyAdvancedAPIRoutes(ctx)
     await verifyNetlifyFormsWorkaround(ctx)
 
+    console.log('has adapter stuff', ctx.hasAdapter())
+
     await Promise.all([
       copyStaticAssets(ctx),
       copyStaticContent(ctx),
       copyPrerenderedContent(ctx),
       createServerHandler(ctx),
-      createEdgeHandlers(ctx),
+      ctx.hasAdapter() ? createEdgeHandlersFromAdapter(ctx) : createEdgeHandlers(ctx),
       setHeadersConfig(ctx),
       setImageConfig(ctx),
     ])
