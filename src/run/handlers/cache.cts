@@ -315,7 +315,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         span?.addEvent('Stale', { staleByTags, key, ttl })
         // note that we modify this after we capture last modified to ensure that Age is correct
         // but we still let Next.js know that entry is stale
-        blob.lastModified = -1 // indicate that the entry is stale
+        this.markCacheEntryStaleByTags(blob)
       }
 
       // Next sets a kind/kindHint and fetchUrl for data requests, however fetchUrl was found to be most reliable across versions
@@ -512,6 +512,57 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   resetRequestCache() {
     // no-op because in-memory cache is scoped to requests and not global
     // see getRequestSpecificInMemoryCache
+  }
+
+  /**
+   * Mutates a cache entry that was found to be stale (but not yet expired) through
+   * on-demand revalidated tags so that Next.js serves it stale while triggering a
+   * background revalidation.
+   *
+   * We can NOT signal staleness with `lastModified = -1` for full-route cache
+   * entries anymore: since Next.js 16 that sentinel means "entry is past its
+   * `expire` → do a blocking re-render" rather than "serve stale". See the
+   * `incremental-cache` `get`: `lastModified === -1` ⇒ `isStale = -1`, and the
+   * response-cache treats `isStale === -1` as "skip the early stale resolve and
+   * block on a fresh render".
+   *
+   * Instead we drive Next.js' native staleness math, which both old and new
+   * Next.js resolve to `isStale === true` (serve stale + background revalidation):
+   *  - `revalidate: 1` + a `lastModified` 2s in the past ⇒ `revalidateAfter = now - 1000 < now` ⇒ stale
+   *  - `expire: undefined`                               ⇒ `expireAfter` undefined ⇒ never the `-1` block path
+   *
+   * `revalidate` must be `>= 1` (Next.js 16 rejects `revalidate: 0` with "Invalid
+   * revalidate configuration provided: 0 < 1") and is needed because force-static
+   * entries have `revalidate: false`, which would otherwise resolve as fresh.
+   *
+   * Actual expiry is still enforced by `checkCacheEntryStaleByTags`: once the tag's
+   * `expireAt` is reached it reports the entry as expired and `get` returns `null`
+   * (cache miss → blocking re-render), so we don't need to encode `expire` here.
+   */
+  private markCacheEntryStaleByTags(blob: NetlifyCacheHandlerValue) {
+    if (!blob.value) {
+      return
+    }
+
+    if (
+      blob.value.kind === 'ROUTE' ||
+      blob.value.kind === 'APP_ROUTE' ||
+      blob.value.kind === 'PAGE' ||
+      blob.value.kind === 'PAGES' ||
+      blob.value.kind === 'APP_PAGE' ||
+      blob.value.kind === 'REDIRECT'
+    ) {
+      blob.lastModified = Date.now() - 2 * 1000
+      blob.value.cacheControl = { revalidate: 1, expire: undefined }
+      blob.value.revalidate = 1
+      return
+    }
+
+    // FETCH (and any other) entries are classified as stale by comparing their age
+    // against the entry's `revalidate` and do not use the `lastModified === -1`
+    // sentinel as a "blocking re-render" signal, so we keep using it to force
+    // staleness regardless of the entry's `revalidate`.
+    blob.lastModified = -1
   }
 
   /**
