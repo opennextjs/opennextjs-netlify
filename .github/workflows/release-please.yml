@@ -50,5 +50,3 @@ jobs:
         if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
       - run: npm publish --provenance
         if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
