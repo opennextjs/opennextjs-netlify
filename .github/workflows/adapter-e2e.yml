@@ -32,8 +32,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          # https://github.com/microsoft/playwright/issues/40998
-          node-version: '24.15'
+          node-version: '20'
 
       - uses: denoland/setup-deno@v2
         with:
@@ -100,7 +99,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '26'
+          node-version: '20'
 
       - name: Setup pnpm
         run: npm i -g corepack && corepack enable
