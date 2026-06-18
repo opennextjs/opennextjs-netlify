@@ -53,7 +53,7 @@
   "homepage": "https://opennext.js.org/netlify",
   "devDependencies": {
     "@fastly/http-compute-js": "1.1.5",
-    "@netlify/blobs": "^10.7.4",
+    "@netlify/blobs": "^10.7.9",
     "@netlify/build": "^35.13.4",
     "@netlify/config": "^24.5.0",
     "@netlify/edge-bundler": "^14.10.1",
