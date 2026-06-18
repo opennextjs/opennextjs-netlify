@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.12](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.11...v5.15.12) (2026-06-18)
+
+
+### Bug Fixes
+
+* mark prerendered content as less stale now that expire setting is enforced for marking for blocking re-render ([#3510](https://github.com/opennextjs/opennextjs-netlify/issues/3510)) ([2a41703](https://github.com/opennextjs/opennextjs-netlify/commit/2a41703bc50d006b211913003ec562cda74feab0))
+
 ## [5.15.11](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.10...v5.15.11) (2026-05-07)
 
 
