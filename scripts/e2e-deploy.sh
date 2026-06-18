@@ -6,7 +6,7 @@ npm i -D netlify-cli >&2
 
 # Symlink the adapter's built dist into the temp app so netlify.toml can reference it
 # with a relative path (netlify.toml only supports relative paths for local plugins)
-ln -sf "$ADAPTER_DIR/dist/" ./next-runtime/
+ln -sf "$ADAPTER_DIR/dist/" ./next-runtime
 
 # Create netlify.toml pointing to the local plugin build
 cat > netlify.toml <<'EOF'
