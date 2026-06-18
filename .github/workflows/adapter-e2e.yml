@@ -3,6 +3,7 @@
 name: test-e2e-deploy
 
 on:
+  push:
   workflow_dispatch:
     inputs:
       nextjsRef:
