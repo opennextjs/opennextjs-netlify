@@ -32,7 +32,8 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          # https://github.com/microsoft/playwright/issues/40998
+          node-version: '24.15'
 
       - name: Setup pnpm
         run: npm i -g corepack && corepack enable
