@@ -3,7 +3,6 @@
 name: test-e2e-deploy
 
 on:
-  push:
   workflow_dispatch:
     inputs:
       nextjsRef:
@@ -115,8 +114,8 @@ jobs:
         env:
           ADAPTER_DIR: ${{ github.workspace }}/adapter
           IS_TURBOPACK_TEST: 1
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ADAPTER_E2E_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_ADAPTER_E2E_SITE_ID }}
           NEXT_E2E_TEST_TIMEOUT: 240000
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
           NEXT_TELEMETRY_DISABLED: 1
