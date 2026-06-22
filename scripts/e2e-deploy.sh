@@ -40,10 +40,11 @@ fi
 
 # Persist metadata for e2e-logs.sh
 BUILD_ID="$(cat .next/BUILD_ID 2>/dev/null || echo 'unknown')"
+DEPLOYMENT_ID="$(grep -oE '/deploys/[a-f0-9]+' .adapter-deploy.log | grep -oE '[a-f0-9]+' | tail -1)"
 {
   echo "BUILD_ID: $BUILD_ID"
-  echo "DEPLOYMENT_ID: $DEPLOY_URL"
-  echo "IMMUTABLE_ASSET_TOKEN: undefined"
+  echo "DEPLOYMENT_ID: $DEPLOYMENT_ID"
+  echo "supportsImmutableAssets: false"
 } > .adapter-build.log
 
 # Only the deployment URL goes to stdout — this is what the Next.js test harness reads
