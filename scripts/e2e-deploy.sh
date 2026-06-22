@@ -44,7 +44,7 @@ DEPLOYMENT_ID="$(grep -oE '/deploys/[a-f0-9]+' .adapter-deploy.log | grep -oE '[
 {
   echo "BUILD_ID: $BUILD_ID"
   echo "DEPLOYMENT_ID: $DEPLOYMENT_ID"
-  echo "supportsImmutableAssets: false"
+  echo "NEXT_SUPPORTS_IMMUTABLE_ASSETS: false"
 } > .adapter-build.log
 
 # Only the deployment URL goes to stdout — this is what the Next.js test harness reads
