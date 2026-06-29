@@ -1,7 +1,10 @@
-import type { OutgoingHttpHeaders } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
-import { ComputeJsOutgoingMessage, toComputeResponse, toReqRes } from '@fastly/http-compute-js'
-import { describe, expect, test } from 'vitest'
+import type { Context } from '@netlify/functions'
+import { describe, expect, test, vi } from 'vitest'
+
+import { createRequestContext, type RequestContext } from './request-context.cjs'
+import handler from './server.js'
 
 /**
  * Regression tests for streamed-response termination on render failure.
@@ -13,19 +16,19 @@ import { describe, expect, test } from 'vitest'
  * unparseable HTTP message (which ATS reports as a 502,
  * ats_status_502_invalid_http_response).
  *
- * This faithfully mirrors the response-finalization pipeline in
- * `src/run/handlers/server.ts`:
- *   - `disableFaultyTransferEncodingHandling` (verbatim)
- *   - kicking off the next handler without awaiting it, capturing a late
- *     render failure and ending the response once headers are committed
- *   - `toComputeResponse(resProxy)` which resolves when HEADERS are available,
- *     NOT when the body stream closes
- *   - the body ReadableStream that keeps the response open until the render +
- *     background work finish, but errors the stream on a failed/aborted render
+ * These tests exercise the *real* `server.ts` default export. The only thing we
+ * substitute is the Next.js request handler itself (the `nextHandler` that
+ * `getMockedRequestHandler` produces): each test injects a fake handler via
+ * `mockNextHandler` that plays out a specific render scenario against the
+ * (real) response object. Everything else - the response-finalization pipeline,
+ * `disableFaultyTransferEncodingHandling`, `toComputeResponse`, and the body
+ * `ReadableStream` that ties termination to the render - runs as it does in
+ * production.
  *
- * We do not import server.ts directly because its module init does top-level
- * `await getRunConfig()` + Next.js imports. The streaming/termination logic
- * below is kept in lock-step with server.ts so the test exercises the real shape.
+ * server.ts pulls in Next.js and reads build output at module-init time, so the
+ * heavy boundaries it touches (config loading, the Next.js import, storage,
+ * tracing, header post-processing, wait-until/use-cache setup) are mocked out
+ * below. None of them participate in the streaming/termination logic under test.
  *
  * Before the fix:
  *   - a mid-stream abort after headers -> response HUNG open indefinitely
@@ -37,99 +40,52 @@ import { describe, expect, test } from 'vitest'
  * an unparseable "success" or hanging.
  */
 
-// --- verbatim from server.ts ---
-const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) => {
-  const originalStoreHeader = res._storeHeader
-  res._storeHeader = function _storeHeader(firstLine, headers) {
-    if (headers) {
-      if (Array.isArray(headers)) {
-        // eslint-disable-next-line no-param-reassign
-        headers = headers.filter(([header]) => header.toLowerCase() !== 'transfer-encoding')
-      } else {
-        delete (headers as OutgoingHttpHeaders)['transfer-encoding']
-      }
-    }
-    return originalStoreHeader.call(this, firstLine, headers)
-  }
-}
+type FakeNextHandler = (req: IncomingMessage, res: ServerResponse) => Promise<void>
 
-type FakeNextHandler = (res: import('node:http').ServerResponse) => Promise<void>
+// The fake Next.js handler the mocked `getMockedRequestHandler` delegates to.
+// `ref.current` is the render scenario each test swaps in; `handler` is the
+// stable wrapper server.ts caches as its `nextHandler`.
+const mockNextHandler = vi.hoisted(() => {
+  const ref: { current: FakeNextHandler | undefined } = { current: undefined }
+  return {
+    ref,
+    handler: (req: IncomingMessage, res: ServerResponse) => ref.current?.(req, res),
+  }
+})
+
+// Only two boundaries of server.ts need stubbing; everything else (tracing,
+// header post-processing, storage, wait-until/use-cache setup) runs for real.
+//
+//  - `../config.js`: server.ts does a top-level `await getRunConfig()` that
+//    reads build output from disk, and `setRunConfig` asserts the compiled
+//    cache handler exists - neither is present in a unit-test run.
+//  - `../next.cjs`: this is the module that imports Next.js itself, and it is
+//    where the `nextHandler` is created. Stubbing `getMockedRequestHandler`
+//    lets each test inject the render scenario it wants to exercise.
+
+vi.mock('../config.js', () => ({
+  getRunConfig: async () => ({ nextConfig: {}, enableUseCacheHandler: false }),
+  setRunConfig: (config: unknown) => config,
+}))
+
+vi.mock('../next.cjs', () => ({
+  // Returns the request handler server.ts caches as `nextHandler`. We hand back
+  // a thin wrapper that defers to whatever the current test installed, so each
+  // test controls the render behavior while the real server pipeline runs.
+  getMockedRequestHandler: async () => mockNextHandler.handler,
+}))
+
+// Imported after the mocks above are registered (vi.mock is hoisted regardless).
+// const { default: handler } = await import('./server.js')
 
 /**
- * Mirror of the response-finalization half of server.ts's default export.
- * `render` plays the role of `nextHandler(req, resProxy)`.
+ * Drive the real server handler with a given fake render, returning the Response
+ * it produces.
  */
-async function finalizeResponseLikeServerHandler(request: Request, render: FakeNextHandler) {
-  const { req, res } = toReqRes(request)
-
-  Object.defineProperty(req, 'connection', { get: () => ({}) })
-  Object.defineProperty(req, 'socket', { get: () => ({}) })
-
-  disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
-
-  let handlerError: unknown
-  const nextHandlerPromise = render(res).catch((error) => {
-    if (res.headersSent) {
-      handlerError = error instanceof Error ? error : new Error(String(error))
-      res.end()
-    } else {
-      res.statusCode = 500
-      res.end('Internal Server Error')
-    }
-  })
-
-  const response = await toComputeResponse(res)
-
-  async function waitForBackgroundWork() {
-    await nextHandlerPromise
-    res.emit('close')
-  }
-
-  if (!response.body) {
-    await waitForBackgroundWork()
-    return new Response(null, response)
-  }
-
-  const reader = response.body.getReader()
-
-  const responseBody = new ReadableStream({
-    start(controller) {
-      nextHandlerPromise.then(() => {
-        if (res.destroyed && !res.writableEnded) {
-          const abortReason =
-            handlerError ?? new Error('Response stream was destroyed before the render completed')
-          try {
-            controller.error(abortReason)
-          } catch {
-            // already closed/errored
-          }
-        }
-      })
-    },
-    async pull(controller) {
-      try {
-        const { done, value } = await reader.read()
-        if (done) {
-          await waitForBackgroundWork()
-          if (handlerError) controller.error(handlerError)
-          else controller.close()
-          return
-        }
-        controller.enqueue(value)
-      } catch (error) {
-        try {
-          controller.error(error)
-        } catch {
-          // already errored
-        }
-      }
-    },
-    async cancel(reason) {
-      await reader.cancel(reason).catch(() => {})
-    },
-  })
-
-  return new Response(responseBody, response)
+function handleRequest(request: Request, render: FakeNextHandler): Promise<Response> {
+  mockNextHandler.ref.current = render
+  const requestContext: RequestContext = createRequestContext(request)
+  return handler(request, {} as Context, undefined, requestContext)
 }
 
 type DrainResult =
@@ -149,12 +105,14 @@ async function drainBody(response: Response, hangAfterMs = 500): Promise<DrainRe
   let body = ''
   try {
     for (;;) {
-      const timeout = new Promise<'hung'>((resolve) =>
-        setTimeout(() => resolve('hung'), hangAfterMs),
-      )
+      const timeout = new Promise<'hung'>((resolve) => {
+        setTimeout(() => resolve('hung'), hangAfterMs)
+      })
       const next = await Promise.race([reader.read(), timeout])
       if (next === 'hung') {
-        reader.cancel().catch(() => {})
+        reader.cancel().catch(() => {
+          // best-effort cancel; nothing to do if it rejects
+        })
         return { outcome: 'hung', partial: body }
       }
       const { done, value } = next
@@ -171,7 +129,7 @@ describe('streamed response termination', () => {
   test('baseline: a render that completes cleanly produces a well-framed 200', async () => {
     const request = new Request('https://example.netlify.app/page/')
 
-    const response = await finalizeResponseLikeServerHandler(request, async (res) => {
+    const response = await handleRequest(request, async (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' })
       res.write('<html><body>')
       res.write('fully rendered page')
@@ -192,10 +150,12 @@ describe('streamed response termination', () => {
     // headers + opening HTML flush early, then a later async step (e.g. a data
     // fetch) aborts the render. The handler promise does NOT reject: it just
     // destroys the response.
-    const response = await finalizeResponseLikeServerHandler(request, async (res) => {
+    const response = await handleRequest(request, async (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' })
       res.write('<html><body>')
-      await new Promise((r) => setTimeout(r, 10))
+      await new Promise((resolve) => {
+        setTimeout(resolve, 10)
+      })
       res.destroy(new Error('stream aborted mid-render'))
     })
 
@@ -217,7 +177,7 @@ describe('streamed response termination', () => {
   test('render throws after headers committed -> stream errors cleanly, no garbled 200 body', async () => {
     const request = new Request('https://example.netlify.app/throws/')
 
-    const response = await finalizeResponseLikeServerHandler(request, async (res) => {
+    const response = await handleRequest(request, async (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/html' })
       res.write('<html><body>partial')
       throw new Error('render failed mid-stream')
