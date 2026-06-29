@@ -216,6 +216,16 @@ export default async (
     // ATS reports both as a 502 (ats_status_502_invalid_http_response). Now such
     // a render errors the output stream so the platform aborts the response
     // instead of emitting an unparseable "success".
+    // A render that destroyed the response without a clean `end()` left no
+    // terminator on the wire, so the response must error rather than close - no
+    // matter whether the source stream hangs (handled in `start`) or happens to
+    // emit `done` (handled in `pull`). Tying this to `res` state instead of to
+    // *which* of those two the source picks keeps correctness independent of the
+    // underlying stream's behaviour.
+    const wasDestroyedWithoutCleanEnd = () => res.destroyed && !res.writableEnded
+    const destroyedBeforeRenderError = () =>
+      handlerError ?? new Error('Response stream was destroyed before the render completed')
+
     const responseBody = new ReadableStream({
       start(controller) {
         // If the response was destroyed mid-stream without being cleanly ended,
@@ -223,17 +233,29 @@ export default async (
         // handler settles we know no more bytes are coming - error the output so
         // the platform aborts the connection promptly. (A handler that threw is
         // handled in `pull` via the clean `end()` in the catch above.)
-        nextHandlerPromise.then(() => {
-          if (res.destroyed && !res.writableEnded) {
-            const abortReason =
-              handlerError ?? new Error('Response stream was destroyed before the render completed')
-            try {
-              controller.error(abortReason)
-            } catch {
-              // controller may already be closed or errored - nothing to do.
+        nextHandlerPromise
+          .then(async () => {
+            if (wasDestroyedWithoutCleanEnd()) {
+              const abortReason = destroyedBeforeRenderError()
+              try {
+                controller.error(abortReason)
+              } catch {
+                // controller may already be closed or errored - nothing to do.
+              }
+              // `pull` is parked on a `reader.read()` that will never settle
+              // because the destroyed response never closes its stream. Cancel
+              // the source reader so it is released instead of leaking.
+              try {
+                await reader.cancel(abortReason)
+              } catch {
+                // best-effort release - nothing to do if cancel rejects.
+              }
             }
-          }
-        })
+          })
+          .catch(() => {
+            // nextHandlerPromise already swallows its own errors; this only
+            // guards the termination logic above.
+          })
       },
       async pull(controller) {
         try {
@@ -242,6 +264,11 @@ export default async (
             await waitForBackgroundWork()
             if (handlerError) {
               controller.error(handlerError)
+            } else if (wasDestroyedWithoutCleanEnd()) {
+              // The source emitted `done` for a response that was destroyed
+              // without a clean `end()` - treat it as an abort, never a clean
+              // close, so a failed render can't reach the edge as a truncated 200.
+              controller.error(destroyedBeforeRenderError())
             } else {
               controller.close()
             }
@@ -257,7 +284,11 @@ export default async (
         }
       },
       async cancel(reason) {
-        await reader.cancel(reason).catch(() => {})
+        try {
+          await reader.cancel(reason)
+        } catch {
+          // best-effort cancel - nothing to do if it rejects.
+        }
       },
     })
 
