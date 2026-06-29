@@ -12,9 +12,8 @@ import handler from './server.js'
  * A streamed SSR response commits its headers (typically a 200, with no
  * Content-Length) as soon as Next.js flushes them - well before the body
  * finishes. If the render then fails *after* that point, the response can no
- * longer become a 5xx, and the body must terminate cleanly or the edge sees an
- * unparseable HTTP message (which ATS reports as a 502,
- * ats_status_502_invalid_http_response).
+ * longer become a 5xx, and the body must terminate cleanly or the edge sees a
+ * malformed HTTP message and rejects the response.
  *
  * These tests exercise the *real* `server.ts` default export. The only thing we
  * substitute is the Next.js request handler itself (the `nextHandler` that
@@ -37,7 +36,7 @@ import handler from './server.js'
  *
  * After the fix: a failed/aborted render terminates the response stream
  * cleanly (errors), so the platform aborts the connection instead of emitting
- * an unparseable "success" or hanging.
+ * a malformed "success" or hanging.
  */
 
 type FakeNextHandler = (req: IncomingMessage, res: ServerResponse) => Promise<void>
@@ -74,9 +73,6 @@ vi.mock('../next.cjs', () => ({
   // test controls the render behavior while the real server pipeline runs.
   getMockedRequestHandler: async () => mockNextHandler.handler,
 }))
-
-// Imported after the mocks above are registered (vi.mock is hoisted regardless).
-// const { default: handler } = await import('./server.js')
 
 /**
  * Drive the real server handler with a given fake render, returning the Response
@@ -167,7 +163,7 @@ describe('streamed response termination', () => {
     const drained = await drainBody(response)
     // The response no longer hangs - it errors promptly and deterministically
     // so the platform aborts the connection (an explicit incomplete signal)
-    // rather than holding an unterminated stream open until ATS times it out.
+    // rather than holding an unterminated stream open until the edge times it out.
     expect(drained.outcome).toBe('errored')
     if (drained.outcome === 'errored') {
       expect(drained.partial.includes('</body></html>')).toBe(false)
