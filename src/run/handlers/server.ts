@@ -100,12 +100,22 @@ export default async (
     const resProxy = augmentNextResponse(res, requestContext)
 
     // We don't await this here, because it won't resolve until the response is finished.
+    // Tracks a render failure so it can be surfaced on the response stream below.
+    let handlerError: unknown
     const nextHandlerPromise = nextHandler(req, resProxy).catch((error) => {
       getLogger().withError(error).error('next handler error')
       console.error(error)
-      resProxy.statusCode = 500
-      span?.setAttribute('http.status_code', 500)
-      resProxy.end('Internal Server Error')
+      if (resProxy.headersSent) {
+        // Headers are already sent, so we can't turn this into a 500. Record the
+        // error and end cleanly; the body stream below surfaces it as a failure.
+        handlerError = error instanceof Error ? error : new Error(String(error))
+        resProxy.end()
+      } else {
+        // We can still produce a proper error response.
+        resProxy.statusCode = 500
+        span?.setAttribute('http.status_code', 500)
+        resProxy.end('Internal Server Error')
+      }
     })
 
     // Contrary to the docs, this resolves when the headers are available, not when the stream closes.
@@ -183,16 +193,79 @@ export default async (
       await requestContext.backgroundWorkPromise
     }
 
-    const keepOpenUntilNextFullyRendered = new TransformStream({
-      async flush() {
-        await waitForBackgroundWork()
+    if (!response.body) {
+      await waitForBackgroundWork()
+      return new Response(null, response)
+    }
+
+    const reader = response.body.getReader()
+
+    // Stream the body, keeping it open until the render and background work
+    // finish. A render that aborts/fails after headers are committed must error
+    // the stream rather than hang or close as a truncated 200. Tying that to
+    // `res` state keeps it correct whether the source stream hangs (caught in
+    // `start`) or emits `done` (caught in `pull`).
+    const wasDestroyedWithoutCleanEnd = () => res.destroyed && !res.writableEnded
+    const destroyedBeforeRenderError = () =>
+      handlerError ?? new Error('Response stream was destroyed before the render completed')
+
+    const responseBody = new ReadableStream({
+      start(controller) {
+        // Destroyed source streams never close, so `pull` would park forever.
+        // Once the handler settles, error the output and release the reader.
+        nextHandlerPromise
+          .then(async () => {
+            if (wasDestroyedWithoutCleanEnd()) {
+              const abortReason = destroyedBeforeRenderError()
+              try {
+                controller.error(abortReason)
+              } catch {
+                // already closed or errored
+              }
+              try {
+                await reader.cancel(abortReason)
+              } catch {
+                // best-effort release
+              }
+            }
+          })
+          .catch(() => {
+            // nextHandlerPromise already handles its own errors
+          })
+      },
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read()
+          if (done) {
+            await waitForBackgroundWork()
+            if (handlerError) {
+              controller.error(handlerError)
+            } else if (wasDestroyedWithoutCleanEnd()) {
+              // source closed but the render was aborted - error, never close
+              controller.error(destroyedBeforeRenderError())
+            } else {
+              controller.close()
+            }
+            return
+          }
+          controller.enqueue(value)
+        } catch (error) {
+          try {
+            controller.error(error)
+          } catch {
+            // already errored
+          }
+        }
+      },
+      async cancel(reason) {
+        try {
+          await reader.cancel(reason)
+        } catch {
+          // best-effort cancel
+        }
       },
     })
 
-    if (!response.body) {
-      await waitForBackgroundWork()
-    }
-
-    return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
+    return new Response(responseBody, response)
   })
 }
