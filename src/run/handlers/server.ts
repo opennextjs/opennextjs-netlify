@@ -100,12 +100,27 @@ export default async (
     const resProxy = augmentNextResponse(res, requestContext)
 
     // We don't await this here, because it won't resolve until the response is finished.
+    // Tracks a render failure so it can be surfaced on the response stream below.
+    let handlerError: unknown
     const nextHandlerPromise = nextHandler(req, resProxy).catch((error) => {
       getLogger().withError(error).error('next handler error')
       console.error(error)
-      resProxy.statusCode = 500
-      span?.setAttribute('http.status_code', 500)
-      resProxy.end('Internal Server Error')
+      if (resProxy.headersSent) {
+        // Headers (and almost always a 200) are already on the wire, so we can
+        // no longer turn this into a 500. Record the error and end the response
+        // cleanly so buffered bytes flush in order; the body stream below then
+        // surfaces the error to the platform. Previously this appended
+        // "Internal Server Error" onto the partial response, producing a garbled
+        // "successful" 200 that ATS rejects as a 502
+        // (ats_status_502_invalid_http_response).
+        handlerError = error instanceof Error ? error : new Error(String(error))
+        resProxy.end()
+      } else {
+        // We can still produce a proper error response.
+        resProxy.statusCode = 500
+        span?.setAttribute('http.status_code', 500)
+        resProxy.end('Internal Server Error')
+      }
     })
 
     // Contrary to the docs, this resolves when the headers are available, not when the stream closes.
@@ -183,16 +198,69 @@ export default async (
       await requestContext.backgroundWorkPromise
     }
 
-    const keepOpenUntilNextFullyRendered = new TransformStream({
-      async flush() {
-        await waitForBackgroundWork()
+    if (!response.body) {
+      await waitForBackgroundWork()
+      return new Response(null, response)
+    }
+
+    const reader = response.body.getReader()
+
+    // Stream the body through, keeping it open until the render and any tracked
+    // background work finish, but tie termination to the request handler so a
+    // failed/aborted render terminates the response *cleanly*.
+    //
+    // The previous implementation piped through a TransformStream whose flush()
+    // only awaited background work and had no error path. If a render aborted or
+    // threw after headers were already committed, the response either hung open
+    // (the source stream never closes) or closed as a truncated/garbled 200.
+    // ATS reports both as a 502 (ats_status_502_invalid_http_response). Now such
+    // a render errors the output stream so the platform aborts the response
+    // instead of emitting an unparseable "success".
+    const responseBody = new ReadableStream({
+      start(controller) {
+        // If the response was destroyed mid-stream without being cleanly ended,
+        // the source stream never closes, so `pull` would hang forever. Once the
+        // handler settles we know no more bytes are coming - error the output so
+        // the platform aborts the connection promptly. (A handler that threw is
+        // handled in `pull` via the clean `end()` in the catch above.)
+        nextHandlerPromise.then(() => {
+          if (res.destroyed && !res.writableEnded) {
+            const abortReason =
+              handlerError ?? new Error('Response stream was destroyed before the render completed')
+            try {
+              controller.error(abortReason)
+            } catch {
+              // controller may already be closed or errored - nothing to do.
+            }
+          }
+        })
+      },
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read()
+          if (done) {
+            await waitForBackgroundWork()
+            if (handlerError) {
+              controller.error(handlerError)
+            } else {
+              controller.close()
+            }
+            return
+          }
+          controller.enqueue(value)
+        } catch (error) {
+          try {
+            controller.error(error)
+          } catch {
+            // already errored
+          }
+        }
+      },
+      async cancel(reason) {
+        await reader.cancel(reason).catch(() => {})
       },
     })
 
-    if (!response.body) {
-      await waitForBackgroundWork()
-    }
-
-    return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
+    return new Response(responseBody, response)
   })
 }
