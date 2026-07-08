@@ -53,6 +53,17 @@ jobs:
         working-directory: adapter
         run: npm ci && npm run build
 
+      # Pack the adapter once here (it depends only on the build, not on any
+      # test fixture) to a stable filename inside the cached `adapter` dir, so
+      # every test fixture can install it without re-packing. netlify-cli is
+      # also already installed (and version-pinned) in adapter/node_modules from
+      # `npm ci` above, and is cached along with it.
+      - name: Pack adapter
+        working-directory: adapter
+        run: |
+          TARBALL="$(npm pack | tail -1)"
+          mv "$TARBALL" adapter-package.tgz
+
       - uses: actions/cache/save@v5
         with:
           # Keyed only on sha so that re-runs of the test job (which get a new
@@ -137,6 +148,7 @@ jobs:
         working-directory: nextjs
         env:
           ADAPTER_DIR: ${{ github.workspace }}/adapter
+          ADAPTER_TARBALL: ${{ github.workspace }}/adapter/adapter-package.tgz
           IS_TURBOPACK_TEST: 1
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ADAPTER_E2E_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_ADAPTER_E2E_SITE_ID }}

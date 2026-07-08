@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Required — set by the Next.js test harness
+# Required — set by the Next.js test harness / CI environment
 : "${ADAPTER_DIR:?ADAPTER_DIR must be set to the adapter repository root}"
-# Required — provided via CI environment
+: "${ADAPTER_TARBALL:?ADAPTER_TARBALL must point to the pre-packed adapter tarball}"
 : "${NETLIFY_AUTH_TOKEN:?NETLIFY_AUTH_TOKEN must be set}"
 : "${NETLIFY_SITE_ID:?NETLIFY_SITE_ID must be set}"
 
-# Install netlify-cli into the temp app so it is available without a global install
-npm i -D netlify-cli >&2
-
-# Pack the adapter and install it into the temp app
-TARBALL="$(cd "$ADAPTER_DIR" && npm pack 2>/dev/null | tail -1)"
-npm i "$ADAPTER_DIR/$TARBALL" >&2
+# Install the adapter into the temp app so netlify.toml can resolve the
+# @netlify/plugin-nextjs plugin. The tarball is built and packed once in CI
+# (see the "Pack adapter" workflow step) and reused across every fixture; only
+# the install (which also pulls the plugin's own deps) is per-fixture.
+# On failure, surface the npm output on stdout so the harness captures it (same
+# rationale as the deploy command below).
+if ! npm i "$ADAPTER_TARBALL" > .adapter-deploy.log 2>&1; then
+  cat .adapter-deploy.log
+  exit 1
+fi
 
 # Create netlify.toml pointing to the installed plugin
 cat > netlify.toml <<'EOF'
@@ -24,7 +28,9 @@ cat > netlify.toml <<'EOF'
   package = "@netlify/plugin-nextjs"
 EOF
 
-# Deploy — Netlify CLI runs the build automatically before deploying.
+# Deploy — Netlify CLI runs the build automatically before deploying. We invoke
+# the netlify-cli that's already installed (and version-pinned) in the adapter's
+# node_modules, rather than installing it per fixture.
 # NO_COLOR=1 disables ANSI escape codes so the URL grep below is reliable.
 # Deploy output is written to .adapter-deploy.log (in the per-test cwd, so no
 # cross-run clash) — it is read again below AND by e2e-logs.sh, which surfaces
@@ -38,7 +44,7 @@ EOF
 # We deliberately do NOT also stream to stderr: run-tests.js buffers child output
 # and prints it only for failed tests, so sending it to stderr here as well would
 # duplicate the whole deploy log in the GitHub Actions failed-test output.
-if ! NO_COLOR=1 npx netlify deploy > .adapter-deploy.log 2>&1; then
+if ! NO_COLOR=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy > .adapter-deploy.log 2>&1; then
   cat .adapter-deploy.log
   exit 1
 fi
