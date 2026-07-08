@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       nextjsRef:
-        description: 'Next.js repo ref (branch/tag/SHA)'
-        default: 'canary'
+        description: "Next.js repo ref (branch/tag/SHA)"
+        default: "canary"
         type: string
   # schedule:
   #   - cron: '0 2 * * *'
@@ -32,11 +32,11 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: "20"
 
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: '2.6'
+          deno-version: "2.6"
 
       - name: Setup pnpm
         run: npm i -g corepack && corepack enable
@@ -119,7 +119,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Setup pnpm
         run: npm i -g corepack && corepack enable
@@ -153,13 +153,13 @@ jobs:
           ADAPTER_DIR: ${{ github.workspace }}/adapter
           ADAPTER_TARBALL: ${{ github.workspace }}/adapter/adapter-package.tgz
           IS_TURBOPACK_TEST: 1
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_ADAPTER_E2E_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_ADAPTER_E2E_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: 1d5a5c76-d445-4ae5-b694-b0d3f2e2c395
           NEXT_E2E_TEST_TIMEOUT: 240000
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
           # Emit a jest-junit report per test file. With IS_TURBOPACK_TEST set,
           # jest.config.js writes them to nextjs/turbopack-test-junit-report/.
-          NEXT_JUNIT_TEST_REPORT: 'true'
+          NEXT_JUNIT_TEST_REPORT: "true"
           NEXT_TELEMETRY_DISABLED: 1
           NEXT_TEST_JOB: 1
           # Memoize passed test files so GHA re-runs skip them (see cache steps
