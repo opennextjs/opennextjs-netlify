@@ -120,6 +120,19 @@ jobs:
           chmod +x adapter/scripts/e2e-logs.sh
           chmod +x adapter/scripts/e2e-cleanup.sh
 
+      # Restore the list of tests that already passed in an earlier attempt of
+      # this same workflow run. On a re-run (github.run_attempt increments) this
+      # lets run-tests.js skip already-passed tests and only re-run the ones
+      # that were still failing. Scoped per shard (strategy.job-index) and per
+      # run (github.run_id), so a new push always starts fresh.
+      - name: Restore passed-tests cache
+        uses: actions/cache/restore@v5
+        with:
+          path: nextjs/.next-test-passed.txt
+          key: next-test-passed-${{ strategy.job-index }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
+          restore-keys: |
+            next-test-passed-${{ strategy.job-index }}-${{ github.run_id }}-
+
       - name: Run deploy tests
         working-directory: nextjs
         env:
@@ -131,8 +144,21 @@ jobs:
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
           NEXT_TELEMETRY_DISABLED: 1
           NEXT_TEST_JOB: 1
+          # Memoize passed test files so GHA re-runs skip them (see cache steps
+          # above/below). Path is relative to this step's working-directory
+          # (nextjs), i.e. nextjs/.next-test-passed.txt.
+          NEXT_TEST_PASSED_FILE: .next-test-passed.txt
           NEXT_TEST_MODE: deploy
           NEXT_TEST_DEPLOY_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-deploy.sh
           NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-logs.sh
           NEXT_TEST_CLEANUP_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-cleanup.sh
         run: node run-tests.js -c 2 -g ${{ matrix.group }} --timings --type e2e
+
+      # Save the passed-tests file so the next attempt (if any) of this run can
+      # skip them. always() so it runs on success, failure, or cancellation.
+      - name: Save passed-tests cache
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: nextjs/.next-test-passed.txt
+          key: next-test-passed-${{ strategy.job-index }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
