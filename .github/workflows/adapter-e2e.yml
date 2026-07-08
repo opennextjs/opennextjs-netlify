@@ -154,6 +154,9 @@ jobs:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_ADAPTER_E2E_SITE_ID }}
           NEXT_E2E_TEST_TIMEOUT: 240000
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
+          # Emit a jest-junit report per test file. With IS_TURBOPACK_TEST set,
+          # jest.config.js writes them to nextjs/turbopack-test-junit-report/.
+          NEXT_JUNIT_TEST_REPORT: 'true'
           NEXT_TELEMETRY_DISABLED: 1
           NEXT_TEST_JOB: 1
           # Memoize passed test files so GHA re-runs skip them (see cache steps
@@ -174,3 +177,14 @@ jobs:
         with:
           path: nextjs/.next-test-passed.txt
           key: next-test-passed-${{ strategy.job-index }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
+
+      # Upload this shard's jest-junit reports so results can be aggregated /
+      # classified later. Named per shard (matrix.group contains a slash, so use
+      # the job index). Uploaded on pass or fail.
+      - name: Upload JUnit results
+        if: success() || failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: adapter-e2e-junit-${{ strategy.job-index }}
+          path: nextjs/turbopack-test-junit-report/*.xml
+          if-no-files-found: warn
