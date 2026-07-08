@@ -49,15 +49,18 @@ jobs:
         working-directory: nextjs
         run: pnpm exec playwright install --with-deps chromium
 
+      # netlify-cli is installed (and version-pinned) in adapter/node_modules by
+      # `npm ci` above and cached with the `adapter` dir, so the deploy script can
+      # invoke it directly.
       - name: Build adapter
         working-directory: adapter
         run: npm ci && npm run build
 
-      # Pack the adapter once here (it depends only on the build, not on any
-      # test fixture) to a stable filename inside the cached `adapter` dir, so
-      # every test fixture can install it without re-packing. netlify-cli is
-      # also already installed (and version-pinned) in adapter/node_modules from
-      # `npm ci` above, and is cached along with it.
+      # Pack the adapter once here (it depends only on the build, not on any test
+      # fixture) to a stable filename inside the cached `adapter` dir. Each test
+      # fixture references this tarball as a file: dependency (see
+      # scripts/e2e-deploy.sh), which is faster and more deterministic than
+      # pointing a file: dep at the adapter dir (npm would re-pack per fixture).
       - name: Pack adapter
         working-directory: adapter
         run: |
