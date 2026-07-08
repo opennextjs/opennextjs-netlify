@@ -36,7 +36,7 @@ fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
 # adapter. This is the ONLY thing that populates node_modules.
 # On failure, cat the full log to stdout so the harness captures it (same
 # rationale as the deploy command below).
-if ! npm install >> .adapter-deploy.log 2>&1; then
+if ! pnpm install --strict-peer-dependencies=false --no-frozen-lockfile >> .adapter-deploy.log 2>&1; then
   cat .adapter-deploy.log
   exit 1
 fi
