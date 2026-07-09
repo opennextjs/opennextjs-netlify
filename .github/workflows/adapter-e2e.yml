@@ -67,6 +67,33 @@ jobs:
           TARBALL="$(npm pack | tail -1)"
           mv "$TARBALL" adapter-package.tgz
 
+      # Run-level provenance the JUnit reports themselves don't carry: the
+      # adapter commit/branch, the requested next.js ref, and the RESOLVED
+      # next.js sha + version that was actually built and tested. Written into
+      # the cached `adapter` dir (so test jobs can read it too) and uploaded as
+      # an artifact the ingest seed script attaches as query params.
+      - name: Write run metadata
+        run: |
+          NEXT_VERSION="$(node -p "require('./nextjs/packages/next/package.json').version")"
+          NEXT_SHA="$(git -C nextjs rev-parse HEAD)"
+          cat > adapter/adapter-e2e-metadata.json <<JSON
+          {
+            "adapterRepo": "${{ github.repository }}",
+            "adapterSha": "${{ github.sha }}",
+            "adapterBranch": "${{ github.ref_name }}",
+            "nextjsRef": "${{ inputs.nextjsRef || 'canary' }}",
+            "nextjsSha": "$NEXT_SHA",
+            "nextjsVersion": "$NEXT_VERSION"
+          }
+          JSON
+          cat adapter/adapter-e2e-metadata.json
+
+      - name: Upload run metadata
+        uses: actions/upload-artifact@v6
+        with:
+          name: adapter-e2e-metadata
+          path: adapter/adapter-e2e-metadata.json
+
       - uses: actions/cache/save@v5
         with:
           # Keyed only on sha so that re-runs of the test job (which get a new
