@@ -157,8 +157,9 @@ jobs:
           NETLIFY_SITE_ID: 1d5a5c76-d445-4ae5-b694-b0d3f2e2c395
           NEXT_E2E_TEST_TIMEOUT: 240000
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
-          # Emit a jest-junit report per test file. With IS_TURBOPACK_TEST set,
-          # jest.config.js writes them to nextjs/turbopack-test-junit-report/.
+          # Emit a jest-junit report per test file. jest.config.js sets
+          # rootDir: 'test', so with IS_TURBOPACK_TEST the reports land in
+          # nextjs/test/turbopack-test-junit-report/.
           NEXT_JUNIT_TEST_REPORT: "true"
           NEXT_TELEMETRY_DISABLED: 1
           NEXT_TEST_JOB: 1
@@ -189,5 +190,5 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: adapter-e2e-junit-${{ strategy.job-index }}
-          path: nextjs/turbopack-test-junit-report/*.xml
+          path: nextjs/test/turbopack-test-junit-report/*.xml
           if-no-files-found: warn
