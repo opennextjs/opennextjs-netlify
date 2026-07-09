@@ -185,11 +185,16 @@ jobs:
 
       # Upload this shard's jest-junit reports so results can be aggregated /
       # classified later. Named per shard (matrix.group contains a slash, so use
-      # the job index). Uploaded on pass or fail.
+      # the job index) AND per run attempt: GitHub keeps artifacts across
+      # attempts, so without the attempt suffix a re-run's artifact collides
+      # with the original's name and they can't be downloaded separately. With
+      # the suffix, the initial and each re-run are distinct artifacts, and the
+      # ingest app tags them as separate runs (runId::runAttempt).
+      # Uploaded on pass or fail.
       - name: Upload JUnit results
         if: success() || failure()
         uses: actions/upload-artifact@v6
         with:
-          name: adapter-e2e-junit-${{ strategy.job-index }}
+          name: adapter-e2e-junit-${{ strategy.job-index }}-attempt-${{ github.run_attempt }}
           path: nextjs/test/turbopack-test-junit-report/*.xml
           if-no-files-found: warn
