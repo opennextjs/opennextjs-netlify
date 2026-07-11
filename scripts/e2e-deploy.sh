@@ -31,12 +31,51 @@ pkg.dependencies['@netlify/plugin-nextjs'] = 'file:${ADAPTER_TARBALL}';
 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
 " >&2
 
+# Which package manager installs the fixture is not ours to pick. The harness
+# always writes a `packageManager` field into the temp app's package.json
+# (test/lib/next-modes/base.ts): the next.js repo's own pnpm by default, but a
+# test may override it — handle-non-hoisted-swc-helpers and filesystem-cache ask
+# for npm, yarn-pnp asks for yarn, because the test is *about* that package
+# manager's node_modules layout. CI runs with corepack enabled, and corepack
+# refuses to run a package manager the project didn't ask for:
+#   "This project is configured to use npm because <dir>/package.json has a
+#    "packageManager" field"
+# So dispatch on the field rather than hardcoding one.
+#
+# Each install needs the same two concessions, spelled differently per manager:
+#   (a) tolerate peer-dependency conflicts. Fixtures pin next/react versions that
+#       don't satisfy every peer range in the tree, and the adapter arrives as a
+#       file: tarball whose own peers won't line up either. This must warn, not
+#       fail.
+#   (b) don't demand a lockfile. The temp app is generated fresh and has none, so
+#       any "must match the lockfile" mode aborts immediately.
+PACKAGE_MANAGER="$(node -p "(require('./package.json').packageManager || 'pnpm').split('@')[0]")"
+case "$PACKAGE_MANAGER" in
+  # pnpm fails the install on a peer conflict, and --frozen-lockfile is its
+  # default when CI=true — so both concessions have to be made explicitly.
+  pnpm) INSTALL=(pnpm install --strict-peer-dependencies=false --no-frozen-lockfile) ;;
+  # npm errors with ERESOLVE on a peer conflict; --legacy-peer-deps downgrades
+  # that to a warning. `npm install` (unlike `npm ci`) already writes the
+  # lockfile it lacks, so there's nothing to relax for (b).
+  npm) INSTALL=(npm install --legacy-peer-deps) ;;
+  # yarn only ever warns about peers, so (a) is free. For (b): yarn 1 is
+  # non-immutable by default, while yarn 2+ turns immutable installs ON when
+  # CI=true and then dies on the missing lockfile. Setting that via the env var
+  # rather than --no-immutable covers yarn 2+ without yarn 1 (which is what
+  # yarn-pnp pins) choking on a flag it has never heard of.
+  yarn) INSTALL=(env YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install) ;;
+  *)
+    echo "Unsupported packageManager '$PACKAGE_MANAGER' in the fixture's package.json"
+    exit 1
+    ;;
+esac
+
 # Install into the temp app: `next` (resolved from the preview-builds mirror via
 # the harness-written .npmrc), react, the fixture's own deps, and the file:
 # adapter. This is the ONLY thing that populates node_modules.
 # On failure, cat the full log to stdout so the harness captures it (same
 # rationale as the deploy command below).
-if ! pnpm install --strict-peer-dependencies=false --no-frozen-lockfile >> .adapter-deploy.log 2>&1; then
+if ! "${INSTALL[@]}" >> .adapter-deploy.log 2>&1; then
   cat .adapter-deploy.log
   exit 1
 fi
