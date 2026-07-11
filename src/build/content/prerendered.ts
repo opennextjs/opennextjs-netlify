@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import { glob } from 'fast-glob'
+import type { PrerenderManifestRoute } from 'next-with-cache-handler-v2/dist/build/index.js'
 import type { RouteMetadata } from 'next-with-cache-handler-v2/dist/export/routes/types.js'
 import pLimit from 'p-limit'
 import { satisfies } from 'semver'
@@ -56,9 +57,34 @@ const routeToFilePath = (path: string) => {
   return `/${path}`
 }
 
+function prerenderManifestRouteToRevalidateAndCacheControlProperties(
+  prerenderManifestRoute: PrerenderManifestRoute | undefined,
+) {
+  if (!prerenderManifestRoute) {
+    return {}
+  }
+
+  return {
+    revalidate: prerenderManifestRoute.initialRevalidateSeconds,
+    cacheControl: prerenderManifestRoute.initialRevalidateSeconds
+      ? {
+          revalidate: prerenderManifestRoute.initialRevalidateSeconds,
+          expire:
+            typeof prerenderManifestRoute.initialExpireSeconds === 'number'
+              ? prerenderManifestRoute.initialExpireSeconds +
+                (prerenderManifestRoute.initialExpireSeconds ===
+                prerenderManifestRoute.initialRevalidateSeconds
+                  ? 31536000000
+                  : 0)
+              : undefined,
+        }
+      : undefined,
+  }
+}
+
 const buildPagesCacheValue = async (
   path: string,
-  initialRevalidateSeconds: number | false | undefined,
+  prerenderManifestRoute: PrerenderManifestRoute | undefined,
   shouldUseEnumKind: boolean,
   shouldSkipJson = false,
 ): Promise<NetlifyCachedPageValue> => ({
@@ -67,7 +93,7 @@ const buildPagesCacheValue = async (
   pageData: shouldSkipJson ? {} : JSON.parse(await readFile(`${path}.json`, 'utf-8')),
   headers: undefined,
   status: undefined,
-  revalidate: initialRevalidateSeconds,
+  ...prerenderManifestRouteToRevalidateAndCacheControlProperties(prerenderManifestRoute),
 })
 
 const RSC_SEGMENTS_DIR_SUFFIX = '.segments'
@@ -75,6 +101,7 @@ const RSC_SEGMENT_SUFFIX = '.segment.rsc'
 
 const buildAppCacheValue = async (
   path: string,
+  prerenderManifestRoute: PrerenderManifestRoute | undefined,
   shouldUseAppPageKind: boolean,
   rscIsRequired = true,
 ): Promise<NetlifyCachedAppPageValue | NetlifyCachedPageValue> => {
@@ -117,6 +144,7 @@ const buildAppCacheValue = async (
         }),
       segmentData,
       ...meta,
+      ...prerenderManifestRouteToRevalidateAndCacheControlProperties(prerenderManifestRoute),
     }
   }
 
@@ -141,26 +169,37 @@ const buildAppCacheValue = async (
     html,
     pageData: rsc,
     ...meta,
+    ...prerenderManifestRouteToRevalidateAndCacheControlProperties(prerenderManifestRoute),
   }
 }
 
 const buildRouteCacheValue = async (
   path: string,
-  initialRevalidateSeconds: number | false,
+  prerenderManifestRoute: PrerenderManifestRoute,
   shouldUseEnumKind: boolean,
 ): Promise<NetlifyCachedRouteValue> => ({
   kind: shouldUseEnumKind ? 'APP_ROUTE' : 'ROUTE',
   body: await readFile(`${path}.body`, 'base64'),
   ...JSON.parse(await readFile(`${path}.meta`, 'utf-8')),
-  revalidate: initialRevalidateSeconds,
+  ...prerenderManifestRouteToRevalidateAndCacheControlProperties(prerenderManifestRoute),
 })
 
 const buildFetchCacheValue = async (
   path: string,
-): Promise<CachedFetchValueForMultipleVersions> => ({
-  kind: 'FETCH',
-  ...JSON.parse(await readFile(path, 'utf-8')),
-})
+): Promise<{ value: CachedFetchValueForMultipleVersions; lastModified: number }> => {
+  const data = JSON.parse(await readFile(path, 'utf-8')) as Omit<
+    CachedFetchValueForMultipleVersions,
+    'kind'
+  >
+
+  return {
+    value: {
+      kind: 'FETCH',
+      ...data,
+    },
+    lastModified: Date.now() - (data?.revalidate ?? 31536000000),
+  }
+}
 
 /**
  * Upload prerendered content to the blob store
@@ -198,43 +237,44 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
 
       await Promise.all([
         ...Object.entries(manifest.routes).map(
-          ([route, meta]): Promise<void> =>
+          ([route, prerenderManifestRoute]): Promise<void> =>
             limitConcurrentPrerenderContentHandling(async () => {
-              const lastModified = meta.initialRevalidateSeconds
-                ? Date.now() - 31536000000
+              const lastModified = prerenderManifestRoute.initialRevalidateSeconds
+                ? Date.now() - prerenderManifestRoute.initialRevalidateSeconds * 1000
                 : Date.now()
               const key = routeToFilePath(route)
               let value: NetlifyIncrementalCacheValue
               switch (true) {
                 // Parallel route default layout has no prerendered page
-                case meta.dataRoute?.endsWith('/default.rsc') &&
+                case prerenderManifestRoute.dataRoute?.endsWith('/default.rsc') &&
                   !existsSync(join(ctx.publishDir, 'server/app', `${key}.html`)):
                   return
-                case meta.dataRoute?.endsWith('.json'):
+                case prerenderManifestRoute.dataRoute?.endsWith('.json'):
                   if (manifest.notFoundRoutes.includes(route)) {
                     // if pages router returns 'notFound: true', build won't produce html and json files
                     return
                   }
                   value = await buildPagesCacheValue(
                     join(ctx.publishDir, 'server/pages', key),
-                    meta.initialRevalidateSeconds,
+                    prerenderManifestRoute,
                     shouldUseEnumKind,
                   )
                   break
-                case meta.dataRoute?.endsWith('.rsc'):
+                case prerenderManifestRoute.dataRoute?.endsWith('.rsc'):
                   value = await buildAppCacheValue(
                     join(ctx.publishDir, 'server/app', key),
+                    prerenderManifestRoute,
                     shouldUseAppPageKind,
-                    meta.renderingMode !== 'PARTIALLY_STATIC',
+                    prerenderManifestRoute.renderingMode !== 'PARTIALLY_STATIC',
                   )
                   if (route === '/_not-found') {
                     appRouterNotFoundDefinedInPrerenderManifest = true
                   }
                   break
-                case meta.dataRoute === null:
+                case prerenderManifestRoute.dataRoute === null:
                   value = await buildRouteCacheValue(
                     join(ctx.publishDir, 'server/app', key),
-                    meta.initialRevalidateSeconds,
+                    prerenderManifestRoute,
                     shouldUseEnumKind,
                   )
                   break
@@ -268,6 +308,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
             const key = routeToFilePath(route)
             const value = await buildAppCacheValue(
               join(ctx.publishDir, 'server/app', key),
+              undefined,
               shouldUseAppPageKind,
               // shells always have `renderingMode === 'PARTIALLY_STATIC'`
               false,
@@ -288,6 +329,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
         const key = '/404'
         const value = await buildAppCacheValue(
           join(ctx.publishDir, 'server/app/_not-found'),
+          undefined,
           shouldUseAppPageKind,
         )
         await writeCacheEntry(key, value, lastModified, ctx)
@@ -310,9 +352,8 @@ export const copyFetchContent = async (ctx: PluginContext): Promise<void> => {
 
     await Promise.all(
       paths.map(async (key): Promise<void> => {
-        const lastModified = Date.now() - 31536000000
         const path = join(ctx.publishDir, 'cache/fetch-cache', key)
-        const value = await buildFetchCacheValue(path)
+        const { value, lastModified } = await buildFetchCacheValue(path)
         await writeCacheEntry(key, value, lastModified, ctx)
       }),
     )
