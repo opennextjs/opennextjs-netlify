@@ -106,7 +106,7 @@ EOF
 # We deliberately do NOT also stream to stderr: run-tests.js buffers child output
 # and prints it only for failed tests, so sending it to stderr here as well would
 # duplicate the whole log in the GitHub Actions failed-test output.
-if ! NO_COLOR=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy >> .adapter-deploy.log 2>&1; then
+if ! NO_COLOR=1 NETLIFY_NEXT_SKEW_PROTECTION=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy >> .adapter-deploy.log 2>&1; then
   cat .adapter-deploy.log
   exit 1
 fi
