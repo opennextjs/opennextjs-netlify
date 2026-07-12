@@ -125,17 +125,21 @@ if [ -z "$DEPLOY_URL" ]; then
   exit 1
 fi
 
-# Persist deployment metadata markers for e2e-logs.sh. These are the
-# authoritative BUILD_ID / DEPLOYMENT_ID / NEXT_SUPPORTS_IMMUTABLE_ASSETS values
-# (DEPLOYMENT_ID is only known here, after deploy) that the harness parses out
-# of next.cliOutput.
-BUILD_ID="$(cat .next/BUILD_ID 2>/dev/null || echo 'unknown')"
-DEPLOYMENT_ID="$(grep -oE '/deploys/[a-f0-9]+' .adapter-deploy.log | grep -oE '[a-f0-9]+' | tail -1)" || true
-{
-  echo "BUILD_ID: $BUILD_ID"
-  echo "DEPLOYMENT_ID: $DEPLOYMENT_ID"
-  echo "NEXT_SUPPORTS_IMMUTABLE_ASSETS: false"
-} > .adapter-deploy-metadata.log
-
+# No metadata markers are written here any more.
+#
+# We used to emit BUILD_ID / DEPLOYMENT_ID / NEXT_SUPPORTS_IMMUTABLE_ASSETS into
+# .adapter-deploy-metadata.log, which e2e-logs.sh printed FIRST so it won the harness's
+# first-match parse. All three are redundant — the fixture's post-build script already
+# prints them from inside the build (the harness appends `&& pnpm post-build` to every
+# fixture's build script in deploy mode) — and the DEPLOYMENT_ID we supplied was
+# actively WRONG: it was the Netlify deploy id scraped from the deploy URL, whereas
+# Next.js means the skew protection token by "deployment id" — the value inlined into
+# the bundle, which skew tests then send back as ?dpl= / x-deployment-id / __vdpl.
+#
+# post-build echoes process.env.NEXT_DEPLOYMENT_ID, which our own onPreBuild sets from
+# NETLIFY_SKEW_PROTECTION_TOKEN (src/build/skew-protection.ts). That token only exists
+# inside the Netlify build container — which is precisely why the fixture, running in
+# there, is the right thing to report it, and this script, running out here, is not.
+#
 # Only the deployment URL goes to stdout — this is what the Next.js test harness reads
 echo "$DEPLOY_URL"
