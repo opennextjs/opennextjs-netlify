@@ -4,8 +4,12 @@ set -euo pipefail
 # Required — set by the Next.js test harness / CI environment
 : "${ADAPTER_DIR:?ADAPTER_DIR must be set to the adapter repository root}"
 : "${ADAPTER_TARBALL:?ADAPTER_TARBALL must point to the pre-packed adapter tarball}"
-: "${NETLIFY_AUTH_TOKEN:?NETLIFY_AUTH_TOKEN must be set}"
 : "${NETLIFY_SITE_ID:?NETLIFY_SITE_ID must be set}"
+
+# NETLIFY_AUTH_TOKEN is deliberately NOT required. The CLI resolves its own auth: the
+# env var is how CI supplies it, but a developer who has run `netlify login` already
+# has a token on disk, and demanding the env var would make them dig it out to say
+# something the CLI already knows.
 
 # Every command below appends its output to this single log file, so on any
 # failure we can cat it and see the full history (install + build + deploy) at
