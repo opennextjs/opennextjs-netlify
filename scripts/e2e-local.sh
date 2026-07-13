@@ -122,6 +122,8 @@ export IS_TURBOPACK_TEST=1
 export NEXT_E2E_TEST_TIMEOUT=240000
 export NEXT_TELEMETRY_DISABLED=1
 export NODE_OPTIONS="--import $ADAPTER_DIR/tools/fetch-retry.mjs"
+export NEXT_TEST_SKIP_CLEANUP=1
+export ADAPTER_DEBUG_LOGS=1
 
 # CI's manifest (test/deploy-tests-manifest.json) EXCLUDES individual cases it has
 # already recorded as failing or flaky. That's right for a green-vs-red signal and

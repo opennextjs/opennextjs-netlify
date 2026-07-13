@@ -11,6 +11,10 @@ set -euo pipefail
 # has a token on disk, and demanding the env var would make them dig it out to say
 # something the CLI already knows.
 
+if [ -n "${ADAPTER_DEBUG_LOGS:-}" ]; then
+  echo "PWD: $(pwd)" >&2
+fi
+
 # Every command below appends its output to this single log file, so on any
 # failure we can cat it and see the full history (install + build + deploy) at
 # once. It's also what e2e-logs.sh replays as next.cliOutput. cwd is a fresh
