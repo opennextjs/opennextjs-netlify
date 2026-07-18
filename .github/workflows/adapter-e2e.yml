@@ -6,6 +6,10 @@ on:
   push:
   workflow_dispatch:
     inputs:
+      nextjsRepo:
+        description: "Next.js repo (owner/name) — e.g. a fork carrying test changes"
+        default: "vercel/next.js"
+        type: string
       nextjsRef:
         description: "Next.js repo ref (branch/tag/SHA)"
         default: "canary"
@@ -27,7 +31,10 @@ jobs:
         with:
           fetch-depth: 25
           path: nextjs
-          repository: vercel/next.js
+          # `inputs` is empty on a push trigger, so both fall back to their
+          # dispatch defaults. Swapping these two literals is how you point a
+          # branch at a fork without touching anything else.
+          repository: ${{ inputs.nextjsRepo || 'vercel/next.js' }}
           ref: ${{ inputs.nextjsRef || 'canary' }}
 
       - uses: actions/setup-node@v6
@@ -81,6 +88,7 @@ jobs:
             "adapterRepo": "${{ github.repository }}",
             "adapterSha": "${{ github.sha }}",
             "adapterBranch": "${{ github.ref_name }}",
+            "nextjsRepo": "${{ inputs.nextjsRepo || 'vercel/next.js' }}",
             "nextjsRef": "${{ inputs.nextjsRef || 'canary' }}",
             "nextjsSha": "$NEXT_SHA",
             "nextjsVersion": "$NEXT_VERSION"
