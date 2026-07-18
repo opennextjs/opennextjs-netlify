@@ -48,6 +48,7 @@ NETLIFY_SITE_ID="${NETLIFY_SITE_ID:-1d5a5c76-d445-4ae5-b694-b0d3f2e2c395}"
 build=0
 traces=1
 manifest=0
+pack_next=0
 patterns=()
 
 while [ $# -gt 0 ]; do
@@ -55,6 +56,7 @@ while [ $# -gt 0 ]; do
     --build) build=1 ;;         # rebuild + repack the adapter before running
     --no-traces) traces=0 ;;    # faster; loses the playwright trace
     --manifest)  manifest=1 ;;  # apply CI's exclusions (see below)
+    --pack-next) pack_next=1 ;; # test local packages/next JS too (slow)
     -h|--help) sed -n '3,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) patterns+=("$1") ;;
   esac
@@ -62,7 +64,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ ${#patterns[@]} -eq 0 ]; then
-  echo "Usage: $0 <test-file-or-pattern>... [--build] [--no-traces] [--manifest]" >&2
+  echo "Usage: $0 <test-file-or-pattern>... [--build] [--no-traces] [--manifest] [--pack-next]" >&2
   exit 1
 fi
 
@@ -125,6 +127,49 @@ export NODE_OPTIONS="--import $ADAPTER_DIR/tools/fetch-retry.mjs"
 export NEXT_TEST_SKIP_CLEANUP=1
 export ADAPTER_DEBUG_LOGS=1
 
+# ---- making the run test YOUR next.js checkout ------------------------------
+# By default it does NOT. Deploy mode calls createTestDir({skipInstall: true})
+# (next-modes/next-deploy.ts:239), and that path writes a plain version string
+# into the fixture's package.json (`next: NEXT_TEST_VERSION || <local version>`,
+# next-modes/base.ts:304). A bare version resolves from the public npm registry.
+#
+# Upstream gets away with this because their CI points npm at Vercel's
+# preview-builds mirror, so the version resolves to the PR's own artifact
+# (writeMirrorNpmrcIfNecessary, next-deploy.ts:506). It needs
+# PREVIEW_BUILDS_READ_TOKEN + NEXT_TEST_PREVIEW_BUILDS_BASE_URL, which are
+# Vercel-internal. Without them the harness logs "Skipping .npmrc write" and
+# falls back to public npm — so the suite tests PUBLISHED next plus your
+# adapter, and nothing from $NEXTJS_DIR except the test files jest reads
+# directly. That failure is silent, which is what makes it worth this comment.
+#
+# NEXT_TEST_NATIVE_DIR is the supported override for the Rust half: next loads
+# `next-swc.<triple>.node` straight out of this directory instead of the
+# @next/swc npm package (build/swc/index.ts:1552 — "Use the binary directly to
+# skip `pnpm pack` for testing as it's slow because of the large native
+# binary"). That covers crates/ and turbopack/crates/, and costs nothing since
+# the binary is already built.
+if ls "$NEXTJS_DIR/packages/next-swc/native/"*.node >/dev/null 2>&1; then
+  export NEXT_TEST_NATIVE_DIR="$NEXTJS_DIR/packages/next-swc/native"
+  echo "→ next-swc: local build ($(cd "$NEXTJS_DIR" && git rev-parse --short HEAD))" >&2
+else
+  echo "→ WARNING: no local next-swc binary — Rust changes in $NEXTJS_DIR will NOT be tested." >&2
+  echo "   Build it: (cd $NEXTJS_DIR && pnpm --filter @next/swc run build-native-release)" >&2
+fi
+
+# The JS half. Opt-in because packing next is slow and most changes under
+# investigation are Rust or adapter-side; without it, packages/next/src edits in
+# your checkout are NOT exercised.
+if [ "$pack_next" -eq 1 ]; then
+  echo "→ Packing next from $NEXTJS_DIR (this takes a minute)…" >&2
+  next_tgz="$(cd "$NEXTJS_DIR/packages/next" && pnpm pack --pack-destination "$TMPDIR" 2>/dev/null | tail -1)"
+  if [ ! -f "$next_tgz" ]; then
+    echo "Error: pnpm pack did not produce a tarball (got '$next_tgz')" >&2
+    exit 1
+  fi
+  export NEXT_TEST_VERSION="file:$next_tgz"
+  echo "→ next: $NEXT_TEST_VERSION" >&2
+fi
+
 # CI's manifest (test/deploy-tests-manifest.json) EXCLUDES individual cases it has
 # already recorded as failing or flaky. That's right for a green-vs-red signal and
 # exactly wrong for triage: the case you're investigating is quite likely one of the
@@ -155,8 +200,19 @@ fi
 cd "$NEXTJS_DIR"
 echo "→ Running ${patterns[*]} (deploy mode, site $NETLIFY_SITE_ID)" >&2
 
+# --retries 0 (default is 2, run-tests.js:187). Two reasons, both about triage:
+#
+# A retry re-deploys the whole fixture, so a failing file costs three deploys and
+# three timeouts before it reports — and a test that fails once and passes on retry
+# is reported as PASSED, which is precisely the flake you were trying to catch.
+#
+# More urgently: before each retry run-tests.js runs `git clean -fdx` AND
+# `git checkout` on the test's directory (run-tests.js:886-897) to reset fixture
+# state. That is destructive to UNCOMMITTED work in the next.js checkout — edit a
+# test file, have it fail, and the retry silently reverts your edit. Nothing warns
+# you; the run just starts passing again against the old code.
 status=0
-node run-tests.js --type e2e --debug --test-pattern "${patterns[*]}" || status=$?
+node run-tests.js --type e2e --debug --retries 0 --test-pattern "${patterns[*]}" || status=$?
 
 if [ "$traces" -eq 1 ] && [ -d "$NEXTJS_DIR/test/traces" ]; then
   echo >&2

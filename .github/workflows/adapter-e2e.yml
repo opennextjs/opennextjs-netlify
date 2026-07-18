@@ -14,6 +14,13 @@ on:
         description: "Next.js repo ref (branch/tag/SHA)"
         default: "canary"
         type: string
+      # Only consulted on workflow_dispatch. A push always builds from source —
+      # see BUILD_NEXTJS on the build job. Uncheck this to test a fixture or
+      # adapter change against published next without paying for a Rust compile.
+      buildNextjs:
+        description: "Build Next.js + next-swc from source (default: install published next from npm)"
+        default: false
+        type: boolean
   # schedule:
   #   - cron: '0 2 * * *'
 
@@ -21,7 +28,16 @@ jobs:
   build:
     name: Build Next.js + adapter
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Compiling next-swc from source dominates this job: ~25-40min cold, a few
+    # minutes once the cargo cache is warm.
+    timeout-minutes: 90
+    env:
+      # Whether to test next.js from this checkout instead of the published npm
+      # release. `inputs` is empty on a push, and a plain `inputs.buildNextjs ||
+      # 'true'` fallback would be wrong here: an explicitly UNCHECKED box is
+      # `false`, which is falsy, so it would silently build anyway. Hence the
+      # event check — dispatch obeys the box, everything else builds.
+      BUILD_NEXTJS: ${{ github.event_name != 'workflow_dispatch' || inputs.buildNextjs }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -48,9 +64,93 @@ jobs:
       - name: Setup pnpm
         run: npm i -g corepack && corepack enable
 
-      - name: Install & build Next.js
+      # ---- testing next.js from source (BUILD_NEXTJS) -----------------------
+      #
+      # Why these steps exist: checking out next.js is NOT enough to test it. In
+      # deploy mode the harness writes a plain version string into each
+      # fixture's package.json (`next: NEXT_TEST_VERSION || <local version>`,
+      # test/lib/next-modes/base.ts:304, reached via
+      # createTestDir({skipInstall:true}) in next-deploy.ts:239), and a bare
+      # version installs from the public npm registry. Upstream's own CI gets
+      # away with that because it points npm at Vercel's preview-builds mirror,
+      # which needs credentials we don't have — so without the steps below the
+      # `nextjs` checkout supplies only the harness and the test files, and the
+      # code under test is whatever npm published. Silently.
+      #
+      # These produce the two artifacts that override that, which the test job
+      # picks up by their presence (see "Use Next.js built from source" there):
+      #   - packages/next-swc/native/*.node  -> NEXT_TEST_NATIVE_DIR (Rust)
+      #   - next-packed.tgz                  -> NEXT_TEST_VERSION    (JS)
+      #
+      # Read the pinned nightly out of next.js's own rust-toolchain.toml rather
+      # than repeating the version here, where it would silently drift. The file
+      # lives in the nested checkout, so the toolchain actions can't find it on
+      # their own.
+      - name: Read Rust toolchain
+        id: rust-toolchain
+        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        run: |
+          CHANNEL="$(grep '^channel' nextjs/rust-toolchain.toml | cut -d'"' -f2)"
+          echo "Using Rust $CHANNEL"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        with:
+          toolchain: ${{ steps.rust-toolchain.outputs.channel }}
+
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        with:
+          workspaces: nextjs
+
+      - name: Install Next.js dependencies
         working-directory: nextjs
-        run: pnpm i && pnpm run build && pnpm i
+        run: pnpm i
+
+      # next.js never builds its own native binary when CI is set
+      # (scripts/install-native.mjs and packages/next-swc/maybe-build-native.mjs
+      # both bail on `process.env.CI`), on the assumption — true upstream, false
+      # here — that an earlier job produced it. So it has to be explicit.
+      #
+      # Release profile, not debug: a debug Turbopack is slow enough to push
+      # test shards into their own timeouts.
+      - name: Build next-swc (Rust)
+        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        working-directory: nextjs
+        run: pnpm --filter @next/swc run build-native-release
+
+      - name: Build Next.js
+        working-directory: nextjs
+        run: pnpm run build && pnpm i
+
+      # Pack next itself for the JS half. Lands inside the cached `nextjs` dir
+      # so the test shards get it from the same cache as everything else.
+      - name: Pack Next.js
+        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        working-directory: nextjs
+        run: |
+          TARBALL="$(cd packages/next && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
+          mv "$TARBALL" next-packed.tgz
+          ls -la next-packed.tgz
+
+      # Fail loudly rather than letting the shards quietly test published next —
+      # the whole failure mode this input exists to fix is a silent one.
+      - name: Verify Next.js was built from source
+        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        working-directory: nextjs
+        run: |
+          ok=1
+          if ! ls packages/next-swc/native/*.node >/dev/null 2>&1; then
+            echo "::error::next-swc native binary missing; shards would use the published @next/swc instead of this checkout's Rust code"
+            ok=0
+          fi
+          if [ ! -f next-packed.tgz ]; then
+            echo "::error::next-packed.tgz missing; shards would use the published next instead of this checkout's JS"
+            ok=0
+          fi
+          [ "$ok" -eq 1 ] || exit 1
+          ls -la packages/next-swc/native/
 
       - name: Install Playwright
         working-directory: nextjs
@@ -91,7 +191,8 @@ jobs:
             "nextjsRepo": "${{ inputs.nextjsRepo || 'vercel/next.js' }}",
             "nextjsRef": "${{ inputs.nextjsRef || 'canary' }}",
             "nextjsSha": "$NEXT_SHA",
-            "nextjsVersion": "$NEXT_VERSION"
+            "nextjsVersion": "$NEXT_VERSION",
+            "nextjsFromSource": $BUILD_NEXTJS
           }
           JSON
           cat adapter/adapter-e2e-metadata.json
@@ -185,6 +286,29 @@ jobs:
           key: next-test-passed-${{ strategy.job-index }}-${{ github.run_id }}-attempt${{ github.run_attempt }}
           restore-keys: |
             next-test-passed-${{ strategy.job-index }}-${{ github.run_id }}-
+
+      # Keyed on what the build job actually produced rather than on
+      # BUILD_NEXTJS, so the two can't disagree: if the artifacts aren't in
+      # the restored cache, the fixtures install published next and these stay
+      # unset. Both are read by next itself, not by the harness —
+      # NEXT_TEST_NATIVE_DIR loads the .node directly (build/swc/index.ts:1552)
+      # and NEXT_TEST_VERSION becomes the fixture's `next` dependency
+      # (next-modes/base.ts:304).
+      - name: Use Next.js built from source (if the build job produced it)
+        working-directory: nextjs
+        run: |
+          if ls packages/next-swc/native/*.node >/dev/null 2>&1; then
+            echo "NEXT_TEST_NATIVE_DIR=$PWD/packages/next-swc/native" >> "$GITHUB_ENV"
+            echo "next-swc: local build"
+          else
+            echo "next-swc: published @next/swc (from npm)"
+          fi
+          if [ -f next-packed.tgz ]; then
+            echo "NEXT_TEST_VERSION=file:$PWD/next-packed.tgz" >> "$GITHUB_ENV"
+            echo "next: local pack"
+          else
+            echo "next: published (from npm)"
+          fi
 
       - name: Run deploy tests
         working-directory: nextjs
