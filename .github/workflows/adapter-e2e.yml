@@ -34,8 +34,8 @@ jobs:
           # `inputs` is empty on a push trigger, so both fall back to their
           # dispatch defaults. Swapping these two literals is how you point a
           # branch at a fork without touching anything else.
-          repository: ${{ inputs.nextjsRepo || 'vercel/next.js' }}
-          ref: ${{ inputs.nextjsRef || 'canary' }}
+          repository: ${{ inputs.nextjsRepo || 'pieh/next.js' }}
+          ref: ${{ inputs.nextjsRef || 'e2e-tests-adjustments' }}
 
       - uses: actions/setup-node@v6
         with:
