@@ -10,7 +10,7 @@ const maxLength = 180
  * Longer keys are truncated and appended with a hash to ensure uniqueness.
  */
 export async function encodeBlobKey(key: string): Promise<string> {
-  const buffer = Buffer.from(key)
+  const buffer = Buffer.from(decodeURIComponent(key))
   const base64 = buffer.toString('base64url')
   if (base64.length <= maxLength) {
     return base64
