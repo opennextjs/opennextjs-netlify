@@ -131,6 +131,9 @@ cat > netlify.toml <<'EOF'
   command = "npm run build"
   publish = "./.next/"
 
+[build.environment]
+  NEXT_PRIVATE_TEST_MODE = "e2e"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 EOF
