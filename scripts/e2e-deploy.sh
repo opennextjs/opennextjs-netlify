@@ -93,6 +93,7 @@ fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
 #       fail.
 #   (b) don't demand a lockfile. The temp app is generated fresh and has none, so
 #       any "must match the lockfile" mode aborts immediately.
+export COREPACK_ENABLE_AUTO_PIN=0
 PACKAGE_MANAGER="$(node -p "(require('./package.json').packageManager || 'pnpm').split('@')[0]")"
 case "$PACKAGE_MANAGER" in
   # pnpm fails the install on a peer conflict, and --frozen-lockfile is its
