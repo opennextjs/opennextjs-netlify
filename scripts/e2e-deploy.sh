@@ -21,6 +21,42 @@ fi
 # per-fixture temp dir, but initialize it empty to be defensive.
 : > .adapter-deploy.log
 
+# Push the fixture's env onto the Netlify site.
+#
+# A test declares env with nextTestSetup({ env: {...} }), and in deploy mode the
+# harness hands it to this script as JSON in NEXT_TEST_ENV
+# (next-modes/next-deploy.ts:62) — that is the ONLY channel. Exporting it here
+# would not be enough: the build runs inside `netlify deploy` and the server
+# runs later on Netlify's infrastructure, so anything the test expects to read
+# at build or request time has to exist where Netlify can see it. Site-level env
+# vars cover both — the build container gets them, and so does the deployed
+# function at request time.
+#
+# Values are passed to the CLI as argv, so nothing needs quoting/escaping: no
+# shell re-parsing, no dotenv dialect to satisfy. node emits NUL-delimited
+# key/value pairs so that newlines, quotes, `#` and `=` inside a value survive
+# the trip through `read`.
+if [ -n "${NEXT_TEST_ENV:-}" ]; then
+  while IFS= read -r -d '' key && IFS= read -r -d '' value; do
+    if ! "$ADAPTER_DIR/node_modules/.bin/netlify" env:set "$key" "$value" >> .adapter-deploy.log 2>&1; then
+      echo "Error: failed to set env var $key"
+      cat .adapter-deploy.log
+      exit 1
+    fi
+    if [ -n "${ADAPTER_DEBUG_LOGS:-}" ]; then
+      echo "env:set $key" >&2
+    fi
+  done < <(node -e "
+const env = JSON.parse(process.env.NEXT_TEST_ENV || '{}')
+const out = []
+for (const [key, value] of Object.entries(env)) {
+  if (value === null || value === undefined) continue
+  out.push(key, '\0', String(value), '\0')
+}
+process.stdout.write(out.join(''))
+")
+fi
+
 # In deploy mode the Next.js harness creates the temp app with `skipInstall`
 # (test/lib/next-modes/next-deploy.ts -> createTestDir({ skipInstall: true })):
 # it writes package.json + fixture files + an .npmrc pointing at the
