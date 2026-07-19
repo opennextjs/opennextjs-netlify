@@ -85,12 +85,20 @@ export const setHeadersConfig = async (ctx: PluginContext): Promise<void> => {
   // immutable assets. It cannot be overridden. These immutable files contain a SHA-hash in
   // the file name, so they can be safely cached indefinitely.
   const { basePath } = ctx.buildConfig
-  ctx.netlifyConfig.headers.push({
-    for: `${basePath}/_next/static/*`,
-    values: {
-      'Cache-Control': 'public, max-age=31536000, immutable',
+  ctx.netlifyConfig.headers.push(
+    {
+      for: `${basePath}/_next/static/*`,
+      values: {
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
     },
-  })
+    {
+      for: `${basePath}/_next/static/service-worker/*`,
+      values: {
+        'Service-Worker-Allowed': basePath || '/',
+      },
+    },
+  )
 }
 
 export const copyStaticExport = async (ctx: PluginContext): Promise<void> => {
