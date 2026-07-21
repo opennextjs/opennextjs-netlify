@@ -60,7 +60,7 @@
     "@netlify/edge-functions": "^3.0.8",
     "@netlify/edge-functions-bootstrap": "^3.2.0",
     "@netlify/eslint-config-node": "^7.0.1",
-    "@netlify/functions": "^5.2.0",
+    "@netlify/functions": "^5.3.0",
     "@netlify/otel": "^5.1.5",
     "@netlify/serverless-functions-api": "^2.15.0",
     "@netlify/zip-it-and-ship-it": "^14.5.4",
