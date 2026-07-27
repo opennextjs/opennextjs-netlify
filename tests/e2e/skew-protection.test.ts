@@ -692,12 +692,16 @@ test.describe('Skew Protection', () => {
 
       expect(params.get('url')).toBe('/local-image.png')
 
-      // Whether public/ images get a deployment id changed in Next.js 16.1.0: the loader used to
-      // only append `&dpl=` for /_next/static/media images (which are content hashed, so build
-      // specific), and now appends it for every local image. Unlike a statically imported image,
-      // a public/ one has the same URL in both deploys and only the content differs, so the
-      // deployment id is the only thing that can scope the request.
-      if (nextVersionSatisfies('>=16.1.0')) {
+      // Unlike a statically imported image, a public/ one has the same URL in both deploys and
+      // only the content differs, so the deployment id is the only thing that can scope the
+      // request - and whether next/image sends one has flip-flopped:
+      //   <15.1.0        `&dpl=` appended to every image, remote ones included
+      //                  https://github.com/vercel/next.js/pull/50470 (added in 13.4.5)
+      //   15.1.0-16.0.x  narrowed to /_next/static/media only, i.e. static imports
+      //                  https://github.com/vercel/next.js/pull/73184
+      //   >=16.1.0       widened back out to every local image
+      //                  https://github.com/vercel/next.js/pull/86485
+      if (nextVersionSatisfies('<15.1.0 || >=16.1.0')) {
         expect(params.get('dpl')).toBe(deploymentId)
 
         await expectImageToBeFromVariant(
