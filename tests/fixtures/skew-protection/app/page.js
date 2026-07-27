@@ -23,6 +23,9 @@ export default function Page() {
           <li>
             <a href="/dynamic-import">Dynamic import</a>
           </li>
+          <li>
+            <a href="/image">next/image</a>
+          </li>
         </ul>
       </nav>
     </>
