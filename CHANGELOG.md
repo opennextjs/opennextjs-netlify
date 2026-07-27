@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.15.13](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.12...v5.15.13) (2026-07-27)
+
+
+### Bug Fixes
+
+* handle invalid `_next/image` requests ([#3547](https://github.com/opennextjs/opennextjs-netlify/issues/3547)) ([f46ce8c](https://github.com/opennextjs/opennextjs-netlify/commit/f46ce8c7dfd2393478862a8790efb9d78f7c79d1))
+
 ## [5.15.12](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.11...v5.15.12) (2026-06-18)
 
 
