@@ -1,5 +1,6 @@
 import { load } from 'cheerio'
 import { getLogger } from 'lambda-local'
+import { existsSync } from 'node:fs'
 import { cp } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -20,6 +21,7 @@ import {
   vi,
 } from 'vitest'
 import { getPatchesToApply } from '../../src/build/content/server.js'
+import { SERVER_HANDLER_NAME } from '../../src/build/plugin-context.js'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import {
   createFixture,
@@ -150,6 +152,48 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
   const notExisting = await invokeFunction(ctx, { url: 'non-exisitng' })
   expect(notExisting.statusCode).toBe(404)
   expect(load(notExisting.body)('h1').text()).toBe('404 Not Found')
+})
+
+// Next.js 15.5.14 added an on-disk LRU cache for the image optimizer. Its
+// `ImageOptimizerCache` constructor eagerly kicks off `mkdir('<distDir>/cache/images')`
+// without awaiting the result, so when `<distDir>` is read-only - as `/var/task` is in
+// a Lambda - the failure escapes as an unhandled rejection and the worker gets torn
+// down mid-invocation, dropping whatever request was in flight.
+//
+// `/_next/image` is normally rewritten to Netlify Image CDN before it can reach the
+// server function, but that rewrite only matches requests carrying exactly `url`, `w`
+// and `q`, so anything else (bots probing `/_next/image`, HTML-escaped `&amp;` in image
+// URLs) still lands here. We therefore need the server function to never touch the
+// on-disk image cache at all.
+//
+// See https://github.com/opennextjs/opennextjs-netlify/issues/3546
+test<FixtureTestContext>('image requests do not use the Next.js on-disk image cache', async (ctx) => {
+  await createFixture('simple', ctx)
+  await runPlugin(ctx)
+
+  const diskImageCacheDir = join(ctx.functionDist, SERVER_HANDLER_NAME, '.next', 'cache', 'images')
+
+  expect(
+    existsSync(diskImageCacheDir),
+    'server function bundle should not contain an image cache directory to begin with',
+  ).toBe(false)
+
+  // `ImageOptimizerCache.validateParams` hard-requires all three of `url`, `w` and `q`,
+  // so omitting `w`/`q` is a guaranteed rejection on every Next.js version. A rejected
+  // request is enough here because the disk cache is initialized from the
+  // `ImageOptimizerCache` constructor, which runs *before* the params are validated - and
+  // it keeps this test independent of `sharp` being loadable for the current platform.
+  const image = await invokeFunction(ctx, { url: '/_next/image?url=%2Fsquirrel.jpg' })
+  expect(image.statusCode).toBe(400)
+
+  // The mkdir is fire-and-forget and not tracked as background work, so give it a
+  // window to land rather than racing it.
+  await new Promise((resolve) => setTimeout(resolve, 500))
+
+  expect(
+    existsSync(diskImageCacheDir),
+    'server function should not create the on-disk image cache (in production this is a mkdir into read-only /var/task that surfaces as an unhandled rejection)',
+  ).toBe(false)
 })
 
 describe('verification', () => {

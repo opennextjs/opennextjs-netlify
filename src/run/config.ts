@@ -55,6 +55,24 @@ export const setRunConfig = (config: NextConfigForMultipleVersions) => {
   // Next.js 14.1.0 moved the cache handler from experimental to stable, see NextConfigForMultipleVersions type
   config.cacheHandler = cacheHandler
 
+  // Next.js >=15.5.14 keeps an on-disk LRU cache for the image optimizer in
+  // `<distDir>/cache/images`. `ImageOptimizerCache`'s constructor eagerly starts initializing it
+  // and does not await the result, and when `images.maximumDiskCacheSize` is not set that
+  // initialization `mkdir`s the cache directory to measure available disk space. In a function
+  // `<distDir>` lives in the read-only deployment directory, so the mkdir rejects with nobody
+  // holding the promise - which surfaces as an unhandled rejection and tears the worker down
+  // mid-invocation, dropping any request in flight.
+  //
+  // Disk caching would be pointless here regardless: the filesystem is read-only and per-worker,
+  // and images are normally served by Netlify Image CDN and cached at the edge. Setting this to 0
+  // disables the disk cache entirely, so the directory is never touched.
+  // See https://github.com/opennextjs/opennextjs-netlify/issues/3546
+  config.images = {
+    ...config.images,
+    // @ts-expect-error `maximumDiskCacheSize` is not typed in min Next.js config type
+    maximumDiskCacheSize: 0,
+  }
+
   // honor the in-memory cache size from next.config (either one set by user or Next.js default)
   setInMemoryCacheMaxSizeFromNextConfig(
     config.cacheMaxMemorySize ?? config.experimental?.isrMemoryCacheSize,
