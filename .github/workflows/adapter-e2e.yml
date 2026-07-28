@@ -77,10 +77,11 @@ jobs:
       # `nextjs` checkout supplies only the harness and the test files, and the
       # code under test is whatever npm published. Silently.
       #
-      # These produce the two artifacts that override that, which the test job
+      # These produce the artifacts that override that, which the test job
       # picks up by their presence (see "Use Next.js built from source" there):
       #   - packages/next-swc/native/*.node  -> NEXT_TEST_NATIVE_DIR (Rust)
       #   - next-packed.tgz                  -> NEXT_TEST_VERSION    (JS)
+      #   - next-env-packed.tgz              -> NEXT_ENV_TARBALL     (JS, see below)
       #
       # Read the pinned nightly out of next.js's own rust-toolchain.toml rather
       # than repeating the version here, where it would silently drift. The file
@@ -126,13 +127,24 @@ jobs:
 
       # Pack next itself for the JS half. Lands inside the cached `nextjs` dir
       # so the test shards get it from the same cache as everything else.
+      #
+      # Also pack @next/env (packages/next-env): it's the only non-optional
+      # @next/* dependency in packages/next/package.json, pinned to the exact
+      # same monorepo version as next itself. Since this checkout tracks the
+      # tip of canary, that exact version routinely hasn't finished publishing
+      # to npm yet — installing next-packed.tgz alone then fails resolving
+      # @next/env with ERR_PNPM_NO_MATCHING_VERSION. Packing it here and
+      # redirecting the fixture's resolution to it (scripts/e2e-deploy.sh) is
+      # what makes a from-source next-packed.tgz installable at all.
       - name: Pack Next.js
         if: ${{ env.BUILD_NEXTJS == 'true' }}
         working-directory: nextjs
         run: |
           TARBALL="$(cd packages/next && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
           mv "$TARBALL" next-packed.tgz
-          ls -la next-packed.tgz
+          ENV_TARBALL="$(cd packages/next-env && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
+          mv "$ENV_TARBALL" next-env-packed.tgz
+          ls -la next-packed.tgz next-env-packed.tgz
 
       # Fail loudly rather than letting the shards quietly test published next —
       # the whole failure mode this input exists to fix is a silent one.
@@ -147,6 +159,10 @@ jobs:
           fi
           if [ ! -f next-packed.tgz ]; then
             echo "::error::next-packed.tgz missing; shards would use the published next instead of this checkout's JS"
+            ok=0
+          fi
+          if [ ! -f next-env-packed.tgz ]; then
+            echo "::error::next-env-packed.tgz missing; next's @next/env dependency would resolve from npm instead of this checkout"
             ok=0
           fi
           [ "$ok" -eq 1 ] || exit 1
@@ -290,10 +306,13 @@ jobs:
       # Keyed on what the build job actually produced rather than on
       # BUILD_NEXTJS, so the two can't disagree: if the artifacts aren't in
       # the restored cache, the fixtures install published next and these stay
-      # unset. Both are read by next itself, not by the harness —
-      # NEXT_TEST_NATIVE_DIR loads the .node directly (build/swc/index.ts:1552)
-      # and NEXT_TEST_VERSION becomes the fixture's `next` dependency
-      # (next-modes/base.ts:304).
+      # unset. NEXT_TEST_NATIVE_DIR and NEXT_TEST_VERSION are read by next
+      # itself, not by the harness — NEXT_TEST_NATIVE_DIR loads the .node
+      # directly (build/swc/index.ts:1552) and NEXT_TEST_VERSION becomes the
+      # fixture's `next` dependency (next-modes/base.ts:304). NEXT_ENV_TARBALL
+      # is ours: next.js has no equivalent override for a dependency's
+      # dependency, so scripts/e2e-deploy.sh reads it to redirect @next/env's
+      # resolution itself (see the comment on the Pack Next.js step above).
       - name: Use Next.js built from source (if the build job produced it)
         working-directory: nextjs
         run: |
@@ -308,6 +327,12 @@ jobs:
             echo "next: local pack"
           else
             echo "next: published (from npm)"
+          fi
+          if [ -f next-env-packed.tgz ]; then
+            echo "NEXT_ENV_TARBALL=$PWD/next-env-packed.tgz" >> "$GITHUB_ENV"
+            echo "@next/env: local pack"
+          else
+            echo "@next/env: published (from npm)"
           fi
 
       - name: Run deploy tests

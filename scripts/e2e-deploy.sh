@@ -57,6 +57,20 @@ process.stdout.write(out.join(''))
 ")
 fi
 
+# Which package manager installs the fixture is not ours to pick. The harness
+# always writes a `packageManager` field into the temp app's package.json
+# (test/lib/next-modes/base.ts): the next.js repo's own pnpm by default, but a
+# test may override it — handle-non-hoisted-swc-helpers and filesystem-cache ask
+# for npm, yarn-pnp asks for yarn, because the test is *about* that package
+# manager's node_modules layout. CI runs with corepack enabled, and corepack
+# refuses to run a package manager the project didn't ask for:
+#   "This project is configured to use npm because <dir>/package.json has a
+#    "packageManager" field"
+# So dispatch on the field rather than hardcoding one. Read it now (before the
+# package.json edit below, which needs it) rather than where it's used later.
+export PACKAGE_MANAGER
+PACKAGE_MANAGER="$(node -p "(require('./package.json').packageManager || 'pnpm').split('@')[0]")"
+
 # In deploy mode the Next.js harness creates the temp app with `skipInstall`
 # (test/lib/next-modes/next-deploy.ts -> createTestDir({ skipInstall: true })):
 # it writes package.json + fixture files + an .npmrc pointing at the
@@ -67,25 +81,40 @@ fi
 # Declare the adapter as a file: dependency on the pre-packed adapter tarball,
 # named @netlify/plugin-nextjs (what netlify.toml references below), so the
 # install below picks it up.
+#
+# When testing next.js from source (NEXT_ENV_TARBALL set — see
+# adapter-e2e.yml), also redirect @next/env to the locally packed tarball.
+# `next` itself is already installed from a local file: (NEXT_TEST_VERSION,
+# read by next.js's own harness), but its package.json still pins an exact,
+# non-optional dependency on @next/env at the same monorepo version — and a
+# from-source checkout's version routinely hasn't finished publishing to npm
+# yet. @next/env isn't a dependency of the fixture itself, so there's no plain
+# `dependencies` entry to redirect it via — only a transitive-override field,
+# spelled differently per package manager.
 node -e "
 const fs = require('fs');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 pkg.dependencies = pkg.dependencies || {};
 pkg.dependencies['@netlify/plugin-nextjs'] = 'file:${ADAPTER_TARBALL}';
+const envTarball = process.env.NEXT_ENV_TARBALL;
+if (envTarball) {
+  const spec = 'file:' + envTarball;
+  switch (process.env.PACKAGE_MANAGER) {
+    case 'pnpm':
+      pkg.pnpm = pkg.pnpm || {};
+      pkg.pnpm.overrides = { ...(pkg.pnpm.overrides || {}), '@next/env': spec };
+      break;
+    case 'npm':
+      pkg.overrides = { ...(pkg.overrides || {}), '@next/env': spec };
+      break;
+    case 'yarn':
+      pkg.resolutions = { ...(pkg.resolutions || {}), '@next/env': spec };
+      break;
+  }
+}
 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
 " >&2
 
-# Which package manager installs the fixture is not ours to pick. The harness
-# always writes a `packageManager` field into the temp app's package.json
-# (test/lib/next-modes/base.ts): the next.js repo's own pnpm by default, but a
-# test may override it — handle-non-hoisted-swc-helpers and filesystem-cache ask
-# for npm, yarn-pnp asks for yarn, because the test is *about* that package
-# manager's node_modules layout. CI runs with corepack enabled, and corepack
-# refuses to run a package manager the project didn't ask for:
-#   "This project is configured to use npm because <dir>/package.json has a
-#    "packageManager" field"
-# So dispatch on the field rather than hardcoding one.
-#
 # Each install needs the same two concessions, spelled differently per manager:
 #   (a) tolerate peer-dependency conflicts. Fixtures pin next/react versions that
 #       don't satisfy every peer range in the tree, and the adapter arrives as a
@@ -94,7 +123,6 @@ fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
 #   (b) don't demand a lockfile. The temp app is generated fresh and has none, so
 #       any "must match the lockfile" mode aborts immediately.
 export COREPACK_ENABLE_AUTO_PIN=0
-PACKAGE_MANAGER="$(node -p "(require('./package.json').packageManager || 'pnpm').split('@')[0]")"
 case "$PACKAGE_MANAGER" in
   # pnpm fails the install on a peer conflict, and --frozen-lockfile is its
   # default when CI=true — so both concessions have to be made explicitly.

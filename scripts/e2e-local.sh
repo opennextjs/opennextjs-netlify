@@ -159,6 +159,12 @@ fi
 # The JS half. Opt-in because packing next is slow and most changes under
 # investigation are Rust or adapter-side; without it, packages/next/src edits in
 # your checkout are NOT exercised.
+#
+# @next/env is packed too and pinned via NEXT_ENV_TARBALL (read by
+# e2e-deploy.sh): next's package.json pins an exact, non-optional dependency on
+# @next/env at this same checkout's version, and a dev checkout tracking canary
+# is routinely ahead of what's actually published — installing next_tgz alone
+# would then fail resolving @next/env from the registry.
 if [ "$pack_next" -eq 1 ]; then
   echo "→ Packing next from $NEXTJS_DIR (this takes a minute)…" >&2
   next_tgz="$(cd "$NEXTJS_DIR/packages/next" && pnpm pack --pack-destination "$TMPDIR" 2>/dev/null | tail -1)"
@@ -168,6 +174,14 @@ if [ "$pack_next" -eq 1 ]; then
   fi
   export NEXT_TEST_VERSION="file:$next_tgz"
   echo "→ next: $NEXT_TEST_VERSION" >&2
+
+  next_env_tgz="$(cd "$NEXTJS_DIR/packages/next-env" && pnpm pack --pack-destination "$TMPDIR" 2>/dev/null | tail -1)"
+  if [ ! -f "$next_env_tgz" ]; then
+    echo "Error: pnpm pack did not produce a tarball for next-env (got '$next_env_tgz')" >&2
+    exit 1
+  fi
+  export NEXT_ENV_TARBALL="$next_env_tgz"
+  echo "→ @next/env: file:$NEXT_ENV_TARBALL" >&2
 fi
 
 # CI's manifest (test/deploy-tests-manifest.json) EXCLUDES individual cases it has
