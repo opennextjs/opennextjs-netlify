@@ -30,17 +30,22 @@ describe('Image CDN', () => {
 
     await setImageConfig(ctx.pluginContext)
 
-    expect(ctx.pluginContext.netlifyConfig.redirects).toEqual(
-      expect.arrayContaining([
-        {
-          from: '/_next/image',
-          // eslint-disable-next-line id-length
-          query: { q: ':quality', url: ':url', w: ':width' },
-          to: '/.netlify/images?url=:url&w=:width&q=:quality',
-          status: 200,
-        },
-      ]),
-    )
+    expect(
+      ctx.pluginContext.netlifyConfig.redirects.filter(({ from }) => from === '/_next/image'),
+    ).toEqual([
+      {
+        from: '/_next/image',
+        // eslint-disable-next-line id-length
+        query: { q: ':quality', url: ':url', w: ':width' },
+        to: '/.netlify/images?url=:url&w=:width&q=:quality',
+        status: 200,
+      },
+      {
+        from: '/_next/image',
+        to: '/.netlify/images',
+        status: 200,
+      },
+    ])
   })
 
   test<ImageCDNTestContext>('does not add redirect to Netlify Image CDN when non-default loader is used', async (ctx) => {

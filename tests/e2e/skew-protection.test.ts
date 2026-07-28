@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { execaCommand } from 'execa'
 import {
   createE2EFixture,
@@ -549,6 +549,174 @@ test.describe('Skew Protection', () => {
       // ensure expected version of a page is rendered
       await expect(page.getByTestId('linked-page-current-variant')).toHaveText('"A"')
       await expect(page.getByTestId('linked-page-slug')).toHaveText('rewrite-a')
+    })
+  })
+
+  test.describe('next/image', () => {
+    /**
+     * Reveals the images (see the fixture page for why they are hidden until then) and returns
+     * the query params of the /_next/image URL baked into the given image's `src`.
+     */
+    async function getImageOptimizerParams(page: Page, testId: string, baseUrl: string) {
+      await page.getByTestId('images-expand-button').click()
+
+      const image = page.getByTestId(testId)
+      await image.waitFor()
+
+      const src = await image.getAttribute('src')
+      expect(src, `${testId} should have a src`).toBeTruthy()
+
+      const parsed = new URL(src as string, baseUrl)
+      expect(
+        parsed.pathname,
+        `${testId} should be served through the Next.js image optimizer endpoint`,
+      ).toBe('/_next/image')
+
+      return { image, params: parsed.searchParams }
+    }
+
+    /** The variant images are solid colours so the bytes identify the deploy that produced them. */
+    const variantImageColour = {
+      A: { r: 220, g: 30, b: 30 },
+      B: { r: 30, g: 30, b: 220 },
+    }
+
+    async function expectImageToLoad(image: Locator, description: string) {
+      await expect
+        .poll(() => image.evaluate((el: HTMLImageElement) => (el.complete ? el.naturalWidth : 0)), {
+          message: description,
+        })
+        .toBeGreaterThan(0)
+    }
+
+    /**
+     * Asserts which deploy actually produced the bytes the browser decoded.
+     *
+     * The optimizer URL is baked into the initial deploy's markup/bundle and is only fetched after
+     * the other deploy has been published, so this is what tells us whether the whole image
+     * pipeline (Netlify Image CDN redirect, or the server function fallback) resolved the request
+     * against the deploy the page came from. Checking that the image merely loaded is not enough:
+     * both deploys have an image at the same public/ URL, they just differ in content.
+     *
+     * Sampling a pixel works because the variant images are solid colours, which survive the
+     * optimizer re-encoding them (and possibly changing format) - locally a source pixel of
+     * rgb(220, 30, 30) decodes back as rgb(221, 30, 31).
+     */
+    async function expectImageToBeFromVariant(
+      image: Locator,
+      variant: keyof typeof variantImageColour,
+      description: string,
+    ) {
+      await expectImageToLoad(image, description)
+
+      const colour = await image.evaluate((el: HTMLImageElement) => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 1
+        canvas.height = 1
+        const context = canvas.getContext('2d') as CanvasRenderingContext2D
+        // scale just the middle pixel of the decoded image into the 1x1 canvas
+        context.drawImage(
+          el,
+          Math.floor(el.naturalWidth / 2),
+          Math.floor(el.naturalHeight / 2),
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+        )
+        const [r, g, b] = context.getImageData(0, 0, 1, 1).data
+        return { r, g, b }
+      })
+
+      const expected = variantImageColour[variant]
+      const message = `${description}: expected variant ${variant} image ${JSON.stringify(
+        expected,
+      )} but got ${JSON.stringify(colour)}`
+
+      // the tolerance is generous because the optimizer re-encodes, but the variant colours are
+      // far enough apart that one can never be mistaken for the other
+      for (const channel of ['r', 'g', 'b'] as const) {
+        expect(Math.abs(colour[channel] - expected[channel]), message).toBeLessThan(40)
+      }
+    }
+
+    test('should scope statically imported image to initial deploy', async ({
+      page,
+      skewProtection,
+      prepareSkewProtectionScenario,
+    }) => {
+      await prepareSkewProtectionScenario(async () => {
+        return await page.goto(`${skewProtection.url}/image`)
+      })
+
+      const deploymentId = await page.getByTestId('deployment-id').textContent()
+      expect(deploymentId, 'fixture should be built with a deployment id').toBeTruthy()
+
+      const { image, params } = await getImageOptimizerParams(
+        page,
+        'statically-imported-image',
+        skewProtection.url,
+      )
+
+      // statically imported images are build specific (content hashed), so next/image scopes
+      // the optimizer request to the deploy that produced them
+      expect(params.get('url')).toContain('/_next/static/media/')
+      expect(params.get('dpl')).toBe(deploymentId)
+
+      await expectImageToBeFromVariant(
+        image,
+        'A',
+        'statically imported image should still be served from the initial deploy after redeploy',
+      )
+    })
+
+    test('should serve public directory image', async ({
+      page,
+      skewProtection,
+      prepareSkewProtectionScenario,
+    }) => {
+      await prepareSkewProtectionScenario(async () => {
+        return await page.goto(`${skewProtection.url}/image`)
+      })
+
+      const deploymentId = await page.getByTestId('deployment-id').textContent()
+      expect(deploymentId, 'fixture should be built with a deployment id').toBeTruthy()
+
+      const { image, params } = await getImageOptimizerParams(
+        page,
+        'public-image',
+        skewProtection.url,
+      )
+
+      expect(params.get('url')).toBe('/local-image.png')
+
+      // Unlike a statically imported image, a public/ one has the same URL in both deploys and
+      // only the content differs, so the deployment id is the only thing that can scope the
+      // request - and whether next/image sends one has flip-flopped:
+      //   <15.1.0        `&dpl=` appended to every image, remote ones included
+      //                  https://github.com/vercel/next.js/pull/50470 (added in 13.4.5)
+      //   15.1.0-16.0.x  narrowed to /_next/static/media only, i.e. static imports
+      //                  https://github.com/vercel/next.js/pull/73184
+      //   >=16.1.0       widened back out to every local image
+      //                  https://github.com/vercel/next.js/pull/86485
+      if (nextVersionSatisfies('<15.1.0 || >=16.1.0')) {
+        expect(params.get('dpl')).toBe(deploymentId)
+
+        await expectImageToBeFromVariant(
+          image,
+          'A',
+          'public/ image should still be served from the initial deploy after redeploy',
+        )
+      } else {
+        expect(params.get('dpl')).toBeNull()
+
+        // Without a deployment id the optimizer URL is byte for byte identical in both deploys, so
+        // which one answers is not determined (and anything caching on that URL in between can
+        // serve either). Only assert it still resolves to an image.
+        await expectImageToLoad(image, 'public/ image should still load after redeploy')
+      }
     })
   })
 
