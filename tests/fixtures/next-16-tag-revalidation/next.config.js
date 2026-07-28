@@ -6,8 +6,11 @@ const nextConfig = {
     cacheLife: {
       testCacheLife: {
         stale: 0,
-        revalidate: 365 * 60 * 60 * 24, // 1 year
-        expire: 5, // 5 seconds to test expiration
+        // revalidate has to be lower than expire to pass config validation.
+        // We only use this profile to test on-demand revalidation which only uses `expire` value
+        revalidate: 1,
+        // 5 seconds to test expiration
+        expire: 5,
       },
     },
   },
