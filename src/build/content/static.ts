@@ -85,20 +85,35 @@ export const setHeadersConfig = async (ctx: PluginContext): Promise<void> => {
   // immutable assets. It cannot be overridden. These immutable files contain a SHA-hash in
   // the file name, so they can be safely cached indefinitely.
   const { basePath } = ctx.buildConfig
-  ctx.netlifyConfig.headers.push(
-    {
-      for: `${basePath}/_next/static/*`,
-      values: {
-        'Cache-Control': 'public, max-age=31536000, immutable',
-      },
+  ctx.netlifyConfig.headers.push({
+    for: `${basePath}/_next/static/*`,
+    values: {
+      'Cache-Control': 'public, max-age=31536000, immutable',
     },
-    {
+  })
+
+  // Next only adds the `Service-Worker-Allowed` header when `_next/static/service-worker/`
+  // exists and is non-empty, recording that decision in `routes-manifest.json`. Netlify serves
+  // these files directly from the CDN, so we replicate the rule based on the manifest instead of
+  // rechecking the filesystem. This keeps behavior aligned with Next, avoids unnecessary rules,
+  // and avoids racing `copyStaticAssets`, which runs concurrently during `onBuild`.
+  const routesManifest = await ctx.getRoutesManifest()
+  const hasServiceWorker = routesManifest.headers.some((rule) =>
+    rule.headers.some((header) => header.key === 'Service-Worker-Allowed'),
+  )
+
+  if (hasServiceWorker) {
+    ctx.netlifyConfig.headers.push({
+      // tested when deployed, this ordering of Netlify headers works fine
+      // for same header names, the more specific "for" wins
+      // for different header names, the values get merged
       for: `${basePath}/_next/static/service-worker/*`,
       values: {
+        'Cache-Control': 'public, max-age=0, must-revalidate',
         'Service-Worker-Allowed': basePath || '/',
       },
-    },
-  )
+    })
+  }
 }
 
 export const copyStaticExport = async (ctx: PluginContext): Promise<void> => {

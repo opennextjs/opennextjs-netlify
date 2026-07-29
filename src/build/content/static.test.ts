@@ -13,7 +13,7 @@ import { createFsFixture } from '../../../tests/utils/fixture.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { PluginContext, RequiredServerFilesManifest } from '../plugin-context.js'
 
-import { copyStaticAssets, copyStaticContent } from './static.js'
+import { copyStaticAssets, copyStaticContent, setHeadersConfig } from './static.js'
 
 type Context = FixtureTestContext & {
   pluginContext: PluginContext
@@ -29,6 +29,7 @@ const createFsFixtureWithBasePath = (
     i18n = undefined,
     dynamicRoutes = {},
     pagesManifest = {},
+    headers = [],
   }: {
     basePath?: string
     i18n?: Pick<NonNullable<RequiredServerFilesManifest['config']['i18n']>, 'locales'>
@@ -36,17 +37,21 @@ const createFsFixtureWithBasePath = (
       [route: string]: Pick<PrerenderManifest['dynamicRoutes'][''], 'fallback'>
     }
     pagesManifest?: Record<string, string>
+    // Next.js always writes this key (possibly empty) into routes-manifest.json; kept
+    // optional here only for fixture-authoring convenience.
+    headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>
   } = {},
 ) => {
   return createFsFixture(
     {
       ...fixture,
-      [join(ctx.publishDir, 'routes-manifest.json')]: JSON.stringify({ basePath }),
+      [join(ctx.publishDir, 'routes-manifest.json')]: JSON.stringify({ basePath, headers }),
       [join(ctx.publishDir, 'required-server-files.json')]: JSON.stringify({
         relativeAppDir: ctx.relativeAppDir,
         appDir: ctx.relativeAppDir,
         config: {
           distDir: ctx.publishDir,
+          basePath,
           i18n,
         },
       } as Pick<RequiredServerFilesManifest, 'relativeAppDir' | 'appDir'>),
@@ -337,6 +342,112 @@ describe('Regular Repository layout', () => {
 
     await copyStaticContent(pluginContext)
     expect(await glob('**/*', { cwd: pluginContext.blobDir, dot: true })).toHaveLength(0)
+  })
+})
+
+describe('setHeadersConfig', () => {
+  beforeEach<Context>((ctx) => {
+    failBuildMock = vi.fn((msg, err) => {
+      expect.fail(`failBuild should not be called, was called with ${inspect({ msg, err })}`)
+    })
+    ctx.publishDir = '.next'
+    ctx.relativeAppDir = ''
+    ctx.pluginContext = new PluginContext({
+      constants: {
+        PUBLISH_DIR: ctx.publishDir,
+      },
+      netlifyConfig: {
+        headers: [],
+      },
+      utils: {
+        build: {
+          failBuild: failBuildMock,
+        } as unknown,
+      },
+    } as unknown as NetlifyPluginOptions)
+  })
+
+  test<Context>('does not add a service worker header rule when Next.js has no service worker headers in its own manifest', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    await createFsFixtureWithBasePath({}, ctx)
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+    ])
+  })
+
+  test<Context>('adds a service worker header rule when Next.js recorded one in routes-manifest.json (no basePath)', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    await createFsFixtureWithBasePath({}, ctx, {
+      headers: [
+        {
+          source: '/_next/static/service-worker/:path*',
+          headers: [{ key: 'Service-Worker-Allowed', value: '/' }],
+        },
+      ],
+    })
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+      {
+        for: '/_next/static/service-worker/*',
+        values: {
+          'Cache-Control': 'public, max-age=0, must-revalidate',
+          'Service-Worker-Allowed': '/',
+        },
+      },
+    ])
+  })
+
+  test<Context>('adds a service worker header rule scoped to basePath when Next.js recorded one in routes-manifest.json', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    await createFsFixtureWithBasePath({}, ctx, {
+      basePath: '/base/path',
+      headers: [
+        {
+          source: '/base/path/_next/static/service-worker/:path*',
+          headers: [{ key: 'Service-Worker-Allowed', value: '/base/path' }],
+        },
+      ],
+    })
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/base/path/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+      {
+        for: '/base/path/_next/static/service-worker/*',
+        values: {
+          'Cache-Control': 'public, max-age=0, must-revalidate',
+          'Service-Worker-Allowed': '/base/path',
+        },
+      },
+    ])
   })
 })
 
