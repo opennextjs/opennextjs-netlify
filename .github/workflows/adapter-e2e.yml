@@ -3,7 +3,6 @@
 name: test-e2e-deploy
 
 on:
-  push:
   workflow_dispatch:
     inputs:
       nextjsRepo:
@@ -14,9 +13,8 @@ on:
         description: "Next.js repo ref (branch/tag/SHA)"
         default: "canary"
         type: string
-      # Only consulted on workflow_dispatch. A push always builds from source —
-      # see BUILD_NEXTJS on the build job. Uncheck this to test a fixture or
-      # adapter change against published next without paying for a Rust compile.
+      # Uncheck to test a fixture or adapter change against published next
+      # without paying for a Rust compile.
       buildNextjs:
         description: "Build Next.js + next-swc from source (default: install published next from npm)"
         default: false
@@ -33,11 +31,8 @@ jobs:
     timeout-minutes: 90
     env:
       # Whether to test next.js from this checkout instead of the published npm
-      # release. `inputs` is empty on a push, and a plain `inputs.buildNextjs ||
-      # 'true'` fallback would be wrong here: an explicitly UNCHECKED box is
-      # `false`, which is falsy, so it would silently build anyway. Hence the
-      # event check — dispatch obeys the box, everything else builds.
-      BUILD_NEXTJS: ${{ github.event_name != 'workflow_dispatch' || inputs.buildNextjs }}
+      # release — obeys the dispatch input's checkbox.
+      BUILD_NEXTJS: ${{ inputs.buildNextjs }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -47,11 +42,8 @@ jobs:
         with:
           fetch-depth: 25
           path: nextjs
-          # `inputs` is empty on a push trigger, so both fall back to their
-          # dispatch defaults. Swapping these two literals is how you point a
-          # branch at a fork without touching anything else.
-          repository: ${{ inputs.nextjsRepo || 'pieh/next.js' }}
-          ref: ${{ inputs.nextjsRef || 'e2e-tests-adjustments' }}
+          repository: ${{ inputs.nextjsRepo }}
+          ref: ${{ inputs.nextjsRef }}
 
       - uses: actions/setup-node@v6
         with:
@@ -204,8 +196,8 @@ jobs:
             "adapterRepo": "${{ github.repository }}",
             "adapterSha": "${{ github.sha }}",
             "adapterBranch": "${{ github.ref_name }}",
-            "nextjsRepo": "${{ inputs.nextjsRepo || 'vercel/next.js' }}",
-            "nextjsRef": "${{ inputs.nextjsRef || 'canary' }}",
+            "nextjsRepo": "${{ inputs.nextjsRepo }}",
+            "nextjsRef": "${{ inputs.nextjsRef }}",
             "nextjsSha": "$NEXT_SHA",
             "nextjsVersion": "$NEXT_VERSION",
             "nextjsFromSource": $BUILD_NEXTJS
@@ -294,7 +286,7 @@ jobs:
       # this same workflow run. On a re-run (github.run_attempt increments) this
       # lets run-tests.js skip already-passed tests and only re-run the ones
       # that were still failing. Scoped per shard (strategy.job-index) and per
-      # run (github.run_id), so a new push always starts fresh.
+      # run (github.run_id), so a new dispatch always starts fresh.
       - name: Restore passed-tests cache
         uses: actions/cache/restore@v5
         with:
