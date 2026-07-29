@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 
 import { NetlifyPluginOptions } from '@netlify/build'
+import type { PrerenderManifest } from 'next-with-cache-handler-v2/dist/build/index.js'
 import { expect, test, vi } from 'vitest'
 
 import { mockFileSystem } from '../../tests/index.js'
@@ -209,4 +210,40 @@ test('should use deploy configuration blobs directory when @netlify/build versio
   } as unknown as NetlifyPluginOptions)
 
   expect(ctx.blobDir).toBe(join(cwd, '.netlify/deploy/v1/blobs/deploy'))
+})
+
+test('getShells only includes routes that have their own generated fallback shell', () => {
+  mockFileSystem({
+    '.next/required-server-files.json': JSON.stringify({
+      config: { distDir: '.next' },
+      relativeAppDir: '',
+    } as RequiredServerFilesManifest),
+  })
+  const ctx = new PluginContext({ constants: {} } as NetlifyPluginOptions)
+
+  const shells = ctx.getShells({
+    dynamicRoutes: {
+      '/blog/[slug]': {
+        fallback: '/blog/[slug].html',
+        renderingMode: 'PARTIALLY_STATIC',
+      },
+      // Routes with unpopulated fallback root params get `fallbackSourceRoute` instead of
+      // their own `fallback` string, and next.js never exports a file for them (see the
+      // fallbackRootParams early-return in next.js's build/index.ts) -- they exist in the
+      // manifest purely so next.js's runtime can redirect matching requests to the source
+      // route's shell. Treating them as shells here would make prerendered.ts try to read a
+      // file that was never written and fail the whole build.
+      '/[lang]/blog/[slug]': {
+        fallback: null,
+        fallbackSourceRoute: '/blog/[slug]',
+        renderingMode: 'PARTIALLY_STATIC',
+      },
+      '/static-only': {
+        fallback: false,
+        renderingMode: 'STATIC',
+      },
+    },
+  } as unknown as PrerenderManifest)
+
+  expect(shells).toEqual(['/blog/[slug]'])
 })

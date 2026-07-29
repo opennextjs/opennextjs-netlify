@@ -473,10 +473,11 @@ export class PluginContext {
     if (!this.#shells) {
       this.#shells = Object.entries(prerenderManifest.dynamicRoutes).reduce(
         (shells, [route, meta]) => {
-          if (
-            (typeof meta.fallback === 'string' || typeof meta.fallbackSourceRoute === 'string') &&
-            meta.renderingMode === 'PARTIALLY_STATIC'
-          ) {
+          // `meta.fallbackSourceRoute` marks routes skipped during export because they have
+          // unpopulated fallback root params. They exist only so Next.js can match requests and
+          // reuse the source route's cached shell, so no `.html`/`.meta` files are written for
+          // them. Only `meta.fallback` represents a real shell we should read here.
+          if (typeof meta.fallback === 'string' && meta.renderingMode === 'PARTIALLY_STATIC') {
             shells.push(route)
           }
           return shells
