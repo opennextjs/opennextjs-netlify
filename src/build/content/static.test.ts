@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { inspect } from 'node:util'
 
@@ -29,7 +29,6 @@ const createFsFixtureWithBasePath = (
     i18n = undefined,
     dynamicRoutes = {},
     pagesManifest = {},
-    headers = [],
   }: {
     basePath?: string
     i18n?: Pick<NonNullable<RequiredServerFilesManifest['config']['i18n']>, 'locales'>
@@ -37,15 +36,12 @@ const createFsFixtureWithBasePath = (
       [route: string]: Pick<PrerenderManifest['dynamicRoutes'][''], 'fallback'>
     }
     pagesManifest?: Record<string, string>
-    // Next.js always writes this key (possibly empty) into routes-manifest.json; kept
-    // optional here only for fixture-authoring convenience.
-    headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>
   } = {},
 ) => {
   return createFsFixture(
     {
       ...fixture,
-      [join(ctx.publishDir, 'routes-manifest.json')]: JSON.stringify({ basePath, headers }),
+      [join(ctx.publishDir, 'routes-manifest.json')]: JSON.stringify({ basePath }),
       [join(ctx.publishDir, 'required-server-files.json')]: JSON.stringify({
         relativeAppDir: ctx.relativeAppDir,
         appDir: ctx.relativeAppDir,
@@ -367,7 +363,7 @@ describe('setHeadersConfig', () => {
     } as unknown as NetlifyPluginOptions)
   })
 
-  test<Context>('does not add a service worker header rule when Next.js has no service worker headers in its own manifest', async ({
+  test<Context>('does not add a service worker header rule when the directory does not exist', async ({
     pluginContext,
     ...ctx
   }) => {
@@ -385,18 +381,51 @@ describe('setHeadersConfig', () => {
     ])
   })
 
-  test<Context>('adds a service worker header rule when Next.js recorded one in routes-manifest.json (no basePath)', async ({
+  // Static-export builds don't produce a routes-manifest.json at all, so this also guards
+  // against regressing to a manifest-based check, which threw ENOENT and failed those builds.
+  test<Context>('does not add a service worker header rule when routes-manifest.json is missing', async ({
     pluginContext,
     ...ctx
   }) => {
-    await createFsFixtureWithBasePath({}, ctx, {
-      headers: [
-        {
-          source: '/_next/static/service-worker/:path*',
-          headers: [{ key: 'Service-Worker-Allowed', value: '/' }],
+    const { cwd } = await createFsFixtureWithBasePath({}, ctx)
+    await rm(join(cwd, ctx.publishDir, 'routes-manifest.json'))
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
         },
-      ],
-    })
+      },
+    ])
+  })
+
+  test<Context>('does not add a service worker header rule when the directory exists but is empty', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    const { cwd } = await createFsFixtureWithBasePath({}, ctx)
+    await mkdir(join(cwd, ctx.publishDir, 'static', 'service-worker'), { recursive: true })
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+    ])
+  })
+
+  test<Context>('adds a service worker header rule when the directory exists and is non-empty (no basePath)', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    await createFsFixtureWithBasePath({ '.next/static/service-worker/sw.js': '' }, ctx)
 
     await setHeadersConfig(pluginContext)
 
@@ -417,18 +446,12 @@ describe('setHeadersConfig', () => {
     ])
   })
 
-  test<Context>('adds a service worker header rule scoped to basePath when Next.js recorded one in routes-manifest.json', async ({
+  test<Context>('adds a service worker header rule scoped to basePath when the directory exists and is non-empty', async ({
     pluginContext,
     ...ctx
   }) => {
-    await createFsFixtureWithBasePath({}, ctx, {
+    await createFsFixtureWithBasePath({ '.next/static/service-worker/sw.js': '' }, ctx, {
       basePath: '/base/path',
-      headers: [
-        {
-          source: '/base/path/_next/static/service-worker/:path*',
-          headers: [{ key: 'Service-Worker-Allowed', value: '/base/path' }],
-        },
-      ],
     })
 
     await setHeadersConfig(pluginContext)

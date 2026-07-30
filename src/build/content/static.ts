@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 
 import { trace } from '@opentelemetry/api'
@@ -92,15 +92,17 @@ export const setHeadersConfig = async (ctx: PluginContext): Promise<void> => {
     },
   })
 
-  // Next only adds the `Service-Worker-Allowed` header when `_next/static/service-worker/`
-  // exists and is non-empty, recording that decision in `routes-manifest.json`. Netlify serves
-  // these files directly from the CDN, so we replicate the rule based on the manifest instead of
-  // rechecking the filesystem. This keeps behavior aligned with Next, avoids unnecessary rules,
-  // and avoids racing `copyStaticAssets`, which runs concurrently during `onBuild`.
-  const routesManifest = await ctx.getRoutesManifest()
-  const hasServiceWorker = routesManifest.headers.some((rule) =>
-    rule.headers.some((header) => header.key === 'Service-Worker-Allowed'),
-  )
+  // Next.js only serves `Service-Worker-Allowed` for `_next/static/service-worker/*` when that
+  // directory exists and is non-empty. Netlify serves these files directly from the CDN, so we
+  // replicate the check against the filesystem instead of `routes-manifest.json`, which isn't
+  // generated for static exports. This is safe because `copyStaticAssets` only reads from
+  // `ctx.publishDir`, so there's no concurrent write to race with.
+  const serviceWorkerDir = join(ctx.publishDir, 'static', 'service-worker')
+  let hasServiceWorker = existsSync(serviceWorkerDir)
+  if (hasServiceWorker) {
+    const serviceWorkerFiles = await readdir(serviceWorkerDir)
+    hasServiceWorker = serviceWorkerFiles.length !== 0
+  }
 
   if (hasServiceWorker) {
     ctx.netlifyConfig.headers.push({
