@@ -20,13 +20,6 @@ globalThis.fetch = async (...args) => {
       }
 
       if (shouldRetry) {
-        // leave some trace in logs what's happening
-        console.error('[fetch-retry] fetch thrown, retrying...', {
-          args,
-          attempt,
-          errorMsg: error.message,
-        })
-
         const currentBackoff = backoff
         await new Promise((resolve) => {
           setTimeout(resolve, currentBackoff)

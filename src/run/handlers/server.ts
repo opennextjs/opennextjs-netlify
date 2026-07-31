@@ -93,6 +93,13 @@ export default async (
       get() {
         return {}
       },
+      set(value) {
+        if (value === null) {
+          // ignore Object.destroyer (node:internal/streams/destroy:333:19) setting null
+          return
+        }
+        throw new Error('Unsupported attempt to set socket on request')
+      },
     })
 
     disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
