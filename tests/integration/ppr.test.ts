@@ -1,9 +1,12 @@
 import { load } from 'cheerio'
+import { execa } from 'execa'
 import { getLogger } from 'lambda-local'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { v4 } from 'uuid'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
+import { SERVER_HANDLER_NAME } from '../../src/build/plugin-context.js'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import {
   createFixture,
@@ -18,6 +21,7 @@ import {
   startMockBlobStore,
 } from '../utils/helpers.js'
 import {
+  hasCacheComponentsTracerPatch,
   hasPartialPrefetching,
   isExperimentalPPRHardDeprecated,
   nextVersionSatisfies,
@@ -111,10 +115,60 @@ function countOccurrences(haystack: string, needle: string): number {
 const OTEL_BOOTSTRAP = fileURLToPath(new URL('../utils/otel-bootstrap.cjs', import.meta.url))
 
 describe('Cache Components + OpenTelemetry', () => {
-  // When an OpenTelemetry SDK is registered, generating a span id calls `Math.random()`, which
-  // Next.js treats as synchronous platform IO while prerendering and aborts the runtime
-  // prerender. The abort is swallowed, so the page still renders - it just silently loses the
-  // runtime prefetch payload that seeds the client segment cache.
+  // Next.js only installs its Cache Components tracer patch when the application has an
+  // `instrumentation.ts` exporting `register`, so an SDK registered by our Functions
+  // bootstrap is left unpatched. `ensureOtelTracerPatchedForCacheComponents` works around
+  // that by calling Next.js' own `afterRegistration()` - see the note on it in
+  // `src/run/next.cts`.
+  //
+  // That reaches into a private Next.js module, so if Next.js ever moves or reworks it we
+  // would silently stop patching. This calls our own function inside the built server handler
+  // - where `next` resolves to the version under test - and asserts it still has an effect.
+  test.skipIf(!hasCacheComponentsTracerPatch())<FixtureTestContext>(
+    'our tracer patching still takes effect',
+    async (ctx) => {
+      await createFixture('ppr', ctx)
+      await runPlugin(ctx)
+
+      const probe = `
+        // Resolve @opentelemetry/api the way Next.js' extension does, so we read the provider
+        // back from the same copy it patches. The API's compatibility check is asymmetric, so
+        // going through a different copy can hand back a different provider.
+        let api
+        try {
+          api = require('@opentelemetry/api')
+        } catch {
+          api = require('next/dist/compiled/@opentelemetry/api')
+        }
+        const getTracerBeforePatch = api.trace.getTracerProvider().getTracer
+
+        const { ensureOtelTracerPatchedForCacheComponents } = require('./.netlify/dist/run/next.cjs')
+        ensureOtelTracerPatchedForCacheComponents()
+
+        if (api.trace.getTracerProvider().getTracer === getTracerBeforePatch) {
+          throw new Error(
+            'ensureOtelTracerPatchedForCacheComponents() no longer patches the registered tracer provider',
+          )
+        }
+      `
+
+      // Runs in a child process because the runtime patches process globals (`Math.random`,
+      // `Date`, `console`) that other tests would otherwise inherit. The SDK is registered by
+      // a preload, so it is in place before the runtime is imported - `@netlify/otel` keeps
+      // its global tracer on a plain `globalThis` key, so the copy in the bundle finds it.
+      const { exitCode } = await execa('node', ['-e', probe], {
+        cwd: join(ctx.functionDist, SERVER_HANDLER_NAME),
+        env: { NODE_OPTIONS: `--require ${OTEL_BOOTSTRAP}` },
+      })
+
+      expect(exitCode).toBe(0)
+    },
+  )
+
+  // ...and this is what that patch buys us. Without it, generating a span id calls
+  // `Math.random()`, which Next.js treats as synchronous platform IO while prerendering and
+  // aborts the runtime prerender. The abort is swallowed, so the page still renders - it just
+  // silently loses the runtime prefetch payload that seeds the client segment cache.
   test.skipIf(!hasPartialPrefetching())<FixtureTestContext>(
     'runtime prefetch payload survives when an OpenTelemetry SDK is registered',
     async (ctx) => {

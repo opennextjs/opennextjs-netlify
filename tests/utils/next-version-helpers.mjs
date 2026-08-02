@@ -38,6 +38,16 @@ export function shouldHaveAppRouterNotFoundInPrerenderManifest() {
   return nextVersionSatisfies(isNextCanary() ? '>=15.4.2-canary.33' : '>=15.5.0')
 }
 
+export function hasCacheComponentsTracerPatch() {
+  // https://github.com/vercel/next.js/pull/82350 added
+  // `server/lib/router-utils/instrumentation-node-extensions.ts`, which we call into
+  // ourselves - see `ensureOtelTracerPatchedForCacheComponents` in `src/run/next.cts`.
+
+  // The canary versions are out of band, as there stable/latest patch versions higher than base of canary versions without
+  // the change included
+  return nextVersionSatisfies(isNextCanary() ? '>=15.4.2-canary.31' : '>=15.5.0')
+}
+
 export function hasPartialPrefetching() {
   // https://github.com/vercel/next.js/pull/94448 added `export const prefetch = 'partial'`,
   // which is what makes Next.js inline a runtime prefetch payload into the initial HTML.
