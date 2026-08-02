@@ -38,6 +38,14 @@ export function shouldHaveAppRouterNotFoundInPrerenderManifest() {
   return nextVersionSatisfies(isNextCanary() ? '>=15.4.2-canary.33' : '>=15.5.0')
 }
 
+export function hasPartialPrefetching() {
+  // https://github.com/vercel/next.js/pull/94448 added `export const prefetch = 'partial'`,
+  // which is what makes Next.js inline a runtime prefetch payload into the initial HTML.
+
+  // Canary only so far, no stable release includes it yet.
+  return nextVersionSatisfies('>=16.3.0-canary.45')
+}
+
 export function shouldHaveAppRouterGlobalErrorInPrerenderManifest() {
   // https://github.com/vercel/next.js/pull/82444
 
