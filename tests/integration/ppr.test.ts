@@ -49,6 +49,7 @@ test.skipIf(
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
       '/dynamic-params/[id]',
       '/index',
+      '/runtime-prefetchable',
       '/static-params/1',
       '/static-params/2',
       '/static-params/[id]',
@@ -74,4 +75,10 @@ test.skipIf(
   expect(res3.statusCode).toBe(200)
   // on this page, the `await params` is in a Suspense boundary
   expect(load(res3.body)('body').text()).toContain('loading...')
+
+  const res4 = await invokeFunction(ctx, { url: '/runtime-prefetchable' })
+  expect(res4.statusCode).toBe(200)
+  // this page renders `use cache: private` content, which resolves on the server rather
+  // than leaving its Suspense fallback in the response
+  expect(load(res4.body)('body').text()).toContain('Search params: none')
 })
