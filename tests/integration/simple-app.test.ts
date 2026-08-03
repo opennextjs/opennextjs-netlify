@@ -17,6 +17,7 @@ import {
   beforeEach,
   describe,
   expect,
+  onTestFinished,
   test,
   vi,
 } from 'vitest'
@@ -56,6 +57,9 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 })
 
 let server: ReturnType<typeof setupServer>
+
+// captured before any test installs Next's lazy `globalThis.WebSocket` getter
+const nativeWebSocket = globalThis.WebSocket
 
 // Disable the verbose logging of the lambda-local runtime
 getLogger().level = 'alert'
@@ -426,6 +430,21 @@ test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=1
 // result in corrupted bodies
 // while that bug stands, we want to ignore accept-encoding
 test<FixtureTestContext>('rewrites to external addresses dont use compression', async (ctx) => {
+  // Since next@16.3.0-canary.98 external rewrites are proxied with `httpxy` instead of the
+  // vendored `http-proxy`. `httpxy` only writes the proxied request once the outgoing socket
+  // emits "connect", while msw's `MockHttpSocket` only leaves the connecting state after it
+  // parsed that request - so the two deadlock and the request never completes. This test hits
+  // a real external host and doesn't need any of the msw handlers, so turn interception off.
+  server.close()
+  onTestFinished(() => {
+    // Next's `node-environment-baseline` installs a lazy `globalThis.WebSocket` getter that
+    // requires `next/dist/compiled/ws` (not part of the bundled handler), and msw's WebSocket
+    // interceptor *reads* that global on `listen()`. Assigning first hits the getter's `set`
+    // trap, which replaces it with a plain value, so `listen()` never triggers the require.
+    globalThis.WebSocket = nativeWebSocket
+    server.listen()
+  })
+
   await createFixture('simple', ctx)
   await runPlugin(ctx)
 
