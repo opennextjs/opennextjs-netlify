@@ -1,5 +1,34 @@
 # Changelog
 
+## [5.15.13](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.12...v5.15.13) (2026-07-27)
+
+
+### Bug Fixes
+
+* handle invalid `_next/image` requests ([#3547](https://github.com/opennextjs/opennextjs-netlify/issues/3547)) ([f46ce8c](https://github.com/opennextjs/opennextjs-netlify/commit/f46ce8c7dfd2393478862a8790efb9d78f7c79d1))
+
+## [5.15.12](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.11...v5.15.12) (2026-06-18)
+
+
+### Bug Fixes
+
+* mark prerendered content as less stale now that expire setting is enforced for marking for blocking re-render ([#3510](https://github.com/opennextjs/opennextjs-netlify/issues/3510)) ([2a41703](https://github.com/opennextjs/opennextjs-netlify/commit/2a41703bc50d006b211913003ec562cda74feab0))
+
+## [5.15.11](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.10...v5.15.11) (2026-05-07)
+
+
+### Bug Fixes
+
+* matching on data routes when middleware matcher is using allowed paths ([#3506](https://github.com/opennextjs/opennextjs-netlify/issues/3506)) ([45ef6ae](https://github.com/opennextjs/opennextjs-netlify/commit/45ef6ae050f334b5023f2b7137ccd64099dbc81a))
+
+## [5.15.10](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.9...v5.15.10) (2026-04-29)
+
+
+### Bug Fixes
+
+* don't optimize same-url rewrite if response headers need to be applied ([#3479](https://github.com/opennextjs/opennextjs-netlify/issues/3479)) ([decdc28](https://github.com/opennextjs/opennextjs-netlify/commit/decdc28c99220e70355910c17f08718c7d0a1902))
+* set cache tag for getStaticProps's redirect ([#3476](https://github.com/opennextjs/opennextjs-netlify/issues/3476)) ([9eea3fe](https://github.com/opennextjs/opennextjs-netlify/commit/9eea3fe1dcf26e1e8b4c6fbd856496ea573746bb))
+
 ## [5.15.9](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.8...v5.15.9) (2026-03-09)
 
 

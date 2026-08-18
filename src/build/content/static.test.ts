@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { inspect } from 'node:util'
 
@@ -13,7 +13,7 @@ import { createFsFixture } from '../../../tests/utils/fixture.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { PluginContext, RequiredServerFilesManifest } from '../plugin-context.js'
 
-import { copyStaticAssets, copyStaticContent } from './static.js'
+import { copyStaticAssets, copyStaticContent, setHeadersConfig } from './static.js'
 
 type Context = FixtureTestContext & {
   pluginContext: PluginContext
@@ -47,6 +47,7 @@ const createFsFixtureWithBasePath = (
         appDir: ctx.relativeAppDir,
         config: {
           distDir: ctx.publishDir,
+          basePath,
           i18n,
         },
       } as Pick<RequiredServerFilesManifest, 'relativeAppDir' | 'appDir'>),
@@ -337,6 +338,139 @@ describe('Regular Repository layout', () => {
 
     await copyStaticContent(pluginContext)
     expect(await glob('**/*', { cwd: pluginContext.blobDir, dot: true })).toHaveLength(0)
+  })
+})
+
+describe('setHeadersConfig', () => {
+  beforeEach<Context>((ctx) => {
+    failBuildMock = vi.fn((msg, err) => {
+      expect.fail(`failBuild should not be called, was called with ${inspect({ msg, err })}`)
+    })
+    ctx.publishDir = '.next'
+    ctx.relativeAppDir = ''
+    ctx.pluginContext = new PluginContext({
+      constants: {
+        PUBLISH_DIR: ctx.publishDir,
+      },
+      netlifyConfig: {
+        headers: [],
+      },
+      utils: {
+        build: {
+          failBuild: failBuildMock,
+        } as unknown,
+      },
+    } as unknown as NetlifyPluginOptions)
+  })
+
+  test<Context>('does not add a service worker header rule when the directory does not exist', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    await createFsFixtureWithBasePath({}, ctx)
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+    ])
+  })
+
+  // Static-export builds don't produce a routes-manifest.json at all, so this also guards
+  // against regressing to a manifest-based check, which threw ENOENT and failed those builds.
+  test<Context>('does not add a service worker header rule when routes-manifest.json is missing', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    const { cwd } = await createFsFixtureWithBasePath({}, ctx)
+    await rm(join(cwd, ctx.publishDir, 'routes-manifest.json'))
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+    ])
+  })
+
+  test<Context>('does not add a service worker header rule when the directory exists but is empty', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    const { cwd } = await createFsFixtureWithBasePath({}, ctx)
+    await mkdir(join(cwd, ctx.publishDir, 'static', 'service-worker'), { recursive: true })
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+    ])
+  })
+
+  test<Context>('adds a service worker header rule when the directory exists and is non-empty (no basePath)', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    await createFsFixtureWithBasePath({ '.next/static/service-worker/sw.js': '' }, ctx)
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+      {
+        for: '/_next/static/service-worker/*',
+        values: {
+          'Cache-Control': 'public, max-age=0, must-revalidate',
+          'Service-Worker-Allowed': '/',
+        },
+      },
+    ])
+  })
+
+  test<Context>('adds a service worker header rule scoped to basePath when the directory exists and is non-empty', async ({
+    pluginContext,
+    ...ctx
+  }) => {
+    await createFsFixtureWithBasePath({ '.next/static/service-worker/sw.js': '' }, ctx, {
+      basePath: '/base/path',
+    })
+
+    await setHeadersConfig(pluginContext)
+
+    expect(pluginContext.netlifyConfig.headers).toEqual([
+      {
+        for: '/base/path/_next/static/*',
+        values: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+      {
+        for: '/base/path/_next/static/service-worker/*',
+        values: {
+          'Cache-Control': 'public, max-age=0, must-revalidate',
+          'Service-Worker-Allowed': '/base/path',
+        },
+      },
+    ])
   })
 })
 

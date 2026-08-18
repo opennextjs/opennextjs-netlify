@@ -19,4 +19,12 @@ describe('encodeBlobKey', () => {
     const key = await encodeBlobKey(`/products/${longKey}`)
     expect(Buffer.from(key, 'base64url').toString().startsWith('/products/')).toBe(true)
   })
+
+  it('produces the same key for a percent-encoded route and its decoded equivalent', async () => {
+    expect(await encodeBlobKey('/caf%C3%A9')).toEqual(await encodeBlobKey('/café'))
+  })
+
+  it('falls back to the raw key (without throwing) when it is not validly percent-encoded', async () => {
+    expect(await encodeBlobKey('/50%-off')).toEqual(Buffer.from('/50%-off').toString('base64url'))
+  })
 })

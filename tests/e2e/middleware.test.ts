@@ -13,6 +13,8 @@ type ExtendedFixtures = {
   edgeOrNodeMiddlewarePages: Fixture
   edgeOrNodeMiddlewareI18n: Fixture
   edgeOrNodeMiddlewareI18nExcludedPaths: Fixture
+  edgeOrNodeMiddlewareI18nIncludedPaths: Fixture
+  edgeOrNodeMiddlewareIncludedPaths: Fixture
   edgeOrNodeMiddlewareStaticAssetMatcher: Fixture
 }
 
@@ -49,6 +51,22 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
       edgeOrNodeMiddlewareI18nExcludedPaths: [
         async ({ middlewareI18nExcludedPaths }, use) => {
           await use(middlewareI18nExcludedPaths)
+        },
+        {
+          scope: 'worker',
+        },
+      ],
+      edgeOrNodeMiddlewareI18nIncludedPaths: [
+        async ({ middlewareI18nIncludedPaths }, use) => {
+          await use(middlewareI18nIncludedPaths)
+        },
+        {
+          scope: 'worker',
+        },
+      ],
+      edgeOrNodeMiddlewareIncludedPaths: [
+        async ({ middlewareIncludedPaths }, use) => {
+          await use(middlewareIncludedPaths)
         },
         {
           scope: 'worker',
@@ -97,6 +115,22 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
           edgeOrNodeMiddlewareI18nExcludedPaths: [
             async ({ middlewareI18nExcludedPathsNode }, use) => {
               await use(middlewareI18nExcludedPathsNode)
+            },
+            {
+              scope: 'worker',
+            },
+          ],
+          edgeOrNodeMiddlewareI18nIncludedPaths: [
+            async ({ middlewareI18nIncludedPathsNode }, use) => {
+              await use(middlewareI18nIncludedPathsNode)
+            },
+            {
+              scope: 'worker',
+            },
+          ],
+          edgeOrNodeMiddlewareIncludedPaths: [
+            async ({ middlewareIncludedPathsNode }, use) => {
+              await use(middlewareIncludedPathsNode)
             },
             {
               scope: 'worker',
@@ -220,121 +254,236 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
       }
 
       test.describe('no 18n', () => {
-        for (const testConfig of testConfigs) {
-          test.describe(testConfig.describeLabel, () => {
-            test('json data fetch', async ({ edgeOrNodeMiddlewarePages, page }) => {
-              const dataFetchPromise = new Promise<Response>((resolve) => {
-                page.on('response', (response) => {
-                  if (response.url().includes(testConfig.jsonPathMatcher)) {
-                    resolve(response)
-                  }
+        test.describe('without middleware matcher', () => {
+          for (const testConfig of testConfigs) {
+            test.describe(testConfig.describeLabel, () => {
+              test('json data fetch', async ({ edgeOrNodeMiddlewarePages, page }) => {
+                const dataFetchPromise = new Promise<Response>((resolve) => {
+                  page.on('response', (response) => {
+                    if (response.url().includes(testConfig.jsonPathMatcher)) {
+                      resolve(response)
+                    }
+                  })
                 })
+
+                const pageResponse = await page.goto(`${edgeOrNodeMiddlewarePages.url}/link`)
+                expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+
+                await page.hover(`[data-link="${testConfig.selector}"]`)
+
+                const dataResponse = await dataFetchPromise
+
+                expect(dataResponse.ok()).toBe(true)
+                expect(dataResponse.headers()['x-hello-from-middleware-res']).toBe('hello')
               })
 
-              const pageResponse = await page.goto(`${edgeOrNodeMiddlewarePages.url}/link`)
-              expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+              test('navigation', async ({ edgeOrNodeMiddlewarePages, page }) => {
+                const pageResponse = await page.goto(`${edgeOrNodeMiddlewarePages.url}/link`)
+                expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
 
-              await page.hover(`[data-link="${testConfig.selector}"]`)
+                // wait for hydration to finish before doing client navigation
+                await expect(page.getByTestId('hydration')).toHaveText('hydrated', {
+                  timeout: 10_000,
+                })
 
-              const dataResponse = await dataFetchPromise
+                await page.evaluate(() => {
+                  // set some value to window to check later if browser did reload and lost this state
+                  ;(window as ExtendedWindow).didReload = false
+                })
 
-              expect(dataResponse.ok()).toBe(true)
+                await page.click(`[data-link="${testConfig.selector}"]`)
+
+                // wait for page to be rendered
+                await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
+
+                // check if browser navigation worked by checking if state was preserved
+                const browserNavigationWorked =
+                  (await page.evaluate(() => {
+                    return (window as ExtendedWindow).didReload
+                  })) === false
+
+                // we expect client navigation to work without browser reload
+                expect(browserNavigationWorked).toBe(true)
+              })
+            })
+          }
+        })
+
+        test.describe('with matcher for specific path', () => {
+          const testConfig = {
+            selector: 'test',
+            expectedPathname: '/test',
+            jsonPathMatcher: '/test.json',
+          }
+
+          test('json data prefetch', async ({ edgeOrNodeMiddlewareIncludedPaths, page }) => {
+            const dataFetchPromise = new Promise<Response>((resolve) => {
+              page.on('response', (response) => {
+                if (response.url().includes(testConfig.jsonPathMatcher)) {
+                  resolve(response)
+                }
+              })
             })
 
-            test('navigation', async ({ edgeOrNodeMiddlewarePages, page }) => {
-              const pageResponse = await page.goto(`${edgeOrNodeMiddlewarePages.url}/link`)
-              expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+            const pageResponse = await page.goto(`${edgeOrNodeMiddlewareIncludedPaths.url}/link`)
+            expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
 
-              // wait for hydration to finish before doing client navigation
-              await expect(page.getByTestId('hydration')).toHaveText('hydrated', {
-                timeout: 10_000,
-              })
+            await page.hover(`[data-link="${testConfig.selector}"]`)
 
-              await page.evaluate(() => {
-                // set some value to window to check later if browser did reload and lost this state
-                ;(window as ExtendedWindow).didReload = false
-              })
+            const dataResponse = await dataFetchPromise
 
-              await page.click(`[data-link="${testConfig.selector}"]`)
-
-              // wait for page to be rendered
-              await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
-
-              // check if browser navigation worked by checking if state was preserved
-              const browserNavigationWorked =
-                (await page.evaluate(() => {
-                  return (window as ExtendedWindow).didReload
-                })) === false
-
-              // we expect client navigation to work without browser reload
-              expect(browserNavigationWorked).toBe(true)
-            })
+            expect(dataResponse.ok()).toBe(true)
+            expect(dataResponse.headers()['x-hello-from-middleware-res']).toBe('hello')
+            expect(dataResponse.headers()['x-pathname']).toBe(testConfig.expectedPathname)
+            expect(dataResponse.headers()['x-runtime']).toBe(expectedRuntime)
+            expect(dataResponse.headers()['x-locale']).toEqual('')
           })
-        }
+
+          test('direct json data fetch', async ({ edgeOrNodeMiddlewareIncludedPaths }) => {
+            const url = `${edgeOrNodeMiddlewareIncludedPaths.url}/_next/data/build-id${testConfig.jsonPathMatcher}`
+            const response = await fetch(url, {
+              headers: {
+                'x-nextjs-data': '1',
+              },
+            })
+
+            expect(response.headers.get('x-hello-from-middleware-res')).toBe('hello')
+            expect(response.headers.get('x-pathname')).toBe(testConfig.expectedPathname)
+            expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+            expect(response.headers.get('x-locale')).toEqual('')
+          })
+        })
       })
 
       test.describe('with 18n', () => {
-        for (const testConfig of testConfigs) {
-          test.describe(testConfig.describeLabel, () => {
-            for (const { localeLabel, pageWithLinksPathname } of [
-              { localeLabel: 'implicit default locale', pageWithLinksPathname: '/link' },
-              { localeLabel: 'explicit default locale', pageWithLinksPathname: '/en/link' },
-              { localeLabel: 'explicit non-default locale', pageWithLinksPathname: '/fr/link' },
-            ]) {
-              test.describe(localeLabel, () => {
-                test('json data fetch', async ({ edgeOrNodeMiddlewareI18n, page }) => {
-                  const dataFetchPromise = new Promise<Response>((resolve) => {
-                    page.on('response', (response) => {
-                      if (response.url().includes(testConfig.jsonPathMatcher)) {
-                        resolve(response)
-                      }
+        for (const { localeLabel, pageWithLinksPathname, localePrefix, expectedLocale } of [
+          {
+            localeLabel: 'implicit default locale',
+            pageWithLinksPathname: '/link',
+            localePrefix: '',
+            expectedLocale: 'en',
+          },
+          {
+            localeLabel: 'explicit default locale',
+            pageWithLinksPathname: '/en/link',
+            localePrefix: '/en',
+            expectedLocale: 'en',
+          },
+          {
+            localeLabel: 'explicit non-default locale',
+            pageWithLinksPathname: '/fr/link',
+            localePrefix: '/fr',
+            expectedLocale: 'fr',
+          },
+        ]) {
+          test.describe(localeLabel, () => {
+            test.describe('without middleware matcher', () => {
+              for (const testConfig of testConfigs) {
+                test.describe(testConfig.describeLabel, () => {
+                  test('json data fetch', async ({ edgeOrNodeMiddlewareI18n, page }) => {
+                    const dataFetchPromise = new Promise<Response>((resolve) => {
+                      page.on('response', (response) => {
+                        if (response.url().includes(testConfig.jsonPathMatcher)) {
+                          resolve(response)
+                        }
+                      })
                     })
+
+                    const pageResponse = await page.goto(
+                      `${edgeOrNodeMiddlewareI18n.url}${pageWithLinksPathname}`,
+                    )
+                    expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+
+                    await page.hover(`[data-link="${testConfig.selector}"]`)
+
+                    const dataResponse = await dataFetchPromise
+
+                    expect(dataResponse.ok()).toBe(true)
+                    expect(dataResponse.headers()['x-hello-from-middleware-res']).toBe('hello')
                   })
 
-                  const pageResponse = await page.goto(
-                    `${edgeOrNodeMiddlewareI18n.url}${pageWithLinksPathname}`,
-                  )
-                  expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+                  test('navigation', async ({ edgeOrNodeMiddlewareI18n, page }) => {
+                    const pageResponse = await page.goto(
+                      `${edgeOrNodeMiddlewareI18n.url}${pageWithLinksPathname}`,
+                    )
+                    expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
 
-                  await page.hover(`[data-link="${testConfig.selector}"]`)
+                    // wait for hydration to finish before doing client navigation
+                    await expect(page.getByTestId('hydration')).toHaveText('hydrated', {
+                      timeout: 10_000,
+                    })
 
-                  const dataResponse = await dataFetchPromise
+                    await page.evaluate(() => {
+                      // set some value to window to check later if browser did reload and lost this state
+                      ;(window as ExtendedWindow).didReload = false
+                    })
 
-                  expect(dataResponse.ok()).toBe(true)
+                    await page.click(`[data-link="${testConfig.selector}"]`)
+
+                    // wait for page to be rendered
+                    await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
+
+                    // check if browser navigation worked by checking if state was preserved
+                    const browserNavigationWorked =
+                      (await page.evaluate(() => {
+                        return (window as ExtendedWindow).didReload
+                      })) === false
+
+                    // we expect client navigation to work without browser reload
+                    expect(browserNavigationWorked).toBe(true)
+                  })
+                })
+              }
+            })
+            test.describe('with matcher for specific path', () => {
+              const testConfig = {
+                selector: 'test',
+                expectedPathname: '/test',
+                jsonPathMatcher: '/test.json',
+              }
+
+              test('json data prefetch', async ({
+                edgeOrNodeMiddlewareI18nIncludedPaths,
+                page,
+              }) => {
+                const dataFetchPromise = new Promise<Response>((resolve) => {
+                  page.on('response', (response) => {
+                    if (response.url().includes(testConfig.jsonPathMatcher)) {
+                      resolve(response)
+                    }
+                  })
                 })
 
-                test('navigation', async ({ edgeOrNodeMiddlewareI18n, page }) => {
-                  const pageResponse = await page.goto(
-                    `${edgeOrNodeMiddlewareI18n.url}${pageWithLinksPathname}`,
-                  )
-                  expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
+                const pageResponse = await page.goto(
+                  `${edgeOrNodeMiddlewareI18nIncludedPaths.url}${pageWithLinksPathname}`,
+                )
+                expect(await pageResponse?.headerValue('x-runtime')).toEqual(expectedRuntime)
 
-                  // wait for hydration to finish before doing client navigation
-                  await expect(page.getByTestId('hydration')).toHaveText('hydrated', {
-                    timeout: 10_000,
-                  })
+                await page.hover(`[data-link="${testConfig.selector}"]`)
 
-                  await page.evaluate(() => {
-                    // set some value to window to check later if browser did reload and lost this state
-                    ;(window as ExtendedWindow).didReload = false
-                  })
+                const dataResponse = await dataFetchPromise
 
-                  await page.click(`[data-link="${testConfig.selector}"]`)
-
-                  // wait for page to be rendered
-                  await page.waitForSelector(`[data-page="${testConfig.selector}"]`)
-
-                  // check if browser navigation worked by checking if state was preserved
-                  const browserNavigationWorked =
-                    (await page.evaluate(() => {
-                      return (window as ExtendedWindow).didReload
-                    })) === false
-
-                  // we expect client navigation to work without browser reload
-                  expect(browserNavigationWorked).toBe(true)
-                })
+                expect(dataResponse.ok()).toBe(true)
+                expect(dataResponse.headers()['x-hello-from-middleware-res']).toBe('hello')
+                expect(dataResponse.headers()['x-pathname']).toBe(testConfig.expectedPathname)
+                expect(dataResponse.headers()['x-runtime']).toBe(expectedRuntime)
+                expect(dataResponse.headers()['x-locale']).toBe(expectedLocale)
               })
-            }
+
+              test('direct json data fetch', async ({ edgeOrNodeMiddlewareI18nIncludedPaths }) => {
+                const url = `${edgeOrNodeMiddlewareI18nIncludedPaths.url}/_next/data/build-id${localePrefix}${testConfig.jsonPathMatcher}`
+                const response = await fetch(url, {
+                  headers: {
+                    'x-nextjs-data': '1',
+                  },
+                })
+
+                expect(response.headers.get('x-hello-from-middleware-res')).toBe('hello')
+                expect(response.headers.get('x-pathname')).toBe(testConfig.expectedPathname)
+                expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+                expect(response.headers.get('x-locale')).toBe(expectedLocale)
+              })
+            })
           })
         }
       })

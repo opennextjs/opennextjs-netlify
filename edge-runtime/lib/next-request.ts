@@ -7,6 +7,7 @@ import {
   normalizeDataUrl,
   normalizeLocalePath,
   removeBasePath,
+  rewriteDataPath,
 } from './util.ts'
 
 interface I18NConfig {
@@ -82,18 +83,32 @@ export const localizeRequest = (
   },
 ): { localizedUrl: URL; locale?: string } => {
   const localizedUrl = new URL(url)
-  localizedUrl.pathname = removeBasePath(localizedUrl.pathname, nextConfig?.basePath)
+  const pathnameWithoutBasePath = removeBasePath(localizedUrl.pathname, nextConfig?.basePath)
+
+  const isDataRequest = pathnameWithoutBasePath.startsWith('/_next/data/')
+
+  const normalizedPath = isDataRequest
+    ? normalizeDataUrl(pathnameWithoutBasePath)
+    : pathnameWithoutBasePath
 
   // Detect the locale from the URL
-  const { detectedLocale } = normalizeLocalePath(localizedUrl.pathname, nextConfig?.i18n?.locales)
+  const { detectedLocale } = normalizeLocalePath(normalizedPath, nextConfig?.i18n?.locales)
 
   // Add the locale to the URL if not already present
-  localizedUrl.pathname = addLocale(
-    localizedUrl.pathname,
+  const normalizedPathWithLocale = addLocale(
+    normalizedPath,
     detectedLocale ?? nextConfig?.i18n?.defaultLocale,
   )
 
-  localizedUrl.pathname = addBasePath(localizedUrl.pathname, nextConfig?.basePath)
+  localizedUrl.pathname = addBasePath(
+    isDataRequest
+      ? rewriteDataPath({
+          dataUrl: pathnameWithoutBasePath,
+          newRoute: normalizedPathWithLocale,
+        })
+      : normalizedPathWithLocale,
+    nextConfig?.basePath,
+  )
 
   return {
     localizedUrl,

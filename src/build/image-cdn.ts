@@ -59,6 +59,27 @@ export const setImageConfig = async (ctx: PluginContext): Promise<void> => {
       to: '/.netlify/images?url=:url&w=:width&q=:quality',
       status: 200,
     },
+    // Catch-all for anything else hitting the image endpoint. Must stay last, because query
+    // matching is exact and this rule has no query constraint, so it would otherwise shadow the
+    // rule above.
+    //
+    // `url`, `w` and `q` are all required by Next.js' own image optimizer (each is a hard 400 in
+    // `ImageOptimizerCache.validateParams`), and they are the only params next/image emits - the
+    // `dpl` param it adds for local images when skew protection is on is consumed and stripped
+    // before redirects are matched. So a request reaching this rule is one the optimizer could not
+    // have served anyway: crawlers probing /_next/image, or markup that mangled the query (an
+    // HTML-escaped `&amp;` turns `w`/`q` into `amp;w`/`amp;q`).
+    //
+    // Sending those to the Image CDN without a `url` lets it reject them at the edge instead of
+    // booting the server function only for Next.js to reject them itself. The Image CDN answers a
+    // missing `url` with the same status Next.js would have:
+    //   HTTP 400 {"code":400,"msg":"must provide the url param","error_id":"..."}
+    // served from the edge, and `error_id` matches `x-nf-request-id` so these stay traceable.
+    {
+      from: imageEndpointPath,
+      to: '/.netlify/images',
+      status: 200,
+    },
   )
 
   if (remotePatterns?.length !== 0 || domains?.length !== 0) {
