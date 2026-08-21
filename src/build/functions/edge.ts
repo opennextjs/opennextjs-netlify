@@ -306,7 +306,13 @@ const isEsmOnlyPackage = (pkgJson: Record<string, unknown>): boolean => {
   return typeof pkgJson.main === 'string' && pkgJson.main.endsWith('.mjs')
 }
 
-const isHashedTurbopackSpecifier = (name: string): boolean => /-[a-f0-9]{8,}$/i.test(name)
+const isHashedTurbopackSpecifier = (name: string): boolean => /-[a-f\d]{8,}$/i.test(name)
+
+const patchExternalImport = (source: string) =>
+  source.replaceAll(
+    'await import(id)',
+    '(globalThis.__netlifyEsmExternals?.[id] ?? await import(id))',
+  )
 
 const isNextAliasTreePath = (posixPath: string): boolean =>
   posixPath === '.next/node_modules' ||
@@ -525,9 +531,8 @@ const copyHandlerDependenciesForNodeMiddleware = async (
 
   const entryPathToNs = new Map<string, string>()
   const staticImportLines: string[] = []
-  let esmImportIndex = 0
-  for (const entryPath of new Set(esmEntries.values())) {
-    const ns = `__netlifyEsm${esmImportIndex++}`
+  for (const [index, entryPath] of [...new Set(esmEntries.values())].entries()) {
+    const ns = `__netlifyEsm${index}`
     entryPathToNs.set(entryPath, ns)
     staticImportLines.push(`import * as ${ns} from ${JSON.stringify(`./${entryPath}`)};`)
   }
@@ -535,11 +540,6 @@ const copyHandlerDependenciesForNodeMiddleware = async (
   // Deno's eszip build cannot evaluate `import(id)` when `id` is a runtime value
   // ("A dynamic import callback was not specified"). Point Turbopack's
   // externalImport at the statically imported namespace instead.
-  const patchExternalImport = (source: string) =>
-    source.replaceAll(
-      'await import(id)',
-      '(globalThis.__netlifyEsmExternals?.[id] ?? await import(id))',
-    )
 
   for (const [path, content] of writtenSources) {
     parts.push(
@@ -661,7 +661,7 @@ export const createEdgeHandlers = async (ctx: PluginContext) => {
     version: 1,
     functions: netlifyDefinitions,
   }
-  if (Object.keys(imports).length > 0) {
+  if (Object.keys(imports).length !== 0) {
     await writeFile(
       join(ctx.edgeFunctionsDir, 'import_map.json'),
       JSON.stringify({ imports }, null, 2),
