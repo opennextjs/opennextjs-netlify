@@ -46,6 +46,22 @@ export class NextDeployInstance extends NextInstance {
     return this._buildId
   }
 
+  protected throwIfUnavailable(): void | never {
+    if (this.isStopping !== null) {
+      throw new Error('Next.js is no longer available.', {
+        cause: this.isStopping,
+      })
+    }
+    if (this.isDestroyed !== null) {
+      throw new Error('Next.js is no longer available.', {
+        cause: this.isDestroyed,
+      })
+    }
+    if (this.childProcess === undefined) {
+      // deploy tests don't have access to the process
+    }
+  }
+
   public async setup(parentSpan: Span) {
     if (process.env.SITE_URL && process.env.BUILD_ID) {
       require('console').log('Using existing deployment: ' + process.env.SITE_URL)
