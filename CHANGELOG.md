@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.16.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.13...v5.16.0) (2026-09-03)
+
+
+### Features
+
+* add _next/static/service-worker/* header handling ([65eb76e](https://github.com/opennextjs/opennextjs-netlify/commit/65eb76eb11d493eca216a7e130e055b12d43761f))
+
+
+### Bug Fixes
+
+* await the Node middleware require in the generated edge handler template ([65eb76e](https://github.com/opennextjs/opennextjs-netlify/commit/65eb76eb11d493eca216a7e130e055b12d43761f))
+* don't crash on server actions over the body size limit ([65eb76e](https://github.com/opennextjs/opennextjs-netlify/commit/65eb76eb11d493eca216a7e130e055b12d43761f))
+* keep non-ascii blob keys consistent between build and runtime ([65eb76e](https://github.com/opennextjs/opennextjs-netlify/commit/65eb76eb11d493eca216a7e130e055b12d43761f))
+
 ## [5.15.13](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.12...v5.15.13) (2026-07-27)
 
 
