@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
 import { v4 } from 'uuid'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
@@ -789,6 +792,39 @@ for (const {
           ).rejects.toThrow(
             'https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/#limitations',
           )
+        })
+
+        test<FixtureTestContext>('should run Node.js middleware that imports an ESM-only serverExternalPackages package', async (ctx) => {
+          await createFixture('middleware-node-esm-externals', ctx)
+          await runPlugin(ctx)
+
+          const importMap = JSON.parse(
+            await readFile(join(ctx.cwd, '.netlify/edge-functions/import_map.json'), 'utf8'),
+          ) as { imports: Record<string, string> }
+          const importMapTargets = Object.values(importMap.imports)
+          expect(importMapTargets.some((target) => target.includes('nanoid'))).toBe(true)
+          expect(
+            Object.keys(importMap.imports).some(
+              (specifier) => specifier === 'nanoid' || specifier.startsWith('nanoid-'),
+            ),
+          ).toBe(true)
+
+          const origin = await LocalServer.run(async (_req, res) => {
+            res.write('Hello from origin!')
+            res.end()
+          })
+          ctx.cleanup?.push(() => origin.stop())
+
+          const response = await invokeEdgeFunction(ctx, {
+            functions: [edgeFunctionNameRoot],
+            origin,
+            url: '/protected',
+          })
+
+          expect(response.status).toBe(200)
+          expect(await response.text()).toBe('Hello from origin!')
+          expect(response.headers.get('x-request-id')).toMatch(/^[A-Za-z0-9_-]+$/)
+          expect(response.headers.get('x-pathname')).toBe('/protected')
         })
       })
 
