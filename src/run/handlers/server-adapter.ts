@@ -13,7 +13,6 @@ import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js
 import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
-  getInvocationUrl,
   getPathnameAliases,
   resolveRoutes,
 } from '../../adapter-runtime-shared/next-routing.js'
@@ -90,6 +89,8 @@ type CommonHandlerArg = {
   resolution: ResolveRoutesResult
   tracer: ReturnType<typeof getTracer>
   span?: Span
+  // set when rendering the error page for this status (like Next's router does with res.statusCode)
+  invokeStatus?: number
 }
 
 type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
@@ -109,7 +110,10 @@ type InvokeHandlerArg = {
   entrypoint: string
   runtime: 'nodejs' | 'edge'
   sourcePage: string
+  isAppRoute: boolean
 }
+
+const appRouteIds = new Set(manifest.outputs.appRoutes.map((output) => output.id))
 
 function createInvokeHandler(
   output:
@@ -123,6 +127,7 @@ function createInvokeHandler(
     entrypoint: output.filePath,
     runtime: output.runtime,
     sourcePage: output.sourcePage,
+    isAppRoute: appRouteIds.has(output.id),
   })
 }
 
@@ -197,15 +202,14 @@ extendedGlobalThis[RouterServerContextSymbol] = {
 }
 
 /**
- * Custom 404 page for the request: pages router `/404` (locale variant first), else app router
- * `/_not-found`. Static 404 HTML is served with Next's default headers for 404s rather than the
- * permanent caching a direct request to a fully static page gets.
+ * Custom error page for the request, like Next's router: 404 renders pages router `/404` (locale
+ * variant first), else app router `/_not-found`; 500 renders `/500`, else `/_error`. Static error
+ * HTML is served with Next's default headers for error pages rather than the permanent caching a
+ * direct request to a fully static page gets.
  */
-async function renderNotFoundPage(
-  request: Request,
-  requestContext: RequestContext,
-  tracer: ReturnType<typeof getTracer>,
-  span?: Span,
+async function renderErrorPage(
+  status: 404 | 500,
+  { request, requestContext, tracer, span }: Omit<CommonHandlerArg, 'resolution'>,
 ): Promise<Response> {
   const url = new URL(request.url)
   const candidates: string[] = []
@@ -213,14 +217,17 @@ async function renderNotFoundPage(
     const { locales, defaultLocale } = manifest.config.i18n
     const segment = url.pathname.slice(basePath.length).split('/')[1]?.toLowerCase()
     const locale = locales.find((value) => value.toLowerCase() === segment) ?? defaultLocale
-    candidates.push(`${basePath}/${locale}/404`)
+    candidates.push(`${basePath}/${locale}/${status}`)
   }
-  candidates.push(`${basePath}/404`, `${basePath}/_not-found`)
+  candidates.push(
+    `${basePath}/${status}`,
+    status === 404 ? `${basePath}/_not-found` : `${basePath}/_error`,
+  )
 
   const pathname = candidates.find((candidate) => handlerDefsByPathname.has(candidate))
   const handler = pathname ? handlerDefsByPathname.get(pathname) : undefined
   if (!pathname || !handler) {
-    return new Response('Not Found', { status: 404 })
+    return new Response(status === 404 ? 'Not Found' : 'Internal Server Error', { status })
   }
 
   const response = await handler({
@@ -229,6 +236,7 @@ async function renderNotFoundPage(
     resolution: {},
     tracer,
     span,
+    invokeStatus: status,
   })
 
   const headers = new Headers(response.headers)
@@ -236,9 +244,9 @@ async function renderNotFoundPage(
     headers.delete('netlify-cdn-cache-control')
     headers.set('cache-control', 'private, no-cache, no-store, max-age=0, must-revalidate')
   }
-  const notFoundResponse = new Response(response.body, { status: 404, headers })
-  setCacheControlHeaders(notFoundResponse, request, requestContext)
-  return notFoundResponse
+  const errorResponse = new Response(response.body, { status, headers })
+  setCacheControlHeaders(errorResponse, request, requestContext)
+  return errorResponse
 }
 
 // a literal request for the 404 page (or its locale variant) responds with 404, like Next's server
@@ -266,11 +274,11 @@ const render404: NonNullable<RequestMeta['render404']> = async (
   if (!requestContext?.originalRequest) {
     throw new Error('render404 called outside of request context')
   }
-  const response = await renderNotFoundPage(
-    requestContext.originalRequest,
+  const response = await renderErrorPage(404, {
+    request: requestContext.originalRequest,
     requestContext,
-    getTracer(),
-  )
+    tracer: getTracer(),
+  })
   if (!res.headersSent) {
     res.statusCode = 404
     for (const [name, value] of response.headers) {
@@ -399,8 +407,8 @@ async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHan
 }
 
 async function invokeHandler(
-  { id, entrypoint, runtime, sourcePage }: InvokeHandlerArg,
-  { tracer, request, requestContext, resolution, span }: CommonHandlerArg,
+  { id, entrypoint, runtime, sourcePage, isAppRoute }: InvokeHandlerArg,
+  { tracer, request, requestContext, resolution, span, invokeStatus }: CommonHandlerArg,
 ) {
   span?.setAttribute('matched.sourcePage', sourcePage)
   span?.setAttribute('matched.runtime', runtime)
@@ -412,6 +420,7 @@ async function invokeHandler(
           request,
           requestContext,
           manifest,
+          query: resolution.resolvedQuery,
           routeParams: resolution.routeMatches,
         })
       } catch (error) {
@@ -425,8 +434,25 @@ async function invokeHandler(
     try {
       const handler = await loadHandler(entrypoint)
 
+      // route handlers (route.ts) read search params from the URL only, so rewrite-added query has
+      // nowhere else to travel. Other outputs get it via requestMeta below, keeping req.url public.
+      let handlerRequest = request
+      if (isAppRoute && resolution.resolvedQuery) {
+        const url = new URL(request.url)
+        for (const [key, valueOrValues] of Object.entries(resolution.resolvedQuery)) {
+          url.searchParams.delete(key)
+          for (const value of Array.isArray(valueOrValues) ? valueOrValues : [valueOrValues]) {
+            url.searchParams.append(key, value)
+          }
+        }
+        handlerRequest = new Request(url, request)
+      }
+
       // Convert Web Request to Node.js IncomingMessage/ServerResponse
-      const { req, res } = toReqRes(request)
+      const { req, res } = toReqRes(handlerRequest)
+      if (invokeStatus) {
+        res.statusCode = invokeStatus
+      }
 
       // Invoke the route handler using the Node.js handler signature
       // as defined by the Next.js adapter contract:
@@ -435,16 +461,21 @@ async function invokeHandler(
         waitUntil: requestContext.trackBackgroundWork,
         requestMeta: {
           initURL: request.url,
+          // rewrite result (with nxtP-prefixed route params), the module re-derives config rewrites
+          // from req.url itself but can't know about middleware ones
+          query: resolution.resolvedQuery,
           render404,
           revalidate,
         },
       })
 
-      // Next.js responds with 500 itself for render errors, but an error thrown before headers are
-      // sent (e.g. failing to load a manifest) would otherwise leave the response open until timeout
+      // Route modules rethrow render errors for the host to serve the error page (Next's router
+      // renders /500 then). Ending the response here also avoids leaving it open until timeout.
+      let failedBeforeHeaders = false
       nextHandlerPromise.catch((error) => {
         console.error('route handler error', error)
         if (!res.headersSent) {
+          failedBeforeHeaders = true
           res.statusCode = 500
           res.end('Internal Server Error')
         }
@@ -456,6 +487,11 @@ async function invokeHandler(
       // Contrary to the docs, this resolves when the headers are available, not when the stream closes.
       // See https://github.com/fastly/http-compute-js/blob/main/src/http-compute-js/http-server.ts#L168-L173
       const response = await toComputeResponse(res)
+
+      if (failedBeforeHeaders && !invokeStatus) {
+        invokeSpan?.setAttribute('http.status_code', 500)
+        return renderErrorPage(500, { request, requestContext, tracer, span })
+      }
 
       invokeSpan?.setAttribute('http.status_code', response.status)
 
@@ -670,15 +706,14 @@ export default async function ServerHandler(request: Request, requestContext: Re
         )
       }
 
-      // rewrites (routing rules or middleware) resolved to a concrete pathname + query, invoke that
-      const invokeUrl = getInvocationUrl(request, resolution, {
-        basePath: manifest.config.basePath || '',
-        buildId: manifest.buildId,
-        trailingSlash: manifest.config.trailingSlash,
-      })
+      // Next's route modules expect req.url to be the URL the client requested (that's req.url and
+      // asPath, and config rewrites are re-applied from it), the rewrite result travels separately.
+      // The routing edge function forwards the rewrite target as the URL though (so the CDN can cache
+      // by it) and passes the requested URL in a header.
+      const publicUrl = request.headers.get('x-next-public-url')
 
       const handlerResponse = await matchedHandler({
-        request: invokeUrl.href === request.url ? request : new Request(invokeUrl, request),
+        request: publicUrl ? new Request(publicUrl, request) : request,
         requestContext,
         resolution,
         tracer,
@@ -708,7 +743,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
     // which would require setting correct netlify-vary header.
     return applyResolutionToThisResponse(
-      await renderNotFoundPage(request, requestContext, tracer, span),
+      await renderErrorPage(404, { request, requestContext, tracer, span }),
       404,
     )
   })

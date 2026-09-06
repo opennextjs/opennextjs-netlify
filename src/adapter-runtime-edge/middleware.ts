@@ -276,6 +276,9 @@ export async function runNextRouting(
   // Clone the request, potentially adjusting URL for rewrites
   const forwardHeaders = new Headers(middlewareRequestHeaders ?? request.headers)
   forwardHeaders.set('x-next-route-resolution', serialized)
+  // the forwarded URL is the rewrite target (so the CDN can cache by it), the server handler still
+  // needs the URL the client requested because that's what Next's route modules expect as req.url
+  forwardHeaders.set('x-next-public-url', request.url)
 
   // Apply any request headers from middleware
   if (resolution.resolvedHeaders) {

@@ -42,12 +42,14 @@ export async function invokeEdgeRuntimeOutput({
   request,
   requestContext,
   manifest,
+  query,
   routeParams,
 }: {
   outputId: string
   request: Request
   requestContext: RequestContext
   manifest: AdapterManifest
+  query?: Record<string, string | string[]>
   routeParams?: Record<string, string>
 }): Promise<Response> {
   // PLUGIN_DIR is the app dir inside the handler, distDir is relative to it
@@ -59,8 +61,15 @@ export async function invokeEdgeRuntimeOutput({
     throw new Error(`Edge function "${outputId}" not found in middleware-manifest.json`)
   }
 
-  // like runEdgeFunction: route params are merged into the query the edge entrypoint sees
+  // like runEdgeFunction: the entrypoint sees the requested URL with rewrite-added query and route
+  // params merged into its query
   const url = new URL(request.url)
+  for (const [key, valueOrValues] of Object.entries(query ?? {})) {
+    url.searchParams.delete(key)
+    for (const value of Array.isArray(valueOrValues) ? valueOrValues : [valueOrValues]) {
+      url.searchParams.append(key, value)
+    }
+  }
   for (const [key, value] of Object.entries(routeParams ?? {})) {
     url.searchParams.set(key, value)
   }
