@@ -1,10 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Buffer } from 'node:buffer'
-import { request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
-import { request as httpsRequest } from 'node:https'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { resolve as resolvePath } from 'node:path'
-import { Readable } from 'node:stream'
-import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import { pathToFileURL } from 'node:url'
 
 import type { Span } from '@opentelemetry/api'
@@ -16,8 +13,6 @@ import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js
 import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
-  getExternalRewriteRequestHeaders,
-  getExternalRewriteResponseHeaders,
   getInvocationUrl,
   resolveRoutes,
 } from '../../adapter-runtime-shared/next-routing.js'
@@ -26,6 +21,7 @@ import type {
   ResolveRoutesParams,
   ResolveRoutesResult,
 } from '../../adapter-runtime-shared/next-routing.js'
+import { proxyExternalRewrite } from '../../adapter-runtime-shared/proxy-external-rewrite.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
@@ -542,51 +538,6 @@ async function invokeHandler(
       getLogger().withError(error).error('route handler error')
       invokeSpan?.setAttribute('http.status_code', 500)
       return new Response('Internal Server Error', { status: 500 })
-    }
-  })
-}
-
-/**
- * Proxy an external rewrite over `node:http` rather than `fetch()`: fetch transparently decodes the
- * body (forcing `content-encoding` to be dropped) and adds its own `accept-encoding`, while Next's
- * own proxy passes upstream bytes and encoding through and only forwards what the client asked for.
- * Header rules are shared with the edge handler's fetch-based variant.
- */
-function proxyExternalRewrite(url: URL, request: Request): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const makeRequest = url.protocol === 'https:' ? httpsRequest : httpRequest
-    const proxyRequest = makeRequest(
-      url,
-      {
-        method: request.method,
-        headers: Object.fromEntries(getExternalRewriteRequestHeaders(request)),
-      },
-      (proxyResponse) => {
-        const upstreamHeaders = new Headers()
-        for (const [name, value] of Object.entries(proxyResponse.headers)) {
-          for (const singleValue of Array.isArray(value) ? value : [value]) {
-            if (singleValue !== undefined) {
-              upstreamHeaders.append(name, singleValue)
-            }
-          }
-        }
-        const status = proxyResponse.statusCode ?? 502
-        const hasBody = ![204, 304].includes(status) && request.method !== 'HEAD'
-        resolve(
-          new Response(hasBody ? (Readable.toWeb(proxyResponse) as ReadableStream) : null, {
-            status,
-            statusText: proxyResponse.statusMessage,
-            headers: getExternalRewriteResponseHeaders(upstreamHeaders, { bodyDecoded: false }),
-          }),
-        )
-      },
-    )
-    proxyRequest.on('error', reject)
-
-    if (request.body && !['GET', 'HEAD'].includes(request.method)) {
-      Readable.fromWeb(request.body as NodeReadableStream).pipe(proxyRequest)
-    } else {
-      proxyRequest.end()
     }
   })
 }

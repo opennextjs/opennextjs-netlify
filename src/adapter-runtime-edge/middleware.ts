@@ -17,13 +17,13 @@ import type { Context } from '@netlify/edge-functions'
 import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
-  fetchExternalRewrite,
   getInvocationUrl,
   normalizeNextDataUrl,
   resolveRoutes,
   responseToMiddlewareResult,
 } from '../adapter-runtime-shared/next-routing.js'
 import type { ResolveRoutesResult } from '../adapter-runtime-shared/next-routing.js'
+import { proxyExternalRewrite } from '../adapter-runtime-shared/proxy-external-rewrite.js'
 // import { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
 interface Route {
@@ -253,7 +253,7 @@ export async function runNextRouting(
   if (resolution.externalRewrite) {
     try {
       return applyResolutionToThisResponse(
-        await fetchExternalRewrite(resolution.externalRewrite, request),
+        await proxyExternalRewrite(resolution.externalRewrite, request),
       )
     } catch (error) {
       console.error('external rewrite fetch error', error)
