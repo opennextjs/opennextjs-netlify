@@ -52,24 +52,8 @@ function normalizeAdapterOutput(
 // so this is meant to massage things a bit so it works - ideally this is eventually removed
 // once things are either fixed upstream ... or maybe assumptions we've made about hot it should
 // are proven incorrect and we'll adjust usage to fit.
+// Both workarounds below re-verified as still needed against @next/routing@16.3.4.
 // this primarily focus on those rules:
-
-// @next/routing doesn't interpolate Location headers, just "destination"
-//   {
-//     "source": "/:file((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+)/",
-//     "sourceRegex": "^(?:\\/((?!\\.well-known(?:\\/.*)?)(?:[^/]+\\/)*[^/]+\\.\\w+))\\/$",
-//     "headers": {
-//       "Location": "/$1"
-//     },
-//     "status": 308,
-//     "missing": [
-//       {
-//         "type": "header",
-//         "key": "x-nextjs-data"
-//       }
-//     ],
-//     "priority": true
-//   },
 
 // this seems to match on next-data request due to processing order in @next/routing - it normalizes
 // data request before handling redirects, so those /_next/data requests match on this rule
@@ -115,25 +99,6 @@ function fixAdapterOutputForNextRouting(
                 key: 'x-nextjs-data',
               },
             ],
-          }
-        }
-
-        if (
-          maybeConvertedRule.status &&
-          maybeConvertedRule.headers &&
-          maybeConvertedRule.status >= 300 &&
-          maybeConvertedRule.status < 400
-        ) {
-          // rewrite location header to be destination, so it gets interpolated by @next/routing
-          const locationHeaderName = Object.keys(maybeConvertedRule.headers).find(
-            (headerName) => headerName.toLowerCase() === 'location',
-          )
-          if (locationHeaderName) {
-            const locationValue = maybeConvertedRule.headers[locationHeaderName]
-            maybeConvertedRule = {
-              ...maybeConvertedRule,
-              destination: locationValue,
-            }
           }
         }
 
