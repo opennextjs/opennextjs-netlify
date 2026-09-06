@@ -1,13 +1,15 @@
 // Runs `runtime: 'edge'` outputs inside the Node.js function using Next's edge sandbox, the same
-// way `NextNodeServer.runEdgeFunction` does in `next start` / standalone. Self-contained on purpose:
-// delete this module (and its call site in server-adapter.ts, plus build/content/edge-runtime-sandbox.ts)
-// once edge outputs get a native home.
+// way `NextNodeServer.runEdgeFunction` does in `next start` / standalone. The sandbox is bundled
+// from our pinned next-with-adapters rather than taken from the app's Next.js, so it's prepared at
+// package build time and the app's Next.js only provides the edge bundles it evaluates. Self-contained
+// on purpose: delete this module (and its call site in server-adapter.ts, plus
+// build/content/edge-runtime-sandbox.ts) once edge outputs get a native home.
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 
 import type { MiddlewareManifest } from 'next-with-adapters/dist/build/webpack/plugins/middleware-plugin.js'
-import type { run as sandboxRun } from 'next-with-adapters/dist/server/web/sandbox/sandbox.js'
+import { run } from 'next-with-adapters/dist/server/web/sandbox/index.js'
 
 import type { AdapterManifest } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
@@ -15,7 +17,7 @@ import { PLUGIN_DIR } from '../constants.js'
 import type { RequestContext } from './request-context.cjs'
 
 type EdgeFunctionDefinition = MiddlewareManifest['functions'][string]
-type SandboxRunParams = Parameters<typeof sandboxRun>[0]
+type SandboxRunParams = Parameters<typeof run>[0]
 
 let edgeFunctionsPromise: Promise<Record<string, EdgeFunctionDefinition>> | undefined
 
@@ -46,10 +48,6 @@ export async function invokeEdgeRuntimeOutput({
   )
   if (!edgeFunction) {
     throw new Error(`Edge function "${outputId}" not found in middleware-manifest.json`)
-  }
-
-  const { run } = (await import('next/dist/server/web/sandbox/index.js')) as {
-    run: typeof sandboxRun
   }
 
   // like runEdgeFunction: route params are merged into the query the edge entrypoint sees

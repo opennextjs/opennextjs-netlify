@@ -1,7 +1,7 @@
 // @ts-check
 
 import { cp, readFile, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { gzip } from 'node:zlib'
@@ -65,6 +65,22 @@ async function bundle(entryPoints, bundleOptions) {
     external: ['next', '@next/env'], // don't try to bundle next (adapter runtime resolves the app's @next/env)
     allowOverwrite: watch,
     plugins: [
+      {
+        // Next internals bundled from next-with-adapters (the edge sandbox) require siblings by bare
+        // `next/...` specifiers; resolve those to the same pinned copy instead of the external `next`
+        name: 'pin-next-internals-imported-by-next-with-adapters',
+        setup(pluginBuild) {
+          pluginBuild.onResolve({ filter: /^next\// }, (args) => {
+            if (!args.importer.includes(`${sep}node_modules${sep}next-with-adapters${sep}`)) {
+              return
+            }
+            return pluginBuild.resolve(args.path.replace(/^next\//, 'next-with-adapters/'), {
+              kind: args.kind,
+              resolveDir: args.resolveDir,
+            })
+          })
+        },
+      },
       {
         // runtime modules are all entrypoints, so importing them should mark them as external
         // to avoid duplicating them in the bundle (which also can cause import path issues)
@@ -137,7 +153,8 @@ await Promise.all([
   bundle(entryPointsESM, {
     format: 'esm',
     chunkNames: 'esm-chunks/[name]-[hash]',
-    banner: { js: bannerRequireShim },
+    // dirname shim: Next's compiled deps bundled for the edge sandbox reference __dirname
+    banner: { js: `${bannerRequireShim}${bannerDirnameShim}` },
   }),
   ...entryPointsCJS.map((entry) => bundle([entry], { format: 'cjs' })),
   bundle(adapterEdgeAndSharedRuntimeEntryPointsEsm, {
