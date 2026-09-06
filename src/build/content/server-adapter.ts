@@ -51,9 +51,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
     for (const outputs of outputArrays) {
       for (const output of outputs) {
         if (output.runtime !== 'nodejs') {
-          console.log(
-            `Skipping non-nodejs output ${output.filePath} with runtime ${output.runtime}`,
-          )
+          // edge outputs are shipped from middleware-manifest.json by copyEdgeRuntimeOutputs below
           continue
         }
         // filePath is already relative to repoRoot (rewritten in adapter's onBuildComplete).
