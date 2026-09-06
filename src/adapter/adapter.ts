@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 import type { NextAdapter } from 'next-with-adapters'
 import { satisfies } from 'semver'
@@ -48,7 +48,16 @@ const adapter: NextAdapter = {
 
     console.log('onBuildComplete 2')
 
-    await writeFile(join(ctx.distDir, ADAPTER_OUTPUT_FILE), JSON.stringify(ctx), 'utf-8')
+    await writeFile(
+      join(ctx.distDir, ADAPTER_OUTPUT_FILE),
+      JSON.stringify({
+        ...ctx,
+        // same expression Next.js bakes into route modules as __NEXT_RELATIVE_PROJECT_DIR
+        // (build/define-env), which they use as the RouterServerContext key at runtime
+        relativeProjectDir: relative(process.cwd(), ctx.projectDir),
+      }),
+      'utf-8',
+    )
   },
 }
 

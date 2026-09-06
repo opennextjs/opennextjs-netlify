@@ -329,7 +329,6 @@ async function invokeHandler(
         waitUntil: requestContext.trackBackgroundWork,
         requestMeta: {
           initURL: request.url,
-          relativeProjectDir: manifest.relativeProjectDir,
           revalidate,
         },
       })

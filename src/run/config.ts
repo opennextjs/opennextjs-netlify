@@ -22,7 +22,7 @@ export type AdapterManifest = Pick<
   AdapterBuildCompleteContext,
   'routing' | 'outputs' | 'buildId' | 'config'
 > & {
-  // key Next.js uses for RouterServerContext lookups, see PluginContext.relativeAppDir
+  // key Next.js uses for RouterServerContext lookups, see adapter.ts
   relativeProjectDir: string
 }
 
