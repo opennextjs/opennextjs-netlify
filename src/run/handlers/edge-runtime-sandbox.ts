@@ -9,7 +9,6 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 
 import type { MiddlewareManifest } from 'next-with-adapters/dist/build/webpack/plugins/middleware-plugin.js'
-import { run } from 'next-with-adapters/dist/server/web/sandbox/index.js'
 
 import type { AdapterManifest } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
@@ -17,7 +16,17 @@ import { PLUGIN_DIR } from '../constants.js'
 import type { RequestContext } from './request-context.cjs'
 
 type EdgeFunctionDefinition = MiddlewareManifest['functions'][string]
-type SandboxRunParams = Parameters<typeof run>[0]
+type Sandbox = typeof import('next-with-adapters/dist/server/web/sandbox/index.js')
+type SandboxRunParams = Parameters<Sandbox['run']>[0]
+
+let sandboxPromise: Promise<Sandbox> | undefined
+// loaded lazily (still bundled): Next's async-local-storage asserts globalThis.AsyncLocalStorage at
+// module evaluation, which server-adapter.ts only sets up after its imports are done. The sandbox is
+// CommonJS, so outside of vitest its exports sit under `default`.
+const getSandbox = () =>
+  (sandboxPromise ??= import('next-with-adapters/dist/server/web/sandbox/index.js').then(
+    (sandbox) => (sandbox as Sandbox & { default?: Sandbox }).default ?? sandbox,
+  ))
 
 let edgeFunctionsPromise: Promise<Record<string, EdgeFunctionDefinition>> | undefined
 
@@ -70,6 +79,7 @@ export async function invokeEdgeRuntimeOutput({
       }
     : undefined
 
+  const { run } = await getSandbox()
   const result = await run({
     distDir,
     name: edgeFunction.name,

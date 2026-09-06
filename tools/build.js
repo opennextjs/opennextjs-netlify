@@ -41,10 +41,13 @@ var require = await (async () => {
 // this shim is needed for some cjs modules that are imported in ESM :(
 // explicitly use var as it might be already defined in some cases
 const bannerDirnameShim = `
+var __filename = await (async () => {
+  const { fileURLToPath: __banner_fileURLToPath } = await import("node:url");
+  return __banner_fileURLToPath(import.meta.url);
+})();
 var __dirname = await (async () => {
   const { dirname: __banner_dirname } = await import("node:path");
-  const { fileURLToPath: __banner_fileURLToPath } = await import("node:url");
-  return __banner_dirname(__banner_fileURLToPath(import.meta.url));
+  return __banner_dirname(__filename);
 })();
 `
 
