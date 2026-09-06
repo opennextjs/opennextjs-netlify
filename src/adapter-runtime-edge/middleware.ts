@@ -17,6 +17,7 @@ import type { Context } from '@netlify/edge-functions'
 import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
+  fetchExternalRewrite,
   getInvocationUrl,
   normalizeNextDataUrl,
   resolveRoutes,
@@ -251,29 +252,8 @@ export async function runNextRouting(
   // Handle external rewrite — fetch directly from edge
   if (resolution.externalRewrite) {
     try {
-      const proxyRequest = new Request(resolution.externalRewrite.toString(), request)
-      // Remove Netlify internal headers
-      for (const key of request.headers.keys()) {
-        if (key.startsWith('x-nf-')) {
-          proxyRequest.headers.delete(key)
-        }
-      }
-      const fetchResp = await fetch(proxyRequest, { redirect: 'manual' })
-      console.log({
-        fetchResp,
-        spreadResp: { ...fetchResp },
-        spreadRespKeys: Object.keys({ ...fetchResp }),
-      })
-      const headers = new Headers(fetchResp.headers)
-      headers.delete('transfer-encoding')
-      headers.delete('content-encoding')
-      headers.delete('content-length')
       return applyResolutionToThisResponse(
-        new Response(fetchResp.body, {
-          headers,
-          status: fetchResp.status,
-          statusText: fetchResp.statusText,
-        }),
+        await fetchExternalRewrite(resolution.externalRewrite, request),
       )
     } catch (error) {
       console.error('external rewrite fetch error', error)

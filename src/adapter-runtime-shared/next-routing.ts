@@ -119,6 +119,69 @@ export function getInvocationUrl(
   return url
 }
 
+// headers that don't survive proxying an external rewrite: host is derived from the target,
+// x-nf-* are Netlify internal, the rest is hop-by-hop / framing of the upstream connection
+const EXTERNAL_REWRITE_DROPPED_REQUEST_HEADERS = new Set(['connection', 'host', 'keep-alive'])
+const EXTERNAL_REWRITE_DROPPED_RESPONSE_HEADERS = new Set([
+  'connection',
+  'content-length',
+  'keep-alive',
+  'transfer-encoding',
+])
+
+export function getExternalRewriteRequestHeaders(request: Request): Headers {
+  const headers = new Headers()
+  for (const [name, value] of request.headers) {
+    if (EXTERNAL_REWRITE_DROPPED_REQUEST_HEADERS.has(name) || name.startsWith('x-nf-')) {
+      continue
+    }
+    headers.append(name, value)
+  }
+  return headers
+}
+
+export function getExternalRewriteResponseHeaders(
+  upstreamHeaders: Headers,
+  { bodyDecoded }: { bodyDecoded: boolean },
+): Headers {
+  const headers = new Headers()
+  for (const [name, value] of upstreamHeaders) {
+    if (EXTERNAL_REWRITE_DROPPED_RESPONSE_HEADERS.has(name)) {
+      continue
+    }
+    // a transparently decoded body must not advertise the upstream encoding
+    if (bodyDecoded && name === 'content-encoding') {
+      continue
+    }
+    headers.append(name, value)
+  }
+  return headers
+}
+
+/**
+ * Proxy an external rewrite with `fetch()`. The body arrives decoded, so the upstream encoding is
+ * dropped with it. Used where there's no lower-level HTTP client (edge); the function proxies over
+ * `node:http` instead so upstream bytes and encoding pass through like Next's own proxy.
+ */
+export async function fetchExternalRewrite(url: URL, request: Request): Promise<Response> {
+  const hasBody = !['GET', 'HEAD'].includes(request.method)
+  const upstream = await fetch(
+    new Request(url, {
+      method: request.method,
+      headers: getExternalRewriteRequestHeaders(request),
+      body: hasBody ? request.body : undefined,
+      // @ts-expect-error duplex is needed for streaming bodies
+      duplex: hasBody ? 'half' : undefined,
+    }),
+    { redirect: 'manual' },
+  )
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: getExternalRewriteResponseHeaders(upstream.headers, { bodyDecoded: true }),
+  })
+}
+
 export function applyResolutionToResponse(
   request: Request,
   resolution: ResolveRoutesResult,

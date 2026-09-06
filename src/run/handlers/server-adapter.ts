@@ -1,7 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Buffer } from 'node:buffer'
-import type { IncomingMessage, ServerResponse } from 'node:http'
-import { resolve } from 'node:path'
+import { request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
+import { request as httpsRequest } from 'node:https'
+import { resolve as resolvePath } from 'node:path'
+import { Readable } from 'node:stream'
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import { pathToFileURL } from 'node:url'
 
 import type { Span } from '@opentelemetry/api'
@@ -13,6 +16,8 @@ import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js
 import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
+  getExternalRewriteRequestHeaders,
+  getExternalRewriteResponseHeaders,
   getInvocationUrl,
   resolveRoutes,
 } from '../../adapter-runtime-shared/next-routing.js'
@@ -363,7 +368,7 @@ function preferDefault(mod: unknown): unknown {
 
 // PLUGIN_DIR is the app dir inside the handler (where `.netlify` lives), output filePaths are relative
 // to the handler root
-const handlerRootDir = resolve(
+const handlerRootDir = resolvePath(
   PLUGIN_DIR,
   ...manifest.relativeAppDir
     .split('/')
@@ -372,7 +377,7 @@ const handlerRootDir = resolve(
 )
 
 async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
-  const resolvedPath = pathToFileURL(resolve(handlerRootDir, filePath)).href
+  const resolvedPath = pathToFileURL(resolvePath(handlerRootDir, filePath)).href
   const cached = nodeHandlerCache.get(resolvedPath)
   if (cached) {
     return cached
@@ -542,6 +547,51 @@ async function invokeHandler(
 }
 
 /**
+ * Proxy an external rewrite over `node:http` rather than `fetch()`: fetch transparently decodes the
+ * body (forcing `content-encoding` to be dropped) and adds its own `accept-encoding`, while Next's
+ * own proxy passes upstream bytes and encoding through and only forwards what the client asked for.
+ * Header rules are shared with the edge handler's fetch-based variant.
+ */
+function proxyExternalRewrite(url: URL, request: Request): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const makeRequest = url.protocol === 'https:' ? httpsRequest : httpRequest
+    const proxyRequest = makeRequest(
+      url,
+      {
+        method: request.method,
+        headers: Object.fromEntries(getExternalRewriteRequestHeaders(request)),
+      },
+      (proxyResponse) => {
+        const upstreamHeaders = new Headers()
+        for (const [name, value] of Object.entries(proxyResponse.headers)) {
+          for (const singleValue of Array.isArray(value) ? value : [value]) {
+            if (singleValue !== undefined) {
+              upstreamHeaders.append(name, singleValue)
+            }
+          }
+        }
+        const status = proxyResponse.statusCode ?? 502
+        const hasBody = ![204, 304].includes(status) && request.method !== 'HEAD'
+        resolve(
+          new Response(hasBody ? (Readable.toWeb(proxyResponse) as ReadableStream) : null, {
+            status,
+            statusText: proxyResponse.statusMessage,
+            headers: getExternalRewriteResponseHeaders(upstreamHeaders, { bodyDecoded: false }),
+          }),
+        )
+      },
+    )
+    proxyRequest.on('error', reject)
+
+    if (request.body && !['GET', 'HEAD'].includes(request.method)) {
+      Readable.fromWeb(request.body as NodeReadableStream).pipe(proxyRequest)
+    } else {
+      proxyRequest.end()
+    }
+  })
+}
+
+/**
  * Deserialize a ResolveRoutesResult from the `x-next-route-resolution` header.
  * The routing edge function serializes the resolution as JSON with
  * Headers → plain object, URL → string conversions.
@@ -666,28 +716,8 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // Handle external rewrite
     if (resolution.externalRewrite) {
       try {
-        const proxyRequest = new Request(resolution.externalRewrite.toString(), request)
-        // Remove Netlify internal headers
-        for (const key of request.headers.keys()) {
-          if (key.startsWith('x-nf-')) {
-            proxyRequest.headers.delete(key)
-          }
-        }
-
-        const fetchResp = await fetch(proxyRequest, { redirect: 'manual' })
-        // fetch() returns immutable headers — create a new Response with mutable headers
-        const headers = new Headers(fetchResp.headers)
-        // fetch() transparently decompresses the body but keeps the original
-        // content-encoding/transfer-encoding headers. Strip them so the browser
-        // doesn't try to decompress an already-decompressed body.
-        headers.delete('transfer-encoding')
-        headers.delete('content-encoding')
-        headers.delete('content-length')
         return applyResolutionToThisResponse(
-          new Response(fetchResp.body, {
-            ...fetchResp,
-            headers,
-          }),
+          await proxyExternalRewrite(resolution.externalRewrite, request),
         )
       } catch (error) {
         console.error('external rewrite fetch error', error)
