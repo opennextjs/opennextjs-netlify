@@ -24,7 +24,7 @@ import {
   type FunctionInvocationOptions,
 } from './lambda-helpers.mjs'
 
-import { glob } from 'fast-glob'
+import { glob, globSync } from 'fast-glob'
 import {
   EDGE_HANDLER_NAME,
   PluginContext,
@@ -417,6 +417,26 @@ export async function uploadBlobs(ctx: FixtureTestContext, blobsDir: string) {
       await ctx.blobStore.set(key, await readFile(join(blobsDir, key), 'utf-8'), { metadata })
     }),
   )
+}
+
+/**
+ * Directory holding the runtime modules (`.netlify/dist/...`) inside the built server handler. It's
+ * the handler root in standalone mode and the app dir inside the handler in adapter mode.
+ */
+export function getServerHandlerRuntimeModulesDir(ctx: FixtureTestContext): string {
+  const handlerDir = join(ctx.functionDist, SERVER_HANDLER_NAME)
+  if (existsSync(join(handlerDir, '.netlify/dist'))) {
+    return join(handlerDir, '.netlify')
+  }
+  const [cacheHandler] = globSync('*/**/.netlify/dist/run/handlers/cache.cjs', {
+    cwd: handlerDir,
+    dot: true,
+    absolute: true,
+  })
+  if (!cacheHandler) {
+    throw new Error(`Could not find runtime modules in ${handlerDir}`)
+  }
+  return cacheHandler.replace(/\/dist\/run\/handlers\/cache\.cjs$/, '')
 }
 
 export async function invokeFunction(
