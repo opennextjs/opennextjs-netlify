@@ -4,8 +4,6 @@ import { join, relative } from 'node:path'
 import type { NextAdapter } from 'next-with-adapters'
 import { satisfies } from 'semver'
 
-import { NETLIFY_IMAGE_LOADER_FILE } from '../build/image-cdn.js'
-
 import { ADAPTER_OUTPUT_FILE } from './adapter-output.js'
 
 // TODO(adapter): this is just a version I am using for now
@@ -25,13 +23,6 @@ const adapter: NextAdapter = {
       // If not export, make sure to not build standalone output to avoid wasteful work
       // @ts-expect-error - types don't allow unsetting output, even if `undefined` is actually a default
       config.output = undefined
-    }
-
-    if (config.images.loader === 'default') {
-      // Set up Netlify Image CDN image's loaderFile
-      // see https://nextjs.org/docs/app/api-reference/config/next-config-js/images
-      config.images.loader = 'custom'
-      config.images.loaderFile = NETLIFY_IMAGE_LOADER_FILE
     }
 
     return config
