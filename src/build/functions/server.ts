@@ -24,12 +24,21 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
     // we need to copy them to the functions-internal folder
     const { included_files: includedFiles = [] } = ctx.netlifyConfig.functions?.['*'] || {}
 
+    // included_files globs are relative to process.cwd() and the app dir relative to that is
+    // PACKAGE_PATH. In adapter mode relativeAppDir is relative to Next's repoRoot (the git root),
+    // which differs from cwd when a base dir is set, so it can't be used to strip the app dir here.
+    const appDirFromCwd = ctx.hasAdapter() ? ctx.constants.PACKAGE_PATH || '' : ctx.relativeAppDir
+    // in the adapter layout the app lives under relativeAppDir inside the handler (see server-adapter.ts)
+    const appDirInHandler = ctx.hasAdapter()
+      ? join(ctx.serverHandlerRootDir, ctx.relativeAppDir)
+      : ctx.serverHandlerDir
+
     // we also force including the .env files to ensure those are available in the lambda
     includedFiles.push(
-      posixJoin(ctx.relativeAppDir, '.env'),
-      posixJoin(ctx.relativeAppDir, '.env.production'),
-      posixJoin(ctx.relativeAppDir, '.env.local'),
-      posixJoin(ctx.relativeAppDir, '.env.production.local'),
+      posixJoin(appDirFromCwd, '.env'),
+      posixJoin(appDirFromCwd, '.env.production'),
+      posixJoin(appDirFromCwd, '.env.local'),
+      posixJoin(appDirFromCwd, '.env.production.local'),
     )
 
     span.setAttribute('next.includedFiles', includedFiles.join(','))
@@ -45,7 +54,7 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
           // The distDir must not be the package path therefore we need to rely on the
           // serverHandlerDir instead of the serverHandlerRootDir
           // therefore we need to remove the package path from the filePath
-          join(ctx.serverHandlerDir, relative(ctx.relativeAppDir, filePath)),
+          join(appDirInHandler, relative(appDirFromCwd, filePath)),
           {
             recursive: true,
             force: true,
