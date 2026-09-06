@@ -9,12 +9,18 @@ import type { AdapterOutput } from 'next-with-adapters'
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
+import { isDynamicRoute } from 'next-with-adapters/dist/shared/lib/router/utils/is-dynamic.js'
+import { getRouteMatcher } from 'next-with-adapters/dist/shared/lib/router/utils/route-matcher.js'
+import { getRouteRegex } from 'next-with-adapters/dist/shared/lib/router/utils/route-regex.js'
 
 import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
   getPathnameAliases,
+  isNextDataPathname,
+  preferStaticPathnameAfterRewrite,
   resolveRoutes,
+  setNextDataHeader,
 } from '../../adapter-runtime-shared/next-routing.js'
 import type {
   I18nForRouting,
@@ -99,6 +105,7 @@ type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
 const handlerDefsByPathname = new Map<string, Handler>()
 const handlerDefsId = new Map<string, Handler>()
 const basePath = manifest.config.basePath || ''
+const routingBasics = { basePath, buildId: manifest.buildId }
 function registerHandler(pathname: string, handler: Handler) {
   for (const alias of getPathnameAliases(pathname, basePath)) {
     handlerDefsByPathname.set(alias, handler)
@@ -110,10 +117,21 @@ type InvokeHandlerArg = {
   entrypoint: string
   runtime: 'nodejs' | 'edge'
   sourcePage: string
+  pathname: string
   isAppRoute: boolean
 }
 
 const appRouteIds = new Set(manifest.outputs.appRoutes.map((output) => output.id))
+
+// pages with getStaticProps: prerenders point back at them, their data-route outputs share the
+// sourcePage
+const ssgParentIds = new Set(manifest.outputs.prerenders.map((output) => output.parentOutputId))
+const ssgSourcePages = new Set(
+  manifest.outputs.pages
+    .filter((output) => ssgParentIds.has(output.id))
+    .map((output) => output.sourcePage),
+)
+const ssgPathnames = new Set<string>()
 
 function createInvokeHandler(
   output:
@@ -127,6 +145,7 @@ function createInvokeHandler(
     entrypoint: output.filePath,
     runtime: output.runtime,
     sourcePage: output.sourcePage,
+    pathname: output.pathname,
     isAppRoute: appRouteIds.has(output.id),
   })
 }
@@ -141,6 +160,11 @@ for (const output of [
   const handler = createInvokeHandler(output)
   handlerDefsId.set(output.id, handler)
   registerHandler(output.pathname, handler)
+  if (ssgSourcePages.has(output.sourcePage)) {
+    for (const alias of getPathnameAliases(output.pathname, basePath)) {
+      ssgPathnames.add(alias)
+    }
+  }
 }
 
 for (const output of manifest.outputs.prerenders) {
@@ -151,6 +175,9 @@ for (const output of manifest.outputs.prerenders) {
     )
   }
   registerHandler(output.pathname, parentHandler)
+  for (const alias of getPathnameAliases(output.pathname, basePath)) {
+    ssgPathnames.add(alias)
+  }
 }
 
 // serve static files
@@ -406,8 +433,40 @@ async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHan
   })
 }
 
+// Route params for the module. `nxtP` query keys cover matches through `dynamicRoutes`, but a
+// middleware rewrite straight to a concrete path of a dynamic page (`/to-ssg → /ssg/hello`) carries
+// them nowhere else; Next's router derives them from the invoked path the same way.
+const routeMatchers = new Map<string, ReturnType<typeof getRouteMatcher>>()
+function getRouteParams(template: string, pathname: string | undefined) {
+  if (!pathname || !isDynamicRoute(template)) {
+    return
+  }
+  let matcher = routeMatchers.get(template)
+  if (!matcher) {
+    matcher = getRouteMatcher(getRouteRegex(template))
+    routeMatchers.set(template, matcher)
+  }
+  let page = pathname
+  const dataPrefix = `${basePath}/_next/data/${manifest.buildId}/`
+  if (page.startsWith(dataPrefix)) {
+    const rest = page.slice(dataPrefix.length).replace(/\.json$/, '')
+    page = rest === 'index' ? basePath || '/' : `${basePath}/${rest}`
+  }
+  if (manifest.config.i18n) {
+    const rest = page.slice(basePath.length)
+    const [, first = ''] = rest.split('/')
+    const locale = manifest.config.i18n.locales.find(
+      (value) => value.toLowerCase() === first.toLowerCase(),
+    )
+    if (locale) {
+      page = `${basePath}${rest.slice(locale.length + 1) || '/'}`
+    }
+  }
+  return matcher(page) || undefined
+}
+
 async function invokeHandler(
-  { id, entrypoint, runtime, sourcePage, isAppRoute }: InvokeHandlerArg,
+  { id, entrypoint, runtime, sourcePage, pathname, isAppRoute }: InvokeHandlerArg,
   { tracer, request, requestContext, resolution, span, invokeStatus }: CommonHandlerArg,
 ) {
   span?.setAttribute('matched.sourcePage', sourcePage)
@@ -421,7 +480,7 @@ async function invokeHandler(
           requestContext,
           manifest,
           query: resolution.resolvedQuery,
-          routeParams: resolution.routeMatches,
+          routeParams: getRouteParams(pathname, resolution.invocationTarget?.pathname),
         })
       } catch (error) {
         console.error('edge runtime output error', error)
@@ -464,6 +523,7 @@ async function invokeHandler(
           // rewrite result (with nxtP-prefixed route params), the module re-derives config rewrites
           // from req.url itself but can't know about middleware ones
           query: resolution.resolvedQuery,
+          params: getRouteParams(pathname, resolution.invocationTarget?.pathname),
           render404,
           revalidate,
         },
@@ -635,7 +695,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
           buildId: manifest.buildId,
           basePath: manifest.config.basePath || '',
           requestBody: request.body ?? new ReadableStream(),
-          headers: new Headers(request.headers),
+          headers: setNextDataHeader(new Headers(request.headers), url, routingBasics),
           pathnames: allPathnames,
           // Cast i18n config — next-with-adapters uses readonly arrays while @next/routing expects mutable
           i18n: (manifest.config.i18n ?? undefined) as ResolveRoutesParams['i18n'],
@@ -649,7 +709,14 @@ export default async function ServerHandler(request: Request, requestContext: Re
             // Return a no-op result.
             return {}
           },
-        })
+        }).then((resolved) =>
+          preferStaticPathnameAfterRewrite(resolved, url, {
+            pathnames: allPathnames,
+            basePath: manifest.config.basePath || '',
+            buildId: manifest.buildId,
+            i18n: manifest.config.i18n as I18nForRouting | null,
+          }),
+        )
       } catch (error) {
         console.error('route resolution error', error)
         getLogger().withError(error).error('route resolution error')
@@ -710,10 +777,41 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // asPath, and config rewrites are re-applied from it), the rewrite result travels separately.
       // The routing edge function forwards the rewrite target as the URL though (so the CDN can cache
       // by it) and passes the requested URL in a header.
-      const publicUrl = request.headers.get('x-next-public-url')
+      const publicUrl = request.headers.get('x-next-public-url') ?? request.url
+
+      // Pages Router middleware prefetch (`Link` prefetch when middleware exists): Next's server
+      // answers with an empty, non-cacheable result for pages without getStaticProps so the client
+      // does the real data request on navigation instead of running getServerSideProps twice
+      if (
+        request.headers.has('x-middleware-prefetch') &&
+        isNextDataPathname(new URL(publicUrl).pathname, routingBasics) &&
+        !ssgPathnames.has(resolution.resolvedPathname)
+      ) {
+        return applyResolutionToThisResponse(
+          new Response('{}', {
+            headers: {
+              'x-middleware-skip': '1',
+              'cache-control': 'private, no-cache, no-store, max-age=0, must-revalidate',
+              'content-type': 'application/json; charset=utf-8',
+            },
+          }),
+        )
+      }
+
+      const handlerHeaders = setNextDataHeader(
+        new Headers(request.headers),
+        new URL(publicUrl),
+        routingBasics,
+      )
 
       const handlerResponse = await matchedHandler({
-        request: publicUrl ? new Request(publicUrl, request) : request,
+        request: new Request(publicUrl, {
+          method: request.method,
+          headers: handlerHeaders,
+          body: request.body,
+          // @ts-expect-error duplex is needed for streaming bodies
+          duplex: 'half',
+        }),
         requestContext,
         resolution,
         tracer,

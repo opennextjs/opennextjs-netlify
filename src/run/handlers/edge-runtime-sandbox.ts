@@ -50,7 +50,7 @@ export async function invokeEdgeRuntimeOutput({
   requestContext: RequestContext
   manifest: AdapterManifest
   query?: Record<string, string | string[]>
-  routeParams?: Record<string, string>
+  routeParams?: Record<string, string | string[] | undefined>
 }): Promise<Response> {
   // PLUGIN_DIR is the app dir inside the handler, distDir is relative to it
   const distDir = join(PLUGIN_DIR, manifest.config.distDir)
@@ -70,8 +70,14 @@ export async function invokeEdgeRuntimeOutput({
       url.searchParams.append(key, value)
     }
   }
-  for (const [key, value] of Object.entries(routeParams ?? {})) {
-    url.searchParams.set(key, value)
+  for (const [key, valueOrValues] of Object.entries(routeParams ?? {})) {
+    if (valueOrValues === undefined) {
+      continue
+    }
+    url.searchParams.delete(key)
+    for (const value of Array.isArray(valueOrValues) ? valueOrValues : [valueOrValues]) {
+      url.searchParams.append(key, value)
+    }
   }
 
   const hasBody = !['GET', 'HEAD'].includes(request.method)

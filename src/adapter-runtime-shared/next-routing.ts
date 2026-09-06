@@ -71,6 +71,90 @@ export function addDefaultLocaleForRouting(
  * Next keys the Pages Router root output as `/index` while requests come in as `/` (and
  * `matchesPathname` is exact), so register the root under both. adapter-k8s does the same.
  */
+type RoutingBasics = { basePath: string; buildId: string }
+
+export function isNextDataPathname(
+  pathname: string,
+  { basePath, buildId }: RoutingBasics,
+): boolean {
+  return pathname.startsWith(`${basePath}/_next/data/${buildId}/`)
+}
+
+/**
+ * Next's router marks `/_next/data/<buildId>/…` requests with this header before middleware and
+ * route modules see them, both key data-request behaviour (`x-nextjs-rewrite`,
+ * `x-nextjs-matched-path`) off the header rather than the URL.
+ */
+export function setNextDataHeader(headers: Headers, url: URL, routing: RoutingBasics): Headers {
+  if (isNextDataPathname(url.pathname, routing)) {
+    headers.set('x-nextjs-data', '1')
+  }
+  return headers
+}
+
+/**
+ * `@next/routing` checks `dynamicRoutes` before the filesystem after an `afterFiles` rewrite,
+ * Next's router does the opposite: a rewrite to a static page shadowed by a dynamic route
+ * (`/rewrite-1 → /ssr-page` next to `pages/[id]`) resolves to the dynamic one. Prefer the static
+ * output when the rewritten pathname is one.
+ */
+export function preferStaticPathnameAfterRewrite(
+  resolution: ResolveRoutesResult,
+  url: URL,
+  {
+    pathnames,
+    basePath,
+    buildId,
+    i18n,
+  }: RoutingBasics & { pathnames: Iterable<string>; i18n: I18nForRouting | null },
+): ResolveRoutesResult {
+  const { routeMatches, invocationTarget, resolvedPathname } = resolution
+  if (!routeMatches || !invocationTarget || !resolvedPathname?.includes('[')) {
+    return resolution
+  }
+  const known = pathnames instanceof Set ? pathnames : new Set(pathnames)
+  const stripBasePath = (pathname: string) =>
+    basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) || '/' : pathname
+
+  // for data requests this is the page path (see getInvocationUrl)
+  const candidates = [invocationTarget.pathname]
+  if (i18n) {
+    const rest = stripBasePath(invocationTarget.pathname)
+    const [, first = ''] = rest.split('/')
+    const locale = i18n.locales.find((value) => value.toLowerCase() === first.toLowerCase())
+    candidates.push(
+      locale
+        ? `${basePath}${rest.slice(locale.length + 1) || '/'}`
+        : `${basePath}/${i18n.defaultLocale}${rest === '/' ? '' : rest}`,
+    )
+  }
+  if (isNextDataPathname(url.pathname, { basePath, buildId })) {
+    candidates.unshift(
+      ...candidates.map((candidate) => {
+        const rest = stripBasePath(candidate)
+        return `${basePath}/_next/data/${buildId}/${rest === '/' ? 'index' : rest.slice(1)}.json`
+      }),
+    )
+  }
+
+  const staticPathname = candidates.find((candidate) => known.has(candidate))
+  if (!staticPathname) {
+    return resolution
+  }
+  // drop the route params the dynamic match added to the query
+  const query = { ...invocationTarget.query }
+  for (const key of Object.keys(routeMatches)) {
+    delete query[key]
+  }
+  return {
+    ...resolution,
+    resolvedPathname: staticPathname,
+    routeMatches: undefined,
+    resolvedQuery: query,
+    invocationTarget: { ...invocationTarget, query },
+  }
+}
+
 export function getPathnameAliases(pathname: string, basePath: string): string[] {
   return pathname === `${basePath}/index` ? [pathname, basePath || '/'] : [pathname]
 }

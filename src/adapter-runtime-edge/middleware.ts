@@ -18,6 +18,8 @@ import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
   getInvocationUrl,
+  preferStaticPathnameAfterRewrite,
+  setNextDataHeader,
   normalizeNextDataUrl,
   resolveRoutes,
   responseToMiddlewareResult,
@@ -156,12 +158,13 @@ export async function runNextRouting(
   // Cast config values — local type definitions are intentionally loose
   // since this file runs in Deno without type-checking. The next-routing
   // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
+  const routingHeaders = setNextDataHeader(new Headers(request.headers), url, routingConfig)
   const resolution = await resolveRoutes({
     url: addDefaultLocaleForRouting(url, routingConfig),
     buildId: routingConfig.buildId,
     basePath: routingConfig.basePath,
     requestBody: request.body ?? new ReadableStream(),
-    headers: new Headers(request.headers),
+    headers: routingHeaders,
     pathnames: routingConfig.pathnames,
     i18n: (routingConfig.i18n ?? undefined) as Parameters<typeof resolveRoutes>[0]['i18n'],
     routes: routingConfig.routes as Parameters<typeof resolveRoutes>[0]['routes'],
@@ -227,7 +230,7 @@ export async function runNextRouting(
 
       return middlewareResult
     },
-  })
+  }).then((resolved) => preferStaticPathnameAfterRewrite(resolved, url, routingConfig))
 
   const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
 
@@ -274,7 +277,7 @@ export async function runNextRouting(
   const serialized = serializeResolution(resolution)
 
   // Clone the request, potentially adjusting URL for rewrites
-  const forwardHeaders = new Headers(middlewareRequestHeaders ?? request.headers)
+  const forwardHeaders = new Headers(middlewareRequestHeaders ?? routingHeaders)
   forwardHeaders.set('x-next-route-resolution', serialized)
   // the forwarded URL is the rewrite target (so the CDN can cache by it), the server handler still
   // needs the URL the client requested because that's what Next's route modules expect as req.url
