@@ -214,7 +214,16 @@ export async function runNextRouting(
         middlewareCtx.url,
       )
 
-      // console.log({ middlewareResult })
+      if (
+        middlewareResult.redirect &&
+        [url.href, middlewareRequestUrl.href].includes(middlewareResult.redirect.url.href)
+      ) {
+        // same as the standalone edge runtime: a redirect to the requested URL would loop in the
+        // browser, so treat it as next() and still apply the response headers (e.g. cookies meant to
+        // change the next request)
+        delete middlewareResult.redirect
+        middlewareResult.responseHeaders?.delete('location')
+      }
 
       if (middlewareResult.bodySent) {
         // Store for later use if middleware sent a body response
