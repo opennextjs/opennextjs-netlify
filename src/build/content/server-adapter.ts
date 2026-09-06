@@ -1,5 +1,7 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { join as posixJoin } from 'node:path/posix'
 
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
@@ -63,6 +65,15 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         }
       }
     }
+
+    // Next's server loads .env files at startup via @next/env, route modules don't. Ship the app's
+    // copy next to the app dir in the handler so the runtime can do the same (see server-adapter.ts).
+    const requireFromApp = createRequire(join(ctx.adapterOutput.projectDir, 'package.json'))
+    const requireFromNext = createRequire(requireFromApp.resolve('next/package.json'))
+    allAssets.set(
+      posixJoin(ctx.relativeAppDir, 'node_modules/@next/env'),
+      dirname(requireFromNext.resolve('@next/env/package.json')),
+    )
 
     // Copy all collected assets preserving relative paths
     const copyPromises: Promise<void>[] = []

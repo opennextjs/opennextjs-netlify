@@ -62,7 +62,7 @@ async function bundle(entryPoints, bundleOptions) {
     bundle: true,
     platform: 'node',
     target: 'node18',
-    external: ['next'], // don't try to bundle next
+    external: ['next', '@next/env'], // don't try to bundle next (adapter runtime resolves the app's @next/env)
     allowOverwrite: watch,
     plugins: [
       {
