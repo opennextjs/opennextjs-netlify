@@ -1,6 +1,6 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
 import { trace } from '@opentelemetry/api'
@@ -50,17 +50,17 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
 
     for (const outputs of outputArrays) {
       for (const output of outputs) {
-        if (output.runtime !== 'nodejs') {
-          // edge outputs are shipped from middleware-manifest.json by copyEdgeRuntimeOutputs below
-          continue
-        }
         // filePath is already relative to repoRoot (rewritten in adapter's onBuildComplete).
         // Resolve the absolute source path for copying.
         allAssets.set(output.filePath, join(ctx.adapterOutput.repoRoot, output.filePath))
 
-        // Add all traced assets
-        for (const [relPath, absPath] of Object.entries(output.assets)) {
-          allAssets.set(relPath, absPath)
+        // Add all traced assets. Keys are documented as repoRoot-relative, but for edge outputs Next
+        // makes them relative to <repoRoot>/<distDir> instead, so derive the key from the absolute path.
+        for (const absPath of [
+          ...Object.values(output.assets),
+          ...Object.values(output.wasmAssets ?? {}),
+        ]) {
+          allAssets.set(relative(ctx.adapterOutput.repoRoot, absPath), absPath)
         }
       }
     }
