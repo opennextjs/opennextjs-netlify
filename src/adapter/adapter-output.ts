@@ -69,6 +69,14 @@ function normalizeAdapterOutput(
 // ],
 
 // additionally, when trailingSlash: true, the pathname matching for static files is not working
+
+// with i18n, middleware matchers get a mandatory locale segment ("/:nextInternalLocale((?!_next/)[^/.]{1,})")
+// because Next's router adds the default locale to every request before matching. @next/routing does
+// too, except for `/api/` requests, so there `api` gets consumed as the locale (a
+// "/((?!api|...).*)" exclusion matcher then matches `/api/x` on its remainder, and a `/api/:path*`
+// matcher never matches). Let the locale segment match empty exactly where @next/routing skips it.
+const I18N_MATCHER_LOCALE_GROUP = '(?:\\/((?!_next\\/)[^/.]{1,}))'
+const I18N_MATCHER_LOCALE_GROUP_OR_API = '(?:(?=\\/api\\/)|(?!\\/api\\/)\\/((?!_next\\/)[^/.]{1,}))'
 function fixAdapterOutputForNextRouting(
   onBuildCompleteAdapterCtx: AdapterBuildCompleteContext,
 ): AdapterBuildCompleteContext {
@@ -86,6 +94,15 @@ function fixAdapterOutputForNextRouting(
     ...onBuildCompleteAdapterCtx,
     routing: {
       ...onBuildCompleteAdapterCtx.routing,
+      middlewareMatchers: onBuildCompleteAdapterCtx.config.i18n
+        ? onBuildCompleteAdapterCtx.routing.middlewareMatchers.map((matcher) => ({
+            ...matcher,
+            sourceRegex: matcher.sourceRegex.replace(
+              I18N_MATCHER_LOCALE_GROUP,
+              I18N_MATCHER_LOCALE_GROUP_OR_API,
+            ),
+          }))
+        : onBuildCompleteAdapterCtx.routing.middlewareMatchers,
       beforeMiddleware: onBuildCompleteAdapterCtx.routing.beforeMiddleware.map((rule) => {
         let maybeConvertedRule = rule
         // due to ordering process in @next/routing, this rule DOES match on data requests,

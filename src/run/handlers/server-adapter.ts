@@ -9,11 +9,13 @@ import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/rou
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
 import {
+  addDefaultLocaleForRouting,
   applyResolutionToResponse,
   getInvocationUrl,
   resolveRoutes,
 } from '../../adapter-runtime-shared/next-routing.js'
 import type {
+  I18nForRouting,
   ResolveRoutesParams,
   ResolveRoutesResult,
 } from '../../adapter-runtime-shared/next-routing.js'
@@ -471,7 +473,11 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // No edge function (standalone mode fallback, or edge function not deployed)
       try {
         resolution = await resolveRoutes({
-          url,
+          url: addDefaultLocaleForRouting(url, {
+            basePath: manifest.config.basePath || '',
+            buildId: manifest.buildId,
+            i18n: manifest.config.i18n as I18nForRouting | null,
+          }),
           buildId: manifest.buildId,
           basePath: manifest.config.basePath || '',
           requestBody: request.body ?? new ReadableStream(),

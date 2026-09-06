@@ -15,6 +15,7 @@
 import type { Context } from '@netlify/edge-functions'
 
 import {
+  addDefaultLocaleForRouting,
   applyResolutionToResponse,
   getInvocationUrl,
   normalizeNextDataUrl,
@@ -158,7 +159,7 @@ export async function runNextRouting(
   // since this file runs in Deno without type-checking. The next-routing
   // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
   const resolution = await resolveRoutes({
-    url,
+    url: addDefaultLocaleForRouting(url, routingConfig),
     buildId: routingConfig.buildId,
     basePath: routingConfig.basePath,
     requestBody: request.body ?? new ReadableStream(),

@@ -18,6 +18,55 @@ export function normalizeNextDataUrl(url: URL, basePath: string, buildId: string
   return normalized
 }
 
+export type I18nForRouting = {
+  locales: string[]
+  defaultLocale: string
+  domains?: Array<{ domain: string; defaultLocale: string }>
+}
+
+/**
+ * Next's router adds the default locale to `/_next/data/<buildId>/page.json` requests missing one
+ * (router-utils/resolve-routes `middleware_next_data`), `resolveRoutes` skips i18n for data
+ * requests entirely: the mandatory-locale middleware matchers and dynamic data routes never match.
+ * Do that step here. `/api/` requests, which `resolveRoutes` also skips, are handled by patching the
+ * matcher regex at build time instead (see fixAdapterOutputForNextRouting), because the routing
+ * tables only know unprefixed API pathnames.
+ */
+export function addDefaultLocaleForRouting(
+  url: URL,
+  { basePath, buildId, i18n }: { basePath: string; buildId: string; i18n?: I18nForRouting | null },
+): URL {
+  if (!i18n) {
+    return url
+  }
+  const pathname =
+    basePath && url.pathname.startsWith(basePath)
+      ? url.pathname.slice(basePath.length)
+      : url.pathname
+  const defaultLocale =
+    i18n.domains?.find((domain) => domain.domain === url.hostname)?.defaultLocale ??
+    i18n.defaultLocale
+  const startsWithLocale = (path: string) => {
+    const segment = path
+      .split('/')[1]
+      ?.replace(/\.json$/, '')
+      .toLowerCase()
+    return i18n.locales.some((locale) => locale.toLowerCase() === segment)
+  }
+
+  const dataPrefix = `/_next/data/${buildId}/`
+  if (!pathname.startsWith(dataPrefix)) {
+    return url
+  }
+  const rest = pathname.slice(dataPrefix.length)
+  if (startsWithLocale(`/${rest}`)) {
+    return url
+  }
+  const result = new URL(url)
+  result.pathname = `${basePath}${dataPrefix}${rest === 'index.json' ? `${defaultLocale}.json` : `${defaultLocale}/${rest}`}`
+  return result
+}
+
 /**
  * URL to invoke for a matched route. `invocationTarget` carries the concrete pathname + query after
  * rewrites (routing rules or middleware). For data requests resolved through dynamic routes
