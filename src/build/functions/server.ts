@@ -59,16 +59,17 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
       )
     }
 
+    const fileList = await glob('dist/**/*', { cwd: ctx.pluginDir })
+
     // We need to create a package.json file with type: module to make sure that the runtime modules
-    // are handled correctly as ESM modules
+    // are handled correctly as ESM modules. Pushed after the await above so a rejection can't go
+    // unhandled while the glob is pending (e.g. when the build fails and the dir is cleaned up).
     promises.push(
       writeFile(
         join(ctx.serverHandlerRuntimeModulesDir, 'package.json'),
         JSON.stringify({ type: 'module' }),
       ),
     )
-
-    const fileList = await glob('dist/**/*', { cwd: ctx.pluginDir })
 
     for (const filePath of fileList) {
       promises.push(
