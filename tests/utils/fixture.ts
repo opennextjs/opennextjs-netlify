@@ -12,7 +12,7 @@ import { createWriteStream, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, parse, relative } from 'node:path'
+import { basename, dirname, join, parse, relative, resolve } from 'node:path'
 import { env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { v4 } from 'uuid'
@@ -423,15 +423,21 @@ export async function invokeFunction(
   ctx: FixtureTestContext,
   options: FunctionInvocationOptions = {},
 ) {
-  // now for the execution set the process working directory to the dist entry point
-  const cwdMock = vi
-    .spyOn(process, 'cwd')
-    .mockReturnValue(join(ctx.functionDist, SERVER_HANDLER_NAME))
+  // now for the execution set the process working directory to the dist entry point.
+  // The handler may chdir into the app dir on load (adapter and monorepo handlers do) and Next.js
+  // resolves manifests from process.cwd(), so track chdir instead of returning a fixed value. The
+  // module is cached across invocations within a test, so the tracked cwd has to live on ctx.
+  ctx.functionCwd ??= join(ctx.functionDist, SERVER_HANDLER_NAME)
+  const cwdMock = vi.spyOn(process, 'cwd').mockImplementation(() => ctx.functionCwd as string)
+  const chdirMock = vi.spyOn(process, 'chdir').mockImplementation((directory) => {
+    ctx.functionCwd = resolve(ctx.functionCwd as string, directory)
+  })
   try {
     const invokeFunctionImpl = await loadFunction(ctx, options)
     return await invokeFunctionImpl(options)
   } finally {
     cwdMock.mockRestore()
+    chdirMock.mockRestore()
   }
 }
 
