@@ -37,6 +37,7 @@ import {
   setFetchBeforeNextPatchedIt,
 } from '../storage/storage.cjs'
 
+import { invokeEdgeRuntimeOutput } from './edge-runtime-sandbox.js'
 import { getRequestContext, type RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
@@ -93,6 +94,7 @@ const handlerDefsByPathname = new Map<string, Handler>()
 const handlerDefsId = new Map<string, Handler>()
 
 type InvokeHandlerArg = {
+  id: string
   entrypoint: string
   runtime: 'nodejs' | 'edge'
   sourcePage: string
@@ -106,6 +108,7 @@ function createInvokeHandler(
     | AdapterOutput['APP_ROUTE'],
 ): Handler {
   return invokeHandler.bind(null, {
+    id: output.id,
     entrypoint: output.filePath,
     runtime: output.runtime,
     sourcePage: output.sourcePage,
@@ -417,16 +420,27 @@ async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHan
 }
 
 async function invokeHandler(
-  { entrypoint, runtime, sourcePage }: InvokeHandlerArg,
-  { tracer, request, requestContext, span }: CommonHandlerArg,
+  { id, entrypoint, runtime, sourcePage }: InvokeHandlerArg,
+  { tracer, request, requestContext, resolution, span }: CommonHandlerArg,
 ) {
   span?.setAttribute('matched.sourcePage', sourcePage)
   span?.setAttribute('matched.runtime', runtime)
   return await withActiveSpan(tracer, 'invoke route handler', async (invokeSpan) => {
-    if (runtime !== 'nodejs') {
-      return new Response(`Not yet supported runtime: ${runtime}`, {
-        status: 500,
-      })
+    if (runtime === 'edge') {
+      try {
+        return await invokeEdgeRuntimeOutput({
+          outputId: id,
+          request,
+          requestContext,
+          manifest,
+          routeParams: resolution.routeMatches,
+        })
+      } catch (error) {
+        console.error('edge runtime output error', error)
+        getLogger().withError(error).error('edge runtime output error')
+        invokeSpan?.setAttribute('http.status_code', 500)
+        return new Response('Internal Server Error', { status: 500 })
+      }
     }
 
     try {

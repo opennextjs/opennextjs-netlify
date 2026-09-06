@@ -9,6 +9,7 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 import { ADAPTER_MANIFEST_FILE } from '../../run/constants.js'
 import type { PluginContextAdapter } from '../plugin-context.js'
 
+import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
 import { writeRunConfig } from './server.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
@@ -86,5 +87,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
       )
     }
     await Promise.all(copyPromises)
+
+    await copyEdgeRuntimeOutputs(ctx)
   })
 }
