@@ -188,7 +188,9 @@ test<FixtureTestContext>('image requests do not use the Next.js on-disk image ca
   // `ImageOptimizerCache` constructor, which runs *before* the params are validated - and
   // it keeps this test independent of `sharp` being loadable for the current platform.
   const image = await invokeFunction(ctx, { url: '/_next/image?url=%2Fsquirrel.jpg' })
-  expect(image.statusCode).toBe(400)
+  // in adapter mode `/_next/image` is not an output, so the request never reaches Next's image
+  // optimizer and 404s instead — the assertion below still guards against the cache dir showing up
+  expect(image.statusCode).toBe(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER ? 404 : 400)
 
   // The mkdir is fire-and-forget and not tracked as background work, so give it a
   // window to land rather than racing it.
