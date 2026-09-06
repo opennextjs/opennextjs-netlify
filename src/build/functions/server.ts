@@ -28,10 +28,6 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
     // PACKAGE_PATH. In adapter mode relativeAppDir is relative to Next's repoRoot (the git root),
     // which differs from cwd when a base dir is set, so it can't be used to strip the app dir here.
     const appDirFromCwd = ctx.hasAdapter() ? ctx.constants.PACKAGE_PATH || '' : ctx.relativeAppDir
-    // in the adapter layout the app lives under relativeAppDir inside the handler (see server-adapter.ts)
-    const appDirInHandler = ctx.hasAdapter()
-      ? join(ctx.serverHandlerRootDir, ctx.relativeAppDir)
-      : ctx.serverHandlerDir
 
     // we also force including the .env files to ensure those are available in the lambda
     includedFiles.push(
@@ -54,7 +50,7 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
           // The distDir must not be the package path therefore we need to rely on the
           // serverHandlerDir instead of the serverHandlerRootDir
           // therefore we need to remove the package path from the filePath
-          join(appDirInHandler, relative(appDirFromCwd, filePath)),
+          join(ctx.serverHandlerDir, relative(appDirFromCwd, filePath)),
           {
             recursive: true,
             force: true,
@@ -121,9 +117,8 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
   // Adapter mode uses a dedicated template that works for both monorepo and non-monorepo setups
   if (ctx.hasAdapter()) {
     const template = await readFile(join(templatesDir, 'handler-adapter.tmpl.js'), 'utf-8')
-    templateVariables['{{cwd}}'] =
-      // eslint-disable-next-line no-negated-condition
-      ctx.relativeAppDir.length !== 0 ? posixJoin(ctx.distDirParent) : ''
+    templateVariables['{{cwd}}'] = posixJoin(ctx.relativeAppDir)
+    templateVariables['{{runtimeModulesDir}}'] = `./${posixJoin(ctx.relativeAppDir, '.netlify')}`
     return applyTemplateVariables(template, templateVariables)
   }
 

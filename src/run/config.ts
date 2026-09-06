@@ -24,6 +24,8 @@ export type AdapterManifest = Pick<
 > & {
   // key Next.js uses for RouterServerContext lookups, see adapter.ts
   relativeProjectDir: string
+  // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)
+  relativeAppDir: string
 }
 
 /**

@@ -231,17 +231,19 @@ export class PluginContext {
   }
 
   get serverHandlerDir(): string {
-    if (this.relativeAppDir.length === 0 || this.hasAdapter()) {
+    if (this.relativeAppDir.length === 0) {
       return this.serverHandlerRootDir
     }
-    return join(this.serverHandlerRootDir, this.distDirParent)
+    // adapter output is laid out relative to Next's repoRoot, so the app dir inside the handler is
+    // relativeAppDir. Runtime modules live next to it so their `import('next/...')` resolve the
+    // app's own Next.js.
+    return join(
+      this.serverHandlerRootDir,
+      this.hasAdapter() ? this.relativeAppDir : this.distDirParent,
+    )
   }
 
   get serverHandlerRuntimeModulesDir(): string {
-    if (this.hasAdapter()) {
-      return join(this.serverHandlerRootDir, '.netlify')
-    }
-
     return join(this.serverHandlerDir, '.netlify')
   }
 

@@ -1,12 +1,12 @@
 import {
   createRequestContext,
   runWithRequestContext,
-} from './.netlify/dist/run/handlers/request-context.cjs'
-import serverHandler from './.netlify/dist/run/handlers/server-adapter.js'
-import { getTracer, withActiveSpan } from './.netlify/dist/run/handlers/tracer.cjs'
+} from '{{runtimeModulesDir}}/dist/run/handlers/request-context.cjs'
+import serverHandler from '{{runtimeModulesDir}}/dist/run/handlers/server-adapter.js'
+import { getTracer, withActiveSpan } from '{{runtimeModulesDir}}/dist/run/handlers/tracer.cjs'
 
 // eslint-disable-next-line no-constant-condition
-if ('{{cwd}}') {
+if ('{{cwd}}' && '{{cwd}}' !== '.') {
   process.chdir('{{cwd}}')
 }
 

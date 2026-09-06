@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Buffer } from 'node:buffer'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import type { Span } from '@opentelemetry/api'
 import type { AdapterOutput } from 'next-with-adapters'
@@ -21,6 +23,7 @@ import type {
 } from '../../adapter-runtime-shared/next-routing.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
+import { PLUGIN_DIR } from '../constants.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
   adjustDateHeader,
@@ -38,6 +41,7 @@ import { getRequestContext, type RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
+// eslint-disable-next-line import/max-dependencies
 import { setupWaitUntil } from './wait-until.cjs'
 
 // Read the adapter manifest written at build time (same path resolution as getRunConfig)
@@ -345,14 +349,24 @@ function preferDefault(mod: unknown): unknown {
   return mod && typeof mod === 'object' && 'default' in mod ? mod.default : mod
 }
 
+// PLUGIN_DIR is the app dir inside the handler (where `.netlify` lives), output filePaths are relative
+// to the handler root
+const handlerRootDir = resolve(
+  PLUGIN_DIR,
+  ...manifest.relativeAppDir
+    .split('/')
+    .filter(Boolean)
+    .map(() => '..'),
+)
+
 async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
-  const resolvedPath = `../../../../${filePath}`
+  const resolvedPath = pathToFileURL(resolve(handlerRootDir, filePath)).href
   const cached = nodeHandlerCache.get(resolvedPath)
   if (cached) {
     return cached
   }
   // eslint-disable-next-line import/no-dynamic-require
-  const mod = await import(`${resolvedPath}`)
+  const mod = await import(resolvedPath)
   const { handler } = (await preferDefault(mod)) as { handler: NodeHandlerFn }
   nodeHandlerCache.set(resolvedPath, handler)
   return handler
@@ -686,17 +700,22 @@ export default async function ServerHandler(request: Request, requestContext: Re
         trailingSlash: manifest.config.trailingSlash,
       })
 
-      return applyResolutionToThisResponse(
-        await matchedHandler({
-          request: invokeUrl.href === request.url ? request : new Request(invokeUrl, request),
-          requestContext,
-          resolution,
-          tracer,
-          span,
-        }),
-        resolution.status ??
-          (isNotFoundPageRequest(request, resolution.resolvedPathname) ? 404 : undefined),
-      )
+      const handlerResponse = await matchedHandler({
+        request: invokeUrl.href === request.url ? request : new Request(invokeUrl, request),
+        requestContext,
+        resolution,
+        tracer,
+        span,
+      })
+
+      if (isNotFoundPageRequest(request, resolution.resolvedPathname)) {
+        // Next's server responds 404 here, and CACHE_404_PAGE cache-control handling keys off that
+        const notFoundResponse = applyResolutionToThisResponse(handlerResponse, 404)
+        setCacheControlHeaders(notFoundResponse, request, requestContext)
+        return notFoundResponse
+      }
+
+      return applyResolutionToThisResponse(handlerResponse, resolution.status)
     }
 
     if (
