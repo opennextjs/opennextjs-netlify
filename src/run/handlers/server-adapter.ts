@@ -55,10 +55,13 @@ try {
 
 // Next's server loads .env files at startup, route modules don't. PLUGIN_DIR is the app dir in the
 // handler where the .env files were copied to, and @next/env resolves to the app's copy shipped there.
-const { loadEnvConfig } =
+// @next/env is CommonJS, so the named export is only there when cjs-module-lexer detects it
+const nextEnv =
   // eslint-disable-next-line import/no-extraneous-dependencies, import/max-dependencies, n/no-extraneous-import
-  (await import('@next/env')) as typeof import('@next/env')
-loadEnvConfig(PLUGIN_DIR, false)
+  (await import('@next/env')) as typeof import('@next/env') & {
+    default?: typeof import('@next/env')
+  }
+;(nextEnv.default ?? nextEnv).loadEnvConfig(PLUGIN_DIR, false)
 
 // make use of global fetch before Next.js applies any patching
 setFetchBeforeNextPatchedIt(globalThis.fetch)
