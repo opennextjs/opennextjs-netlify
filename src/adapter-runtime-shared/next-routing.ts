@@ -68,6 +68,14 @@ export function addDefaultLocaleForRouting(
 }
 
 /**
+ * Next keys the Pages Router root output as `/index` while requests come in as `/` (and
+ * `matchesPathname` is exact), so register the root under both. adapter-k8s does the same.
+ */
+export function getPathnameAliases(pathname: string, basePath: string): string[] {
+  return pathname === `${basePath}/index` ? [pathname, basePath || '/'] : [pathname]
+}
+
+/**
  * URL to invoke for a matched route. `invocationTarget` carries the concrete pathname + query after
  * rewrites (routing rules or middleware). For data requests resolved through dynamic routes
  * @next/routing returns the normalized page pathname, but Next.js detects data requests from the

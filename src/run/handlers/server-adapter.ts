@@ -14,6 +14,7 @@ import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
   getInvocationUrl,
+  getPathnameAliases,
   resolveRoutes,
 } from '../../adapter-runtime-shared/next-routing.js'
 import type {
@@ -93,9 +94,15 @@ type CommonHandlerArg = {
 
 type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
 
-// // Build a map of pathname -> handler output for quick lookup at request time
+// Build a map of pathname -> handler output for quick lookup at request time
 const handlerDefsByPathname = new Map<string, Handler>()
 const handlerDefsId = new Map<string, Handler>()
+const basePath = manifest.config.basePath || ''
+function registerHandler(pathname: string, handler: Handler) {
+  for (const alias of getPathnameAliases(pathname, basePath)) {
+    handlerDefsByPathname.set(alias, handler)
+  }
+}
 
 type InvokeHandlerArg = {
   id: string
@@ -120,25 +127,15 @@ function createInvokeHandler(
 }
 
 // outputs that invoke compute
-for (const output of manifest.outputs.pages) {
+for (const output of [
+  ...manifest.outputs.pages,
+  ...manifest.outputs.pagesApi,
+  ...manifest.outputs.appPages,
+  ...manifest.outputs.appRoutes,
+]) {
   const handler = createInvokeHandler(output)
   handlerDefsId.set(output.id, handler)
-  handlerDefsByPathname.set(output.pathname, handler)
-}
-for (const output of manifest.outputs.pagesApi) {
-  const handler = createInvokeHandler(output)
-  handlerDefsId.set(output.id, handler)
-  handlerDefsByPathname.set(output.pathname, handler)
-}
-for (const output of manifest.outputs.appPages) {
-  const handler = createInvokeHandler(output)
-  handlerDefsId.set(output.id, handler)
-  handlerDefsByPathname.set(output.pathname, handler)
-}
-for (const output of manifest.outputs.appRoutes) {
-  const handler = createInvokeHandler(output)
-  handlerDefsId.set(output.id, handler)
-  handlerDefsByPathname.set(output.pathname, handler)
+  registerHandler(output.pathname, handler)
 }
 
 for (const output of manifest.outputs.prerenders) {
@@ -148,7 +145,7 @@ for (const output of manifest.outputs.prerenders) {
       `Prerender output ${output.id} has parentOutputId ${output.parentOutputId} which does not exist`,
     )
   }
-  handlerDefsByPathname.set(output.pathname, parentHandler)
+  registerHandler(output.pathname, parentHandler)
 }
 
 // serve static files
@@ -161,13 +158,10 @@ function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
 
 const staticFilePathnames = new Set<string>()
 for (const output of manifest.outputs.staticFiles) {
-  staticFilePathnames.add(output.pathname)
-  handlerDefsByPathname.set(
-    output.pathname,
-    createStaticFileHandler({
-      filePath: output.filePath,
-    }),
-  )
+  for (const alias of getPathnameAliases(output.pathname, basePath)) {
+    staticFilePathnames.add(alias)
+  }
+  registerHandler(output.pathname, createStaticFileHandler({ filePath: output.filePath }))
 }
 
 const allPathnames = [...handlerDefsByPathname.keys()]
@@ -213,7 +207,6 @@ async function renderNotFoundPage(
   tracer: ReturnType<typeof getTracer>,
   span?: Span,
 ): Promise<Response> {
-  const basePath = manifest.config.basePath || ''
   const url = new URL(request.url)
   const candidates: string[] = []
   if (manifest.config.i18n) {
@@ -254,7 +247,6 @@ function isNotFoundPageRequest(request: Request, resolvedPathname: string): bool
   if (request.headers.has('x-prerender-revalidate')) {
     return false
   }
-  const basePath = manifest.config.basePath || ''
   if (resolvedPathname === `${basePath}/404`) {
     return true
   }

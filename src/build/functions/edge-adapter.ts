@@ -6,6 +6,7 @@ import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
 import { RoutingConfig } from '../../adapter-runtime-edge/middleware.js'
+import { getPathnameAliases } from '../../adapter-runtime-shared/next-routing.js'
 import { EDGE_HANDLER_NAME, PluginContextAdapter } from '../plugin-context.js'
 
 import { writeEdgeManifest } from './edge.js'
@@ -285,24 +286,20 @@ async function writeRoutingEdgeFunctionEntry(
  */
 function collectAllPathnames(adapterOutput: AdapterBuildCompleteContext): string[] {
   const pathnames = new Set<string>()
+  const basePath = adapterOutput.config.basePath || ''
+  const { outputs } = adapterOutput
 
-  for (const output of adapterOutput.outputs.pages) {
-    pathnames.add(output.pathname)
-  }
-  for (const output of adapterOutput.outputs.pagesApi) {
-    pathnames.add(output.pathname)
-  }
-  for (const output of adapterOutput.outputs.appPages) {
-    pathnames.add(output.pathname)
-  }
-  for (const output of adapterOutput.outputs.appRoutes) {
-    pathnames.add(output.pathname)
-  }
-  for (const output of adapterOutput.outputs.prerenders) {
-    pathnames.add(output.pathname)
-  }
-  for (const output of adapterOutput.outputs.staticFiles) {
-    pathnames.add(output.pathname)
+  for (const output of [
+    ...outputs.pages,
+    ...outputs.pagesApi,
+    ...outputs.appPages,
+    ...outputs.appRoutes,
+    ...outputs.prerenders,
+    ...outputs.staticFiles,
+  ]) {
+    for (const alias of getPathnameAliases(output.pathname, basePath)) {
+      pathnames.add(alias)
+    }
   }
 
   return [...pathnames]
