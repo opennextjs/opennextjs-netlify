@@ -69,7 +69,6 @@ export const onPreBuild = async (options: NetlifyPluginOptions) => {
   })
 
   if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
-    console.log('set adapter path')
     process.env.NEXT_ADAPTER_PATH = fileURLToPath(new URL(`adapter/adapter.js`, import.meta.url))
   }
 }
@@ -99,8 +98,6 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
 
     await verifyAdvancedAPIRoutes(ctx)
     await verifyNetlifyFormsWorkaround(ctx)
-
-    console.log('has adapter stuff', ctx.hasAdapter())
 
     await Promise.all([
       copyStaticAssets(ctx),

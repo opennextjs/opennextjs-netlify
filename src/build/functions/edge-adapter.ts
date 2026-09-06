@@ -23,7 +23,6 @@ const ADAPTER_MIDDLEWARE_FUNCTION_NAME = 'adapter-middleware'
  * to CDN, and only compute-requiring requests reach the server handler.
  */
 export const createEdgeHandlersFromAdapter = async (ctx: PluginContextAdapter): Promise<void> => {
-  console.log('running new stuff')
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const adapterOutput = ctx.adapterOutput!
   const middlewareOutput = adapterOutput.outputs.middleware
@@ -60,7 +59,6 @@ export const createEdgeHandlersFromAdapter = async (ctx: PluginContextAdapter): 
     cp(join(edgeRuntimeDir, 'lib/cjs.ts'), join(handlerEdgeRuntimeDir, 'lib/cjs.ts')),
   ])
 
-  console.log('middleware runtime', middlewareOutput.runtime)
   // Bundle the middleware handler
   await (middlewareOutput.runtime === 'edge'
     ? copyEdgeMiddlewareDependenciesFromAdapter(ctx, middlewareOutput, handlerDirectory)

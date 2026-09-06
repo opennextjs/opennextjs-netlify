@@ -147,9 +147,6 @@ export async function runNextRouting(
   middlewareConfig: MiddlewareConfig,
   nextConfig: RequestData['nextConfig'],
 ): Promise<Response | undefined> {
-  console.log('running new edge handler', {
-    url: request.url,
-  })
   const url = new URL(request.url)
   let middlewareResponse: Response | undefined
   // resolveRoutes only returns response headers, request headers modified by middleware
@@ -171,7 +168,6 @@ export async function runNextRouting(
     invokeMiddleware: async (middlewareCtx: MiddlewareContext) => {
       // const shouldNormalize = routingConfig.routes.shouldNormalizeNextData
 
-      // console.log('invokeMiddleware', { middlewareConfig, middlewareCtx, shouldNormalize })
       if (!middlewareConfig.enabled || !middlewareConfig.load) {
         return {}
       }
@@ -204,8 +200,6 @@ export async function runNextRouting(
       })
       const rawResponse = result.response
 
-      // console.log({ rawResponse })
-
       // Convert the raw Next.js middleware response to a MiddlewareResult
       // that resolveRoutes understands
       middlewareRequestHeaders = middlewareCtx.headers
@@ -236,12 +230,6 @@ export async function runNextRouting(
   })
 
   const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
-
-  // console.log('resolution', {
-  //   resolution,
-  //   middlewareResponse,
-  //   body: await middlewareResponse?.clone().text(),
-  // })
 
   // Handle redirect — return directly from edge, no lambda needed
   if (resolution.redirect) {
@@ -311,10 +299,6 @@ export async function runNextRouting(
       duplex: 'half',
     },
   )
-  // console.log('context.next() with forwarded request', {
-  //   url: forwardRequest.url,
-  //   headers: Object.fromEntries(forwardRequest.headers.entries()),
-  // })
   // context.next() forwards to the origin (server handler or CDN)
   return applyResolutionToThisResponse(await context.next(forwardRequest))
 }

@@ -172,20 +172,6 @@ for (const output of manifest.outputs.staticFiles) {
 
 const allPathnames = [...handlerDefsByPathname.keys()]
 
-console.log({
-  pathnames: allPathnames,
-  outputIds: [...handlerDefsId.keys()],
-})
-
-// console.log(
-//   inspect(
-//     {
-//       allPathnames,
-//     },
-//     { depth: null },
-//   ),
-// )
-
 type NodeHandlerFn = (
   req: IncomingMessage,
   res: ServerResponse,
@@ -340,7 +326,6 @@ const revalidate: NonNullable<RequestMeta['revalidate']> = async (args) => {
     },
   )
 
-  console.log('[revalidate]', { args, revalidateRequest })
   // ensure to trigger cache-tag revalidation after storing cache entries in cache handler
   requestContext.didPagesRouterOnDemandRevalidate = true
   const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
@@ -403,8 +388,6 @@ async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHan
   const headers = new Headers()
   let body = 'Not found static file'
   let status = 404
-
-  console.log('htmlFile', { htmlFile, filePath, blobKey })
 
   if (htmlFile) {
     body = htmlFile.html
@@ -647,8 +630,6 @@ export default async function ServerHandler(request: Request, requestContext: Re
     }
 
     const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
-
-    console.log({ url, resolution })
 
     if (resolution.redirect) {
       // Handle explicit redirect
