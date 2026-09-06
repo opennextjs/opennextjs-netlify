@@ -208,7 +208,8 @@ async function copyNodeMiddlewareDependenciesFromAdapter(
   parts.push(`registerCJSModules(import.meta.url, virtualModules, virtualSymlinks);
 
     const require = createRequire(import.meta.url);
-    const handlerMod = require("./${middlewareOutput.filePath}");
+    // middleware with top-level await compiles to a module whose require() returns a Promise
+    const handlerMod = await require("./${middlewareOutput.filePath}");
     const handler = handlerMod.default || handlerMod;
 
     export default handler
