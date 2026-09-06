@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { Buffer } from 'node:buffer'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { relative, resolve } from 'node:path/posix'
 
 import type { Span } from '@opentelemetry/api'
 import type { AdapterOutput } from 'next-with-adapters'
@@ -24,7 +24,6 @@ import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
   adjustDateHeader,
-  notFoundHeuristics,
   setCacheControlHeaders,
   setCacheStatusHeader,
   setCacheTagsHeaders,
@@ -143,7 +142,9 @@ function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
   return serverStaticFile.bind(null, output)
 }
 
+const staticFilePathnames = new Set<string>()
 for (const output of manifest.outputs.staticFiles) {
+  staticFilePathnames.add(output.pathname)
   handlerDefsByPathname.set(
     output.pathname,
     createStaticFileHandler({
@@ -196,6 +197,97 @@ extendedGlobalThis[RouterServerContextSymbol] = {
   [manifest.relativeProjectDir]: {
     nextConfig,
   },
+}
+
+/**
+ * Custom 404 page for the request: pages router `/404` (locale variant first), else app router
+ * `/_not-found`. Static 404 HTML is served with Next's default headers for 404s rather than the
+ * permanent caching a direct request to a fully static page gets.
+ */
+async function renderNotFoundPage(
+  request: Request,
+  requestContext: RequestContext,
+  tracer: ReturnType<typeof getTracer>,
+  span?: Span,
+): Promise<Response> {
+  const basePath = manifest.config.basePath || ''
+  const url = new URL(request.url)
+  const candidates: string[] = []
+  if (manifest.config.i18n) {
+    const { locales, defaultLocale } = manifest.config.i18n
+    const segment = url.pathname.slice(basePath.length).split('/')[1]?.toLowerCase()
+    const locale = locales.find((value) => value.toLowerCase() === segment) ?? defaultLocale
+    candidates.push(`${basePath}/${locale}/404`)
+  }
+  candidates.push(`${basePath}/404`, `${basePath}/_not-found`)
+
+  const pathname = candidates.find((candidate) => handlerDefsByPathname.has(candidate))
+  const handler = pathname ? handlerDefsByPathname.get(pathname) : undefined
+  if (!pathname || !handler) {
+    return new Response('Not Found', { status: 404 })
+  }
+
+  const response = await handler({
+    request: new Request(new URL(pathname, request.url), { headers: request.headers }),
+    requestContext,
+    resolution: {},
+    tracer,
+    span,
+  })
+
+  const headers = new Headers(response.headers)
+  if (staticFilePathnames.has(pathname)) {
+    headers.delete('netlify-cdn-cache-control')
+    headers.set('cache-control', 'private, no-cache, no-store, max-age=0, must-revalidate')
+  }
+  const notFoundResponse = new Response(response.body, { status: 404, headers })
+  setCacheControlHeaders(notFoundResponse, request, requestContext)
+  return notFoundResponse
+}
+
+// a literal request for the 404 page (or its locale variant) responds with 404, like Next's server
+// does, unless it's the on-demand revalidation of that page
+function isNotFoundPageRequest(request: Request, resolvedPathname: string): boolean {
+  if (request.headers.has('x-prerender-revalidate')) {
+    return false
+  }
+  const basePath = manifest.config.basePath || ''
+  if (resolvedPathname === `${basePath}/404`) {
+    return true
+  }
+  const locales = manifest.config.i18n?.locales ?? []
+  return locales.some((locale) => resolvedPathname === `${basePath}/${locale}/404`)
+}
+
+// passed via requestMeta so Next.js renders our custom 404 page for `notFound: true` / `notFound()`
+// instead of its bare "This page could not be found" fallback
+const render404: NonNullable<RequestMeta['render404']> = async (
+  req,
+  res,
+  _parsedUrl,
+  setHeaders,
+) => {
+  const requestContext = getRequestContext()
+  if (!requestContext?.originalRequest) {
+    throw new Error('render404 called outside of request context')
+  }
+  const response = await renderNotFoundPage(
+    requestContext.originalRequest,
+    requestContext,
+    getTracer(),
+  )
+  if (!res.headersSent) {
+    res.statusCode = 404
+    for (const [name, value] of response.headers) {
+      if (
+        name === 'content-type' ||
+        (setHeaders && !['content-length', 'transfer-encoding'].includes(name))
+      ) {
+        res.setHeader(name, value)
+      }
+    }
+  }
+  res.end(Buffer.from(await response.arrayBuffer()))
 }
 
 // passed via requestMeta so pages router `res.revalidate()` goes through this handler instead of network
@@ -276,7 +368,8 @@ function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
 async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHandlerArg) {
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
 
-  const blobKey = relative(resolve(manifest.config.distDir, 'server/pages'), filePath)
+  // filePath is relative to repoRoot, blobs are keyed relative to <distDir>/server/pages (see copyStaticContent)
+  const blobKey = filePath.split('/server/pages/')[1] ?? filePath
 
   const htmlFile = await cacheStore.get<HtmlBlob>(blobKey, 'staticHtml.get')
 
@@ -329,8 +422,19 @@ async function invokeHandler(
         waitUntil: requestContext.trackBackgroundWork,
         requestMeta: {
           initURL: request.url,
+          render404,
           revalidate,
         },
+      })
+
+      // Next.js responds with 500 itself for render errors, but an error thrown before headers are
+      // sent (e.g. failing to load a manifest) would otherwise leave the response open until timeout
+      nextHandlerPromise.catch((error) => {
+        console.error('route handler error', error)
+        if (!res.headersSent) {
+          res.statusCode = 500
+          res.end('Internal Server Error')
+        }
       })
 
       // below is for now copied from standalone handler (without some extras, that generally could also be removed from standalone)
@@ -365,7 +469,9 @@ async function invokeHandler(
       // eslint-disable-next-line no-inner-declarations
       async function waitForBackgroundWork() {
         // it's important to keep the stream open until the next handler has finished
-        await nextHandlerPromise
+        await nextHandlerPromise.catch(() => {
+          // already reported above
+        })
 
         // Next.js relies on `close` event emitted by response to trigger running callback variant of `next/after`
         // however @fastly/http-compute-js never actually emits that event - so we have to emit it ourselves,
@@ -588,7 +694,8 @@ export default async function ServerHandler(request: Request, requestContext: Re
           tracer,
           span,
         }),
-        resolution.status,
+        resolution.status ??
+          (isNotFoundPageRequest(request, resolution.resolvedPathname) ? 404 : undefined),
       )
     }
 
@@ -604,10 +711,9 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // TODO(adapter): this can be cached forever because it will never match any routes
     // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
     // which would require setting correct netlify-vary header.
-    const headers = new Headers()
-    notFoundHeuristics(request, headers, requestContext)
     return applyResolutionToThisResponse(
-      new Response('Not Found (server-handler)', { status: 404, headers }),
+      await renderNotFoundPage(request, requestContext, tracer, span),
+      404,
     )
   })
 }
