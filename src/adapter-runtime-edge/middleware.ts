@@ -16,11 +16,12 @@ import type { Context } from '@netlify/edge-functions'
 
 import {
   applyResolutionToResponse,
-  matchRoute,
+  getInvocationUrl,
   normalizeNextDataUrl,
   resolveRoutes,
   responseToMiddlewareResult,
 } from '../adapter-runtime-shared/next-routing.js'
+import type { ResolveRoutesResult } from '../adapter-runtime-shared/next-routing.js'
 // import { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
 interface Route {
@@ -49,7 +50,9 @@ export interface RoutingConfig {
     }>
   } | null
   routes: {
+    caseSensitive?: boolean
     beforeMiddleware: Array<Route>
+    middlewareMatchers?: Array<Route>
     beforeFiles: Array<Route>
     afterFiles: Array<Route>
     dynamicRoutes: Array<Route>
@@ -59,7 +62,6 @@ export interface RoutingConfig {
   }
   pathnames: string[]
   skipProxyUrlNormalize?: boolean
-  middlewareMatchers: Route[]
 }
 
 interface RequestData {
@@ -86,16 +88,6 @@ export interface MiddlewareConfig {
   load?: () => Promise<NextHandler>
 }
 
-interface ResolveRoutesResult {
-  middlewareResponded?: boolean
-  externalRewrite?: URL
-  redirect?: { url: URL; status: number }
-  matchedPathname?: string
-  resolvedHeaders?: Headers
-  status?: number
-  routeMatches?: Record<string, string>
-}
-
 interface MiddlewareContext {
   url: URL
   headers: Headers
@@ -107,7 +99,9 @@ interface MiddlewareContext {
  */
 function serializeResolution(resolution: ResolveRoutesResult): string {
   const serialized: Record<string, unknown> = {
-    matchedPathname: resolution.matchedPathname ?? null,
+    resolvedPathname: resolution.resolvedPathname ?? null,
+    resolvedQuery: resolution.resolvedQuery ?? null,
+    invocationTarget: resolution.invocationTarget ?? null,
     routeMatches: resolution.routeMatches ?? null,
     status: resolution.status ?? null,
     redirect: null,
@@ -156,6 +150,9 @@ export async function runNextRouting(
   })
   const url = new URL(request.url)
   let middlewareResponse: Response | undefined
+  // resolveRoutes only returns response headers, request headers modified by middleware
+  // (x-middleware-override-headers / x-middleware-request-*) are applied in place to this object
+  let middlewareRequestHeaders: Headers | undefined
 
   // Cast config values — local type definitions are intentionally loose
   // since this file runs in Deno without type-checking. The next-routing
@@ -177,26 +174,13 @@ export async function runNextRouting(
         return {}
       }
 
-      // matching is done by testing normalized url
-      const matchingUrl = normalizeNextDataUrl(
-        middlewareCtx.url,
-        routingConfig.basePath,
-        routingConfig.buildId,
-      )
+      // resolveRoutes already checked middlewareMatchers, this is just building the URL middleware sees.
+      // Next.js passes the URL as requested (middlewareCtx.url has default locale prefix added by resolveRoutes),
+      // only normalizing data URLs unless skipMiddlewareUrlNormalize.
+      const matchingUrl = normalizeNextDataUrl(url, routingConfig.basePath, routingConfig.buildId)
 
       if (nextConfig?.trailingSlash && !matchingUrl.pathname.endsWith('/')) {
         matchingUrl.pathname += '/'
-      }
-
-      const matchesAny = routingConfig.middlewareMatchers.some((matcher) => {
-        // @ts-expect-error matcher types
-        const { matched } = matchRoute(matcher, middlewareCtx.url, middlewareCtx.headers)
-        return matched
-      })
-
-      // console.log({ matchingUrl, matchers: routingConfig.middlewareMatchers, matchesAny })
-      if (!matchesAny) {
-        return {}
       }
 
       // Load and invoke middleware directly — construct RequestData inline
@@ -204,9 +188,7 @@ export async function runNextRouting(
       // would double-normalize URLs (routing library already normalizes).
       const handler = await middlewareConfig.load()
 
-      const middlewareRequestUrl = nextConfig?.skipMiddlewareUrlNormalize
-        ? middlewareCtx.url
-        : matchingUrl
+      const middlewareRequestUrl = nextConfig?.skipMiddlewareUrlNormalize ? url : matchingUrl
 
       const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
       const result = await handler({
@@ -224,9 +206,10 @@ export async function runNextRouting(
 
       // Convert the raw Next.js middleware response to a MiddlewareResult
       // that resolveRoutes understands
+      middlewareRequestHeaders = middlewareCtx.headers
       const middlewareResult = responseToMiddlewareResult(
         rawResponse.clone(),
-        new Headers(middlewareCtx.headers),
+        middlewareRequestHeaders,
         middlewareCtx.url,
       )
 
@@ -313,7 +296,7 @@ export async function runNextRouting(
   const serialized = serializeResolution(resolution)
 
   // Clone the request, potentially adjusting URL for rewrites
-  const forwardHeaders = new Headers(request.headers)
+  const forwardHeaders = new Headers(middlewareRequestHeaders ?? request.headers)
   forwardHeaders.set('x-next-route-resolution', serialized)
 
   // Apply any request headers from middleware
@@ -325,13 +308,19 @@ export async function runNextRouting(
     }
   }
 
-  const forwardRequest = new Request(request.url, {
-    method: request.method,
-    headers: forwardHeaders,
-    body: request.body,
-    // @ts-expect-error duplex is needed for streaming bodies
-    duplex: 'half',
-  })
+  const forwardRequest = new Request(
+    getInvocationUrl(request, resolution, {
+      ...routingConfig,
+      trailingSlash: nextConfig?.trailingSlash,
+    }),
+    {
+      method: request.method,
+      headers: forwardHeaders,
+      body: request.body,
+      // @ts-expect-error duplex is needed for streaming bodies
+      duplex: 'half',
+    },
+  )
   // console.log('context.next() with forwarded request', {
   //   url: forwardRequest.url,
   //   headers: Object.fromEntries(forwardRequest.headers.entries()),

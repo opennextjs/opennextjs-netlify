@@ -10,6 +10,7 @@ import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js
 
 import {
   applyResolutionToResponse,
+  getInvocationUrl,
   resolveRoutes,
 } from '../../adapter-runtime-shared/next-routing.js'
 import type {
@@ -171,7 +172,8 @@ type NodeHandlerFn = (
   ctx?: { waitUntil?: (prom: Promise<void>) => void; requestMeta?: RequestMeta },
 ) => Promise<void>
 
-// Next.js machinery
+// Next.js machinery, see next/dist/server/lib/router-utils/router-server-context.js
+// Route modules read their `nextConfig` from here (keyed by relativeProjectDir), same as next-server does.
 const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
 
 // Netlify Adapter machinery (just for integration tests resetting global state in-between tests)
@@ -189,55 +191,56 @@ const extendedGlobalThis = globalThis as typeof globalThis & {
 }
 
 extendedGlobalThis[RouterServerContextSymbol] = {
-  // TODO(adapter): monorepo?
-  '': {
+  [manifest.relativeProjectDir]: {
     nextConfig,
-    revalidate: async (args) => {
-      const { urlPath, revalidateHeaders } = args
-      const requestContext = getRequestContext()
-      if (!requestContext) {
-        throw new Error('revalidate called outside of request context')
-      }
-
-      if (!requestContext.originalRequest) {
-        throw new Error('original request not set in request context')
-      }
-
-      if (!requestContext.originalContext) {
-        throw new Error('original context not set in request context')
-      }
-
-      const normalizeRevalidateHeaders = new Headers()
-      for (const [headerName, headerValueOrValues] of Object.entries(revalidateHeaders)) {
-        const headerValues = Array.isArray(headerValueOrValues)
-          ? headerValueOrValues
-          : [headerValueOrValues]
-        for (const headerValue of headerValues) {
-          normalizeRevalidateHeaders.append(headerName, headerValue)
-        }
-      }
-
-      const revalidateRequest = new Request(
-        new URL(`${manifest.config.basePath}${urlPath}`, requestContext.originalRequest.url),
-        {
-          headers: normalizeRevalidateHeaders,
-        },
-      )
-
-      console.log('[revalidate]', { args, revalidateRequest })
-      // ensure to trigger cache-tag revalidation after storing cache entries in cache handler
-      requestContext.didPagesRouterOnDemandRevalidate = true
-      const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
-      requestContext.trackBackgroundWork(revalidatePromise)
-      return revalidatePromise
-        .catch((revalidateError) => {
-          console.error('Revalidation failed', revalidateError)
-        })
-        .then(() => {
-          // no-op
-        })
-    },
   },
+}
+
+// passed via requestMeta so pages router `res.revalidate()` goes through this handler instead of network
+const revalidate: NonNullable<RequestMeta['revalidate']> = async (args) => {
+  const { urlPath, headers: revalidateHeaders } = args
+  const requestContext = getRequestContext()
+  if (!requestContext) {
+    throw new Error('revalidate called outside of request context')
+  }
+
+  if (!requestContext.originalRequest) {
+    throw new Error('original request not set in request context')
+  }
+
+  if (!requestContext.originalContext) {
+    throw new Error('original context not set in request context')
+  }
+
+  const normalizeRevalidateHeaders = new Headers()
+  for (const [headerName, headerValueOrValues] of Object.entries(revalidateHeaders)) {
+    const headerValues = Array.isArray(headerValueOrValues)
+      ? headerValueOrValues
+      : [headerValueOrValues]
+    for (const headerValue of headerValues) {
+      normalizeRevalidateHeaders.append(headerName, headerValue)
+    }
+  }
+
+  const revalidateRequest = new Request(
+    new URL(`${manifest.config.basePath}${urlPath}`, requestContext.originalRequest.url),
+    {
+      headers: normalizeRevalidateHeaders,
+    },
+  )
+
+  console.log('[revalidate]', { args, revalidateRequest })
+  // ensure to trigger cache-tag revalidation after storing cache entries in cache handler
+  requestContext.didPagesRouterOnDemandRevalidate = true
+  const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
+  requestContext.trackBackgroundWork(revalidatePromise)
+  return revalidatePromise
+    .catch((revalidateError) => {
+      console.error('Revalidation failed', revalidateError)
+    })
+    .then(() => {
+      // no-op
+    })
 }
 
 extendedGlobalThis[NetlifyAdapterTestReset] = () => {
@@ -324,6 +327,8 @@ async function invokeHandler(
         waitUntil: requestContext.trackBackgroundWork,
         requestMeta: {
           initURL: request.url,
+          relativeProjectDir: manifest.relativeProjectDir,
+          revalidate,
         },
       })
 
@@ -399,7 +404,9 @@ async function invokeHandler(
  */
 function deserializeResolution(serialized: string): ResolveRoutesResult {
   const parsed = JSON.parse(serialized) as {
-    matchedPathname: string | null
+    resolvedPathname: string | null
+    resolvedQuery: ResolveRoutesResult['resolvedQuery'] | null
+    invocationTarget: ResolveRoutesResult['invocationTarget'] | null
     routeMatches: Record<string, string> | null
     resolvedHeaders: Record<string, string> | null
     status: number | null
@@ -410,8 +417,14 @@ function deserializeResolution(serialized: string): ResolveRoutesResult {
 
   const resolution: ResolveRoutesResult = {}
 
-  if (parsed.matchedPathname !== null) {
-    resolution.matchedPathname = parsed.matchedPathname
+  if (parsed.resolvedPathname !== null) {
+    resolution.resolvedPathname = parsed.resolvedPathname
+  }
+  if (parsed.resolvedQuery !== null) {
+    resolution.resolvedQuery = parsed.resolvedQuery
+  }
+  if (parsed.invocationTarget !== null) {
+    resolution.invocationTarget = parsed.invocationTarget
   }
   if (parsed.routeMatches !== null) {
     resolution.routeMatches = parsed.routeMatches
@@ -466,7 +479,10 @@ export default async function ServerHandler(request: Request, requestContext: Re
           pathnames: allPathnames,
           // Cast i18n config — next-with-adapters uses readonly arrays while @next/routing expects mutable
           i18n: (manifest.config.i18n ?? undefined) as ResolveRoutesParams['i18n'],
-          routes: manifest.routing,
+          routes: {
+            ...manifest.routing,
+            caseSensitive: manifest.config.experimental?.caseSensitiveRoutes,
+          },
           invokeMiddleware: async () => {
             // Middleware runs in Netlify Edge Function before the serverless function.
             // By the time the request reaches this handler, middleware has already executed.
@@ -543,30 +559,25 @@ export default async function ServerHandler(request: Request, requestContext: Re
     }
 
     // Handle matched route
-    if (resolution.matchedPathname) {
-      span?.setAttribute('matched.pathname', resolution.matchedPathname)
-      const matchedHandler = handlerDefsByPathname.get(resolution.matchedPathname)
+    if (resolution.resolvedPathname) {
+      span?.setAttribute('matched.pathname', resolution.resolvedPathname)
+      const matchedHandler = handlerDefsByPathname.get(resolution.resolvedPathname)
       if (!matchedHandler) {
         return applyResolutionToThisResponse(
           new Response('Routing matched but no matched output exists', { status: 500 }),
         )
       }
 
-      // const invokeUrl = new URL(request.url)
-      // invokeUrl.pathname = resolution.matchedPathname
-      // if (resolution.routeMatches) {
-      //   for (const [key, value] of Object.entries(resolution.routeMatches)) {
-      //     invokeUrl.searchParams.set(key, value)
-      //   }
-      // }
-
-      // console.log({ invokeUrl})
-
-      // const adjustedRequest = new Request(invokeUrl, request)
+      // rewrites (routing rules or middleware) resolved to a concrete pathname + query, invoke that
+      const invokeUrl = getInvocationUrl(request, resolution, {
+        basePath: manifest.config.basePath || '',
+        buildId: manifest.buildId,
+        trailingSlash: manifest.config.trailingSlash,
+      })
 
       return applyResolutionToThisResponse(
         await matchedHandler({
-          request,
+          request: invokeUrl.href === request.url ? request : new Request(invokeUrl, request),
           requestContext,
           resolution,
           tracer,

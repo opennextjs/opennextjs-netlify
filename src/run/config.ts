@@ -21,7 +21,10 @@ export type RunConfig = {
 export type AdapterManifest = Pick<
   AdapterBuildCompleteContext,
   'routing' | 'outputs' | 'buildId' | 'config'
->
+> & {
+  // key Next.js uses for RouterServerContext lookups, see PluginContext.relativeAppDir
+  relativeProjectDir: string
+}
 
 /**
  * Get Next.js config from the build output

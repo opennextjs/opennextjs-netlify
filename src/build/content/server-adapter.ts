@@ -29,6 +29,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         outputs: ctx.adapterOutput.outputs,
         buildId: ctx.adapterOutput.buildId,
         config: ctx.adapterOutput.config,
+        relativeProjectDir: ctx.relativeAppDir,
       }),
       'utf-8',
     )

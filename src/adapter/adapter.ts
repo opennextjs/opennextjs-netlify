@@ -12,7 +12,7 @@ import { ADAPTER_OUTPUT_FILE } from './adapter-output.js'
 // if adapter API won't change - this can stay as-is, otherwise version will be bumped
 // to ensure we only support most recent Adapters API version while it's experimental to avoid
 // having to support multiple versions of the API at the same time.
-const MIN_NEXT_VERSION = '16.2.0-canary.72'
+const MIN_NEXT_VERSION = '16.3.0'
 
 const adapter: NextAdapter = {
   name: 'Netlify',

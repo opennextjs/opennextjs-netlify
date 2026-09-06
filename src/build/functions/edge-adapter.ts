@@ -242,17 +242,15 @@ async function writeRoutingEdgeFunctionEntry(
     basePath: ctx.adapterOutput.config.basePath || '',
     // @ts-expect-error ugh
     i18n: ctx.adapterOutput.config.i18n ?? null,
-    routes: ctx.adapterOutput.routing,
+    routes: {
+      ...ctx.adapterOutput.routing,
+      caseSensitive: ctx.adapterOutput.config.experimental?.caseSensitiveRoutes,
+    },
     pathnames: collectAllPathnames(ctx.adapterOutput),
     skipProxyUrlNormalize: ctx.adapterOutput.config.skipProxyUrlNormalize,
-    middlewareMatchers: middlewareOutput.config?.matchers ?? [],
   } satisfies RoutingConfig
 
   await writeFile(join(handlerDirectory, 'routing-config.json'), JSON.stringify(routingConfig))
-
-  // Build matcher regexes from middleware config
-  // const matchers = middlewareOutput.config?.matchers ?? []
-  // const matcherRegexes = matchers.map((matcher) => matcher.sourceRegex)
 
   // Minimal next config for middleware request building — inlined in the entry template
   const minimalNextConfig = {
