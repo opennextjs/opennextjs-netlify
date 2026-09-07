@@ -183,6 +183,7 @@ for (const output of manifest.outputs.prerenders) {
 // serve static files
 type StaticFileHandlerArg = {
   filePath: string
+  pathname: string
 }
 function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
   return serverStaticFile.bind(null, output)
@@ -193,7 +194,10 @@ for (const output of manifest.outputs.staticFiles) {
   for (const alias of getPathnameAliases(output.pathname, basePath)) {
     staticFilePathnames.add(alias)
   }
-  registerHandler(output.pathname, createStaticFileHandler({ filePath: output.filePath }))
+  registerHandler(
+    output.pathname,
+    createStaticFileHandler({ filePath: output.filePath, pathname: output.pathname }),
+  )
 }
 
 const allPathnames = [...handlerDefsByPathname.keys()]
@@ -403,14 +407,24 @@ function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
   return Boolean(resolution.resolvedHeaders?.get('location'))
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function serverStaticFile({ filePath }: StaticFileHandlerArg, _: CommonHandlerArg) {
+async function serverStaticFile(
+  { filePath, pathname }: StaticFileHandlerArg,
+  { request }: CommonHandlerArg,
+) {
+  // only static HTML pages live in blobs (copyStaticContent), every other static output is on the
+  // CDN (copyStaticAssets). A request for the file itself never reaches the function then, so
+  // getting here means a rewrite landed on it: fetch it from the CDN.
+  const [, pagesBlobKey] = filePath.split('/server/pages/')
+  if (!pagesBlobKey) {
+    if (new URL(request.url).pathname === pathname) {
+      // the CDN doesn't have it either (see copyStaticAssets), don't loop through it
+      return new Response('Not Found', { status: 404 })
+    }
+    return proxyExternalRewrite(new URL(pathname, request.url), request)
+  }
+
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
-
-  // filePath is relative to repoRoot, blobs are keyed relative to <distDir>/server/pages (see copyStaticContent)
-  const blobKey = filePath.split('/server/pages/')[1] ?? filePath
-
-  const htmlFile = await cacheStore.get<HtmlBlob>(blobKey, 'staticHtml.get')
+  const htmlFile = await cacheStore.get<HtmlBlob>(pagesBlobKey, 'staticHtml.get')
 
   const headers = new Headers()
   let body = 'Not found static file'
