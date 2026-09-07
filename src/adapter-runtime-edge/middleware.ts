@@ -49,7 +49,7 @@ export interface RoutingConfig {
     domains?: Array<{
       defaultLocale: string
       domain: string
-      http?: boolean
+      http?: true
       locales?: string[]
     }>
   } | null
@@ -160,7 +160,7 @@ export async function runNextRouting(
   // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
   const routingHeaders = setNextDataHeader(new Headers(request.headers), url, routingConfig)
   const resolution = await resolveRoutes({
-    url: addDefaultLocaleForRouting(url, routingConfig),
+    url: addDefaultLocaleForRouting(url, routingConfig, routingHeaders),
     buildId: routingConfig.buildId,
     basePath: routingConfig.basePath,
     requestBody: request.body ?? new ReadableStream(),

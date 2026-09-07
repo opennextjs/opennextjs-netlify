@@ -97,6 +97,11 @@ function fixAdapterOutputForNextRouting(
     ...onBuildCompleteAdapterCtx,
     routing: {
       ...onBuildCompleteAdapterCtx.routing,
+      // Next only sets this when middleware and pages coexist; without it the lib matches
+      // beforeFiles/afterFiles rewrites against the raw `/_next/data/<buildId>/…json` path, so
+      // config rewrites never apply to data requests. Next's router always normalizes data requests
+      // to the page path before routing (and the lib denormalizes again before matching outputs).
+      shouldNormalizeNextData: true,
       middlewareMatchers: onBuildCompleteAdapterCtx.config.i18n
         ? onBuildCompleteAdapterCtx.routing.middlewareMatchers.map((matcher) => ({
             ...matcher,

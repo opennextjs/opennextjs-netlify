@@ -7,7 +7,6 @@ import { pathToFileURL } from 'node:url'
 import type { Span } from '@opentelemetry/api'
 import type { AdapterOutput } from 'next-with-adapters'
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
-import { isNonHtmlSecFetchDest } from 'next-with-adapters/dist/server/lib/is-non-html-sec-fetch-dest.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 import { isDynamicRoute } from 'next-with-adapters/dist/shared/lib/router/utils/is-dynamic.js'
@@ -475,17 +474,26 @@ function getRouteParams(template: string, pathname: string | undefined) {
   return matcher(page) || undefined
 }
 
+// locale segment of a page or `/_next/data/<buildId>/<locale>/…json` pathname
 function getPathnameLocale(pathname: string): string | undefined {
   if (!manifest.config.i18n) {
     return undefined
   }
-  const [, first = ''] = pathname.slice(basePath.length).split('/')
+  let rest = basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname
+  const dataPrefix = `/_next/data/${manifest.buildId}`
+  if (rest.startsWith(`${dataPrefix}/`)) {
+    // the index data path of a locale is `<locale>.json`
+    rest = rest.slice(dataPrefix.length).replace(/\.json$/, '')
+  }
+  const [, first = ''] = rest.split('/')
   return manifest.config.i18n.locales.find((value) => value.toLowerCase() === first.toLowerCase())
 }
 
-// Next's router answers a no-match for `_next/static` assets and for non-HTML subresource requests
-// (`sec-fetch-dest`) with plain text instead of rendering the 404 page (router-server "404 case")
-function isPlainNotFoundRequest(request: Request, url: URL): boolean {
+// Next's router answers a no-match for `_next/static` assets with plain text instead of rendering
+// the 404 page (router-server "404 case"). It does the same for non-HTML `sec-fetch-dest` requests,
+// but upstream tests expect the HTML 404 for those when deployed (Vercel's CDN behaviour), so only
+// the static-asset rule is mirrored.
+function isPlainNotFoundRequest(url: URL): boolean {
   let { pathname } = url
   if (basePath && pathname.startsWith(basePath)) {
     pathname = pathname.slice(basePath.length) || '/'
@@ -502,13 +510,7 @@ function isPlainNotFoundRequest(request: Request, url: URL): boolean {
   if (locale) {
     pathname = pathname.slice(locale.length + 1) || '/'
   }
-  if (pathname.startsWith('/_next/static/')) {
-    return true
-  }
-  return (
-    (request.method === 'GET' || request.method === 'HEAD') &&
-    isNonHtmlSecFetchDest(request.headers.get('sec-fetch-dest'))
-  )
+  return pathname.startsWith('/_next/static/')
 }
 
 // Next's router detects the locale from the requested path and overrides it with the one of a
@@ -746,16 +748,21 @@ export default async function ServerHandler(request: Request, requestContext: Re
     } else {
       // No edge function (standalone mode fallback, or edge function not deployed)
       try {
+        const routingHeaders = setNextDataHeader(new Headers(request.headers), url, routingBasics)
         resolution = await resolveRoutes({
-          url: addDefaultLocaleForRouting(url, {
-            basePath: manifest.config.basePath || '',
-            buildId: manifest.buildId,
-            i18n: manifest.config.i18n as I18nForRouting | null,
-          }),
+          url: addDefaultLocaleForRouting(
+            url,
+            {
+              basePath: manifest.config.basePath || '',
+              buildId: manifest.buildId,
+              i18n: manifest.config.i18n as I18nForRouting | null,
+            },
+            routingHeaders,
+          ),
           buildId: manifest.buildId,
           basePath: manifest.config.basePath || '',
           requestBody: request.body ?? new ReadableStream(),
-          headers: setNextDataHeader(new Headers(request.headers), url, routingBasics),
+          headers: routingHeaders,
           pathnames: allPathnames,
           // Cast i18n config — next-with-adapters uses readonly arrays while @next/routing expects mutable
           i18n: (manifest.config.i18n ?? undefined) as ResolveRoutesParams['i18n'],
@@ -888,16 +895,18 @@ export default async function ServerHandler(request: Request, requestContext: Re
       return applyResolutionToThisResponse(handlerResponse, resolution.status)
     }
 
+    // like Next's router: with middleware, an unmatched data request gets an empty JSON 404 so the
+    // client falls back to a hard navigation instead of rendering the 404 page's data
     if (
       request.headers.has('x-nextjs-data') &&
-      manifest.routing.shouldNormalizeNextData &&
+      (manifest.routing.middlewareMatchers?.length ?? 0) > 0 &&
       url.pathname.startsWith(`${manifest.config.basePath}/_next/data/${manifest.buildId}/`)
     ) {
       return Response.json({})
     }
 
     // No match found — 404
-    if (isPlainNotFoundRequest(request, url)) {
+    if (isPlainNotFoundRequest(url)) {
       return applyResolutionToThisResponse(
         new Response('Not Found', {
           status: 404,

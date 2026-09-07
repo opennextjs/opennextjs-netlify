@@ -1,4 +1,6 @@
 import { ResolveRoutesResult } from '@next/routing'
+import { detectDomainLocale } from 'next-with-adapters/dist/shared/lib/i18n/detect-domain-locale.js'
+import { getLocaleRedirect } from 'next-with-adapters/dist/shared/lib/i18n/get-locale-redirect.js'
 
 export { resolveRoutes, responseToMiddlewareResult } from '@next/routing'
 export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
@@ -21,7 +23,8 @@ export function normalizeNextDataUrl(url: URL, basePath: string, buildId: string
 export type I18nForRouting = {
   locales: string[]
   defaultLocale: string
-  domains?: Array<{ domain: string; defaultLocale: string }>
+  localeDetection?: false
+  domains?: Array<{ domain: string; defaultLocale: string; http?: true; locales?: string[] }>
 }
 
 /**
@@ -35,6 +38,7 @@ export type I18nForRouting = {
 export function addDefaultLocaleForRouting(
   url: URL,
   { basePath, buildId, i18n }: { basePath: string; buildId: string; i18n?: I18nForRouting | null },
+  headers?: Headers,
 ): URL {
   if (!i18n) {
     return url
@@ -43,15 +47,37 @@ export function addDefaultLocaleForRouting(
     basePath && url.pathname.startsWith(basePath)
       ? url.pathname.slice(basePath.length)
       : url.pathname
-  const defaultLocale =
-    i18n.domains?.find((domain) => domain.domain === url.hostname)?.defaultLocale ??
-    i18n.defaultLocale
+  const domainLocale = detectDomainLocale(i18n.domains, url.hostname)
+  const defaultLocale = domainLocale?.defaultLocale ?? i18n.defaultLocale
   const startsWithLocale = (path: string) => {
     const segment = path
       .split('/')[1]
       ?.replace(/\.json$/, '')
       .toLowerCase()
     return i18n.locales.some((locale) => locale.toLowerCase() === segment)
+  }
+
+  // `/` alone: the lib prefixes the detected-or-default locale and 308s `/` to it (`/en`). Next only
+  // redirects when the detected locale (accept-language, NEXT_LOCALE cookie, domain) differs from
+  // the default and serves the default locale's root directly. Leave detected redirects to the lib
+  // (it runs middleware first, so we can't resolve twice) and route the rest as the default root.
+  if (pathname === '' || pathname === '/') {
+    const redirect = getLocaleRedirect({
+      defaultLocale,
+      domainLocale,
+      headers: headers ? Object.fromEntries(headers) : undefined,
+      nextConfig: {
+        basePath,
+        i18n: i18n as Parameters<typeof getLocaleRedirect>[0]['nextConfig']['i18n'],
+      },
+      urlParsed: { hostname: url.hostname, pathname: '/' },
+    })
+    if (redirect) {
+      return url
+    }
+    const result = new URL(url)
+    result.pathname = `${basePath}/${defaultLocale}`
+    return result
   }
 
   const dataPrefix = `/_next/data/${buildId}/`
