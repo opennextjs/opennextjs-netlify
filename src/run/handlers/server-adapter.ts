@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import type { Span } from '@opentelemetry/api'
 import type { AdapterOutput } from 'next-with-adapters'
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
+import { isNonHtmlSecFetchDest } from 'next-with-adapters/dist/server/lib/is-non-html-sec-fetch-dest.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 import { isDynamicRoute } from 'next-with-adapters/dist/shared/lib/router/utils/is-dynamic.js'
@@ -482,6 +483,34 @@ function getPathnameLocale(pathname: string): string | undefined {
   return manifest.config.i18n.locales.find((value) => value.toLowerCase() === first.toLowerCase())
 }
 
+// Next's router answers a no-match for `_next/static` assets and for non-HTML subresource requests
+// (`sec-fetch-dest`) with plain text instead of rendering the 404 page (router-server "404 case")
+function isPlainNotFoundRequest(request: Request, url: URL): boolean {
+  let { pathname } = url
+  if (basePath && pathname.startsWith(basePath)) {
+    pathname = pathname.slice(basePath.length) || '/'
+  }
+  const { assetPrefix, i18n } = manifest.config
+  if (assetPrefix) {
+    const prefix = URL.canParse(assetPrefix) ? new URL(assetPrefix).pathname : assetPrefix
+    if (prefix !== '/' && pathname.startsWith(prefix)) {
+      pathname = pathname.slice(prefix.length) || '/'
+    }
+  }
+  const [, first = ''] = pathname.split('/')
+  const locale = i18n?.locales.find((value) => value.toLowerCase() === first.toLowerCase())
+  if (locale) {
+    pathname = pathname.slice(locale.length + 1) || '/'
+  }
+  if (pathname.startsWith('/_next/static/')) {
+    return true
+  }
+  return (
+    (request.method === 'GET' || request.method === 'HEAD') &&
+    isNonHtmlSecFetchDest(request.headers.get('sec-fetch-dest'))
+  )
+}
+
 // Next's router detects the locale from the requested path and overrides it with the one of a
 // middleware rewrite target; the module only sees req.url (the requested path) so pass it on
 function getLocaleRequestMeta(request: Request, resolution: ResolveRoutesResult) {
@@ -868,6 +897,18 @@ export default async function ServerHandler(request: Request, requestContext: Re
     }
 
     // No match found — 404
+    if (isPlainNotFoundRequest(request, url)) {
+      return applyResolutionToThisResponse(
+        new Response('Not Found', {
+          status: 404,
+          headers: {
+            'content-type': 'text/plain; charset=utf-8',
+            'cache-control': 'private, no-cache, no-store, max-age=0, must-revalidate',
+          },
+        }),
+        404,
+      )
+    }
     // TODO(adapter): this can be cached forever because it will never match any routes
     // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
     // which would require setting correct netlify-vary header.
