@@ -92,19 +92,23 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
             if (!filePath.endsWith('.body')) {
               return
             }
-            // the CDN guesses the content-type from the extension, which is wrong for e.g.
-            // `.webmanifest`; Next's `.meta` sidecar has the one the route handler set
-            const meta = JSON.parse(
-              await readFile(`${src.slice(0, -'.body'.length)}.meta`, 'utf-8'),
-            ) as {
-              headers?: Record<string, string>
+            // the adapter output has no headers for STATIC_FILE outputs, Next's `.meta` sidecar has
+            // the ones the route handler set (the CDN would guess `.webmanifest` wrong). Internal
+            // `x-next-*` ones (cache tags) mean nothing for a file the CDN serves.
+            let headers: Record<string, string> = {}
+            try {
+              const meta = JSON.parse(
+                await readFile(`${src.slice(0, -'.body'.length)}.meta`, 'utf-8'),
+              ) as { headers?: Record<string, string> }
+              headers = meta.headers ?? {}
+            } catch {
+              // no sidecar: the CDN's extension-based content-type will have to do
             }
-            const contentType = meta.headers?.['content-type']
-            if (contentType) {
-              netlifyConfig.headers.push({
-                for: output.pathname,
-                values: { 'Content-Type': contentType },
-              })
+            const values = Object.fromEntries(
+              Object.entries(headers).filter(([name]) => !name.startsWith('x-next-')),
+            )
+            if (Object.keys(values).length !== 0) {
+              netlifyConfig.headers.push({ for: output.pathname, values })
             }
           }),
         )
