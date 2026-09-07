@@ -18,11 +18,11 @@ import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
   getInvocationUrl,
-  preferStaticPathnameAfterRewrite,
-  setNextDataHeader,
   normalizeNextDataUrl,
+  preferStaticPathnameAfterRewrite,
   resolveRoutes,
   responseToMiddlewareResult,
+  setNextDataHeader,
 } from '../adapter-runtime-shared/next-routing.js'
 import type { ResolveRoutesResult } from '../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../adapter-runtime-shared/proxy-external-rewrite.js'
