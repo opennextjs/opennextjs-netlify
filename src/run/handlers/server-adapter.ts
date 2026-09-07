@@ -452,17 +452,33 @@ function getRouteParams(template: string, pathname: string | undefined) {
     const rest = page.slice(dataPrefix.length).replace(/\.json$/, '')
     page = rest === 'index' ? basePath || '/' : `${basePath}/${rest}`
   }
-  if (manifest.config.i18n) {
+  const locale = getPathnameLocale(page)
+  if (locale) {
     const rest = page.slice(basePath.length)
-    const [, first = ''] = rest.split('/')
-    const locale = manifest.config.i18n.locales.find(
-      (value) => value.toLowerCase() === first.toLowerCase(),
-    )
-    if (locale) {
-      page = `${basePath}${rest.slice(locale.length + 1) || '/'}`
-    }
+    page = `${basePath}${rest.slice(locale.length + 1) || '/'}`
   }
   return matcher(page) || undefined
+}
+
+function getPathnameLocale(pathname: string): string | undefined {
+  if (!manifest.config.i18n) {
+    return undefined
+  }
+  const [, first = ''] = pathname.slice(basePath.length).split('/')
+  return manifest.config.i18n.locales.find((value) => value.toLowerCase() === first.toLowerCase())
+}
+
+// Next's router detects the locale from the requested path and overrides it with the one of a
+// middleware rewrite target; the module only sees req.url (the requested path) so pass it on
+function getLocaleRequestMeta(request: Request, resolution: ResolveRoutesResult) {
+  if (!manifest.config.i18n) {
+    return {}
+  }
+  const locale =
+    (resolution.invocationTarget && getPathnameLocale(resolution.invocationTarget.pathname)) ??
+    getPathnameLocale(new URL(request.url).pathname) ??
+    manifest.config.i18n.defaultLocale
+  return { locale, defaultLocale: manifest.config.i18n.defaultLocale }
 }
 
 async function invokeHandler(
@@ -524,6 +540,7 @@ async function invokeHandler(
           // from req.url itself but can't know about middleware ones
           query: resolution.resolvedQuery,
           params: getRouteParams(pathname, resolution.invocationTarget?.pathname),
+          ...getLocaleRequestMeta(request, resolution),
           render404,
           revalidate,
         },

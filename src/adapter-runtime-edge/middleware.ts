@@ -243,8 +243,16 @@ export async function runNextRouting(
   // Handle external rewrite — fetch directly from edge
   if (resolution.externalRewrite) {
     try {
+      // request headers set by middleware (`NextResponse.rewrite(url, { request: { headers } })`)
+      const externalRequest = middlewareRequestHeaders
+        ? new Request(request, {
+            headers: middlewareRequestHeaders,
+            // @ts-expect-error duplex is needed for streaming bodies
+            duplex: 'half',
+          })
+        : request
       return applyResolutionToThisResponse(
-        await proxyExternalRewrite(resolution.externalRewrite, request),
+        await proxyExternalRewrite(resolution.externalRewrite, externalRequest),
       )
     } catch (error) {
       console.error('external rewrite fetch error', error)
