@@ -338,6 +338,27 @@ jobs:
             echo "@next/env: published (from npm)"
           fi
 
+      # `run-tests.js --timings --group N/16` bin-packs the shards from a
+      # `{ test file: seconds }` map it reads as test-timings.json in its cwd (nextjs).
+      # Without one it splits round-robin, which is what leaves shards finishing tens of
+      # minutes apart — the map totals ~7.4h, so a balanced split is ~28m a shard.
+      #
+      # The file is committed here rather than fetched: it is derived data that changes
+      # only when we regenerate it (from the ingest app's Timings tab, which takes the
+      # median per file over recent runs), and a committed copy keeps the test job free of
+      # a network dependency it would have to tolerate failing anyway.
+      #
+      # Tolerated as missing on purpose: a stale or deleted file should cost the run a
+      # worse split, not fail all 16 shards over an optimisation.
+      - name: Use committed test timings
+        run: |
+          if [ -f adapter/test-timings.json ]; then
+            cp adapter/test-timings.json nextjs/test-timings.json
+            echo "timings: $(node -p 'Object.keys(require("./nextjs/test-timings.json")).length') files"
+          else
+            echo "no adapter/test-timings.json — shards will be split round-robin"
+          fi
+
       - name: Run deploy tests
         working-directory: nextjs
         env:
