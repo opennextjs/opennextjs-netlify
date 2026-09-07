@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
@@ -67,8 +67,49 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
           recursive: true,
         })
       }
-      if (existsSync(join(ctx.publishDir, 'static'))) {
-        await cp(join(ctx.publishDir, 'static'), join(ctx.staticDir, basePath, '_next/static'), {
+      const { adapterOutput, relativeAppDir, staticDir, netlifyConfig, publishDir } = ctx
+      if (adapterOutput) {
+        // the adapter output lists `<distDir>/static` and the static metadata routes (robots.txt,
+        // sitemap.xml, manifest.webmanifest, static opengraph-image...) that Next writes to
+        // `server/app/<route>.body`; `public/` is not in it (copied above). Static HTML pages stay
+        // on blobs: the function handles their 404 status and durable caching.
+        const { repoRoot, config, outputs } = adapterOutput
+        const distDir = join(relativeAppDir, config.distDir)
+        const cdnServedPrefixes = [`${distDir}/static/`, `${distDir}/server/app/`]
+        await Promise.all(
+          outputs.staticFiles.map(async (output) => {
+            // filePaths are repoRoot-relative once fixAdapterOutputForNextRouting ran, absolute before
+            const filePath = isAbsolute(output.filePath)
+              ? relative(repoRoot, output.filePath)
+              : output.filePath
+            if (!cdnServedPrefixes.some((prefix) => filePath.startsWith(prefix))) {
+              return
+            }
+            const src = join(repoRoot, filePath)
+            const dest = join(staticDir, output.pathname)
+            await mkdir(dirname(dest), { recursive: true })
+            await cp(src, dest)
+            if (!filePath.endsWith('.body')) {
+              return
+            }
+            // the CDN guesses the content-type from the extension, which is wrong for e.g.
+            // `.webmanifest`; Next's `.meta` sidecar has the one the route handler set
+            const meta = JSON.parse(
+              await readFile(`${src.slice(0, -'.body'.length)}.meta`, 'utf-8'),
+            ) as {
+              headers?: Record<string, string>
+            }
+            const contentType = meta.headers?.['content-type']
+            if (contentType) {
+              netlifyConfig.headers.push({
+                for: output.pathname,
+                values: { 'Content-Type': contentType },
+              })
+            }
+          }),
+        )
+      } else if (existsSync(join(publishDir, 'static'))) {
+        await cp(join(publishDir, 'static'), join(staticDir, basePath, '_next/static'), {
           recursive: true,
         })
       }
