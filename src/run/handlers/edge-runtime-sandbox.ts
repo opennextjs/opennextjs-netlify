@@ -7,16 +7,21 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
+import { pathToFileURL } from 'node:url'
 
 import type { MiddlewareManifest } from 'next-with-adapters/dist/build/webpack/plugins/middleware-plugin.js'
 
 import type { AdapterManifest } from '../config.js'
+import { getRunConfig } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
 
 import type { RequestContext } from './request-context.cjs'
 
 type EdgeFunctionDefinition = MiddlewareManifest['functions'][string]
 type Sandbox = typeof import('next-with-adapters/dist/server/web/sandbox/index.js')
+type IncrementalCacheModule =
+  typeof import('next-with-adapters/dist/server/lib/incremental-cache/index.js')
+type NodeFsModule = typeof import('next-with-adapters/dist/server/lib/node-fs-methods.js')
 type SandboxRunParams = Parameters<Sandbox['run']>[0]
 
 let sandboxPromise: Promise<Sandbox> | undefined
@@ -35,6 +40,65 @@ function getEdgeFunctions(distDir: string) {
     (content) => (JSON.parse(content) as MiddlewareManifest).functions,
   )
   return edgeFunctionsPromise
+}
+
+/**
+ * `fetch()` inside an edge output goes through `globalThis.__incrementalCache`, which the sandbox
+ * only sets when it is handed one — without it every fetch misses the cache and tag revalidation
+ * has nothing to invalidate (the cache handler bundled into the sandbox is inert under
+ * `EdgeRuntime`). Prefer the instance a node route module already published, like
+ * `NextNodeServer.runEdgeFunction` does, so both tiers share one cache; otherwise build the same
+ * cache they build (`route-module.js` `getIncrementalCache`) from our cache handler. adapter-k8s
+ * does the same in its pool server.
+ */
+let incrementalCachePromise: Promise<unknown> | undefined
+async function getIncrementalCache(manifest: AdapterManifest, requestHeaders: Headers) {
+  const published = (globalThis as { __incrementalCache?: unknown }).__incrementalCache
+  if (published) {
+    return published
+  }
+  incrementalCachePromise ??= (async () => {
+    // both are CommonJS: the named exports only survive our bundle through `default`
+    const [incrementalCacheModule, nodeFsModule, { nextConfig }, prerenderManifest] =
+      await Promise.all([
+        import('next-with-adapters/dist/server/lib/incremental-cache/index.js') as Promise<
+          IncrementalCacheModule & { default?: IncrementalCacheModule }
+        >,
+        import('next-with-adapters/dist/server/lib/node-fs-methods.js') as Promise<
+          NodeFsModule & { default?: NodeFsModule }
+        >,
+        getRunConfig(),
+        readFile(
+          join(PLUGIN_DIR, manifest.config.distDir, 'prerender-manifest.json'),
+          'utf-8',
+        ).then((contents) => JSON.parse(contents)),
+      ])
+    const { IncrementalCache } = incrementalCacheModule.default ?? incrementalCacheModule
+    const { nodeFs } = nodeFsModule.default ?? nodeFsModule
+    const cacheHandlerPath = (nextConfig as { cacheHandler?: string }).cacheHandler
+    let CurCacheHandler
+    if (cacheHandlerPath) {
+      // eslint-disable-next-line import/no-dynamic-require
+      const cacheHandlerModule = await import(pathToFileURL(cacheHandlerPath).href)
+      CurCacheHandler = cacheHandlerModule.default ?? cacheHandlerModule
+    }
+
+    return new IncrementalCache({
+      fs: nodeFs,
+      dev: false,
+      fetchCache: true,
+      // our cache handler owns persistence, the deployment directory is read-only
+      flushToDisk: false,
+      serverDistDir: join(PLUGIN_DIR, manifest.config.distDir, 'server'),
+      requestHeaders: Object.fromEntries(requestHeaders),
+      maxMemoryCacheSize: nextConfig.cacheMaxMemorySize,
+      fetchCacheKeyPrefix: nextConfig.experimental?.fetchCacheKeyPrefix,
+      allowedRevalidateHeaderKeys: nextConfig.experimental?.allowedRevalidateHeaderKeys,
+      getPrerenderManifest: () => prerenderManifest,
+      CurCacheHandler,
+    } as ConstructorParameters<IncrementalCacheModule['IncrementalCache']>[0])
+  })()
+  return incrementalCachePromise
 }
 
 export async function invokeEdgeRuntimeOutput({
@@ -127,6 +191,7 @@ export async function invokeEdgeRuntimeOutput({
       signal: request.signal,
       waitUntil: requestContext.trackBackgroundWork,
     },
+    incrementalCache: await getIncrementalCache(manifest, request.headers),
     useCache: true,
     onError: (error) => {
       console.error('edge runtime output error', error)
