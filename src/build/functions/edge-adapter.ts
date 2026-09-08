@@ -112,7 +112,13 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
   if (wasmAssets) {
     for (const [name, filePath] of Object.entries(wasmAssets)) {
       const data = await readFile(filePath)
-      parts.push(`const ${name} = Uint8Array.from(${JSON.stringify([...data])})`)
+      // a compiled module, like Next's own sandbox binds (`loadWasm`): with raw bytes
+      // `WebAssembly.instantiate(wasm)` resolves to `{ module, instance }` instead of the instance,
+      // so the `const { exports } = await WebAssembly.instantiate(wasm)` that Next compiles the
+      // `import wasm from './x.wasm?module'` into gets `exports: undefined`
+      parts.push(
+        `const ${name} = await WebAssembly.compile(Uint8Array.from(${JSON.stringify([...data])}))`,
+      )
     }
   }
 
