@@ -26,6 +26,8 @@ export type AdapterManifest = Pick<
   relativeProjectDir: string
   // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)
   relativeAppDir: string
+  // `public/` files: the CDN serves them, but routing needs to know they exist (see getPublicPathnames)
+  publicPathnames: string[]
 }
 
 /**

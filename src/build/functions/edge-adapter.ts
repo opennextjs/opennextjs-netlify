@@ -246,7 +246,7 @@ async function writeRoutingEdgeFunctionEntry(
       ...ctx.adapterOutput.routing,
       caseSensitive: ctx.adapterOutput.config.experimental?.caseSensitiveRoutes,
     },
-    pathnames: collectAllPathnames(ctx.adapterOutput),
+    pathnames: [...collectAllPathnames(ctx.adapterOutput), ...(await ctx.getPublicPathnames())],
     skipProxyUrlNormalize: ctx.adapterOutput.config.skipProxyUrlNormalize,
   } satisfies RoutingConfig
 

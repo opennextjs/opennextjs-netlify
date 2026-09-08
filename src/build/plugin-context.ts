@@ -10,6 +10,7 @@ import type {
   NetlifyPluginOptions,
   NetlifyPluginUtils,
 } from '@netlify/build'
+import glob from 'fast-glob'
 import type { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin.js'
 import type { PagesManifest } from 'next/dist/build/webpack/plugins/pages-manifest-plugin.js'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
@@ -283,6 +284,21 @@ export class PluginContext {
   }
 
   #adapterOutput: AdapterBuildCompleteContext | null | undefined = undefined
+
+  /**
+   * Pathnames of `public/` files, which Next serves as static assets but the adapter output does not
+   * list (adapter-k8s adds them to its routing tables the same way). Routing needs them so a rewrite
+   * that targets one resolves instead of falling through to a 404.
+   */
+  async getPublicPathnames(): Promise<string[]> {
+    const publicDir = this.resolveFromSiteDir('public')
+    if (!existsSync(publicDir)) {
+      return []
+    }
+    const basePath = this.buildConfig.basePath || ''
+    const files = await glob('**/*', { cwd: publicDir, dot: true })
+    return files.map((file) => `${basePath}/${file}`)
+  }
 
   /** Read and cache the adapter output JSON from publishDir if it exists */
   get adapterOutput(): AdapterBuildCompleteContext | null {

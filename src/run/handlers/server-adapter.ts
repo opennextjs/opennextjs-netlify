@@ -200,6 +200,15 @@ function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
   return serverStaticFile.bind(null, output)
 }
 
+// `public/` files live on the CDN, so a direct request never reaches the function — but a rewrite
+// resolved here does, and then the file has to be fetched from the CDN like any other static output
+for (const pathname of manifest.publicPathnames) {
+  registerHandler(
+    pathname,
+    createStaticFileHandler({ filePath: `public${pathname.slice(basePath.length)}`, pathname }),
+  )
+}
+
 const staticFilePathnames = new Set<string>()
 for (const output of manifest.outputs.staticFiles) {
   for (const alias of getPathnameAliases(output.pathname, basePath)) {

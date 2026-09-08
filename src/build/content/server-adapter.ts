@@ -34,6 +34,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         config: ctx.adapterOutput.config,
         relativeProjectDir: ctx.adapterOutput.relativeProjectDir,
         relativeAppDir: ctx.relativeAppDir,
+        publicPathnames: await ctx.getPublicPathnames(),
       }),
       'utf-8',
     )
