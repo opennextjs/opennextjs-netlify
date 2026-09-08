@@ -159,6 +159,10 @@ export async function runNextRouting(
   // since this file runs in Deno without type-checking. The next-routing
   // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
   const routingHeaders = setNextDataHeader(new Headers(request.headers), url, routingConfig)
+  // A request body can only be read once, and both middleware and the origin need it. Tee it when
+  // middleware actually runs (Next buffers the whole body for the same reason, see
+  // `getCloneableBody`/`cloneBodyStream`) and keep the branch nobody read out of the way.
+  let originBody = request.body
   const resolution = await resolveRoutes({
     url: addDefaultLocaleForRouting(url, routingConfig, routingHeaders),
     buildId: routingConfig.buildId,
@@ -192,15 +196,29 @@ export async function runNextRouting(
       const middlewareRequestUrl = nextConfig?.skipMiddlewareUrlNormalize ? url : matchingUrl
 
       const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
+      let middlewareBody: ReadableStream | undefined
+      if (hasBody && originBody) {
+        // not middlewareCtx.requestBody: that is the very stream we handed to resolveRoutes, so
+        // reading it in middleware would leave nothing for the origin
+        const [forMiddleware, forOrigin] = originBody.tee()
+        middlewareBody = forMiddleware
+        originBody = forOrigin
+      }
       const result = await handler({
         request: {
           headers: Object.fromEntries(new Headers(middlewareCtx.headers).entries()),
           method: request.method,
           url: middlewareRequestUrl.href,
-          body: hasBody ? middlewareCtx.requestBody : undefined,
+          body: middlewareBody,
           nextConfig,
         },
       })
+      // middleware that never read its branch would otherwise make the tee buffer the whole body
+      if (middlewareBody && !middlewareBody.locked) {
+        middlewareBody.cancel().catch(() => {
+          // nothing to release
+        })
+      }
       const rawResponse = result.response
 
       // Convert the raw Next.js middleware response to a MiddlewareResult
@@ -244,13 +262,15 @@ export async function runNextRouting(
   if (resolution.externalRewrite) {
     try {
       // request headers set by middleware (`NextResponse.rewrite(url, { request: { headers } })`)
-      const externalRequest = middlewareRequestHeaders
-        ? new Request(request, {
-            headers: middlewareRequestHeaders,
-            // @ts-expect-error duplex is needed for streaming bodies
-            duplex: 'half',
-          })
-        : request
+      const externalRequest =
+        middlewareRequestHeaders || originBody !== request.body
+          ? new Request(request, {
+              headers: middlewareRequestHeaders ?? request.headers,
+              body: originBody,
+              // @ts-expect-error duplex is needed for streaming bodies
+              duplex: 'half',
+            })
+          : request
       return applyResolutionToThisResponse(
         await proxyExternalRewrite(resolution.externalRewrite, externalRequest),
       )
@@ -308,7 +328,7 @@ export async function runNextRouting(
     {
       method: request.method,
       headers: forwardHeaders,
-      body: request.body,
+      body: originBody,
       // @ts-expect-error duplex is needed for streaming bodies
       duplex: 'half',
     },
