@@ -21,30 +21,27 @@ fi
 # per-fixture temp dir, but initialize it empty to be defensive.
 : > .adapter-deploy.log
 
-# Push the fixture's env onto the Netlify site.
+# Hand the fixture's env to the deployed functions.
 #
-# A test declares env with nextTestSetup({ env: {...} }), and in deploy mode the
-# harness hands it to this script as JSON in NEXT_TEST_ENV
-# (next-modes/next-deploy.ts:62) — that is the ONLY channel. Exporting it here
-# would not be enough: the build runs inside `netlify deploy` and the server
-# runs later on Netlify's infrastructure, so anything the test expects to read
-# at build or request time has to exist where Netlify can see it. Site-level env
-# vars cover both — the build container gets them, and so does the deployed
-# function at request time.
+# The build half needs nothing: the harness spawns this script with the test's
+# env already in scriptEnv (next-modes/next-deploy.ts:70), so `netlify deploy`
+# inherits it. Only the deployed functions are a separate process, and `--env`
+# puts the variables on the deploy itself (netlify/cli#8413, CLI >= 27.2.0),
+# taking priority over site-level ones.
 #
-# Values are passed to the CLI as argv, so nothing needs quoting/escaping: no
-# shell re-parsing, no dotenv dialect to satisfy. node emits NUL-delimited
-# key/value pairs so that newlines, quotes, `#` and `=` inside a value survive
-# the trip through `read`.
+# This used to be `netlify env:set` per variable, which writes to the SHARED
+# site: parallel shards raced each other ("failed to set env var ...", 44 tests
+# in one run) and every variable leaked into every later deploy.
+#
+# NEXT_TEST_ENV is the same env as JSON. node emits it NUL-delimited so values
+# containing newlines, quotes, `#` or `=` survive `read`; from there they go to
+# the CLI as argv, with no shell or dotenv re-parsing to escape for.
+DEPLOY_ENV_ARGS=()
 if [ -n "${NEXT_TEST_ENV:-}" ]; then
   while IFS= read -r -d '' key && IFS= read -r -d '' value; do
-    if ! "$ADAPTER_DIR/node_modules/.bin/netlify" env:set "$key" "$value" >> .adapter-deploy.log 2>&1; then
-      echo "Error: failed to set env var $key"
-      cat .adapter-deploy.log
-      exit 1
-    fi
+    DEPLOY_ENV_ARGS+=(--env "$key=$value")
     if [ -n "${ADAPTER_DEBUG_LOGS:-}" ]; then
-      echo "env:set $key" >&2
+      echo "deploy env $key" >&2
     fi
   done < <(node -e "
 const env = JSON.parse(process.env.NEXT_TEST_ENV || '{}')
@@ -182,7 +179,7 @@ EOF
 # We deliberately do NOT also stream to stderr: run-tests.js buffers child output
 # and prints it only for failed tests, so sending it to stderr here as well would
 # duplicate the whole log in the GitHub Actions failed-test output.
-if ! NO_COLOR=1 NETLIFY_NEXT_SKEW_PROTECTION=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy >> .adapter-deploy.log 2>&1; then
+if ! NO_COLOR=1 NETLIFY_NEXT_SKEW_PROTECTION=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy "${DEPLOY_ENV_ARGS[@]}" >> .adapter-deploy.log 2>&1; then
   cat .adapter-deploy.log
   exit 1
 fi
