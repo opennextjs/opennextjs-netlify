@@ -108,7 +108,7 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
     }
   }
 
-  const { wasmAssets, assets, filePath: middlewareFilePath } = middlewareOutput
+  const { wasmAssets, assets, filePath: middlewareFilePath, id: middlewareId } = middlewareOutput
   if (wasmAssets) {
     for (const [name, filePath] of Object.entries(wasmAssets)) {
       const data = await readFile(filePath)
@@ -140,7 +140,7 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
   // `middleware_instrumentation`. Picking the first key with that prefix therefore lands on
   // instrumentation often enough, and its default is not a handler ("handler is not a function",
   // killing the whole edge function). Address the middleware's own entry by name instead.
-  const middlewareEntryKey = `middleware_${middlewareOutput.id}`
+  const middlewareEntryKey = `middleware_${middlewareId}`
   parts.push(
     `;// Middleware entry: ${middlewareFilePath} \n`,
     middlewareEntry,
