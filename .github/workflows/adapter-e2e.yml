@@ -7,11 +7,11 @@ on:
     inputs:
       nextjsRepo:
         description: "Next.js repo (owner/name) — e.g. a fork carrying test changes"
-        default: "vercel/next.js"
+        default: "pieh/next.js"
         type: string
       nextjsRef:
         description: "Next.js repo ref (branch/tag/SHA)"
-        default: "canary"
+        default: "e2e-tests-adjustments"
         type: string
       # Uncheck to test a fixture or adapter change against published next
       # without paying for a Rust compile.
@@ -24,7 +24,7 @@ on:
       # standalone output path.
       adapterMode:
         description: "Run the adapter in adapter mode (NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true) instead of standalone"
-        default: false
+        default: true
         type: boolean
   # schedule:
   #   - cron: '0 2 * * *'
