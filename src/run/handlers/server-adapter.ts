@@ -123,6 +123,11 @@ type InvokeHandlerArg = {
 }
 
 const appRouteIds = new Set(manifest.outputs.appRoutes.map((output) => output.id))
+// pages/app pages that are prerendered or fully static: those answer reads only, see readOnlyPathnames
+const staticPageOutputIds = new Set(
+  [...manifest.outputs.pages, ...manifest.outputs.appPages].map((output) => output.id),
+)
+const readOnlyPathnames = new Set<string>()
 
 // pages with getStaticProps: prerenders point back at them, their data-route outputs share the
 // sourcePage
@@ -176,6 +181,11 @@ for (const output of manifest.outputs.prerenders) {
     )
   }
   registerHandler(output.pathname, parentHandler)
+  if (staticPageOutputIds.has(output.parentOutputId)) {
+    for (const alias of getPathnameAliases(output.pathname, basePath)) {
+      readOnlyPathnames.add(alias)
+    }
+  }
   for (const alias of getPathnameAliases(output.pathname, basePath)) {
     ssgPathnames.add(alias)
   }
@@ -194,6 +204,7 @@ const staticFilePathnames = new Set<string>()
 for (const output of manifest.outputs.staticFiles) {
   for (const alias of getPathnameAliases(output.pathname, basePath)) {
     staticFilePathnames.add(alias)
+    readOnlyPathnames.add(alias)
   }
   registerHandler(
     output.pathname,
@@ -850,6 +861,26 @@ export default async function ServerHandler(request: Request, requestContext: Re
       if (!matchedHandler) {
         return applyResolutionToThisResponse(
           new Response('Routing matched but no matched output exists', { status: 500 }),
+        )
+      }
+
+      // A prerendered or fully static page answers reads only: Next's router-server sets
+      // `Allow: GET, HEAD` and 405s every other method on a static output, and base-server does the
+      // same for an SSG page. Route modules carry neither check, so it lands on the host (adapter-k8s
+      // gates its static serves the same way). Server actions and postponed resumes legitimately
+      // POST to a page URL.
+      if (
+        !['GET', 'HEAD'].includes(request.method) &&
+        readOnlyPathnames.has(resolution.resolvedPathname) &&
+        !request.headers.has('next-action') &&
+        !request.headers.has('next-resume')
+      ) {
+        return applyResolutionToThisResponse(
+          new Response('Method Not Allowed', {
+            status: 405,
+            headers: { allow: 'GET, HEAD', 'content-type': 'text/plain; charset=utf-8' },
+          }),
+          405,
         )
       }
 
