@@ -8,6 +8,7 @@ import type { Span } from '@opentelemetry/api'
 import type { AdapterOutput } from 'next-with-adapters'
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
+import { getIsPossibleServerAction } from 'next-with-adapters/dist/server/lib/server-action-request-meta.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 import { isDynamicRoute } from 'next-with-adapters/dist/shared/lib/router/utils/is-dynamic.js'
 import { getRouteMatcher } from 'next-with-adapters/dist/shared/lib/router/utils/route-matcher.js'
@@ -882,11 +883,15 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // `Allow: GET, HEAD` and 405s every other method on a static output, and base-server does the
       // same for an SSG page. Route modules carry neither check, so it lands on the host (adapter-k8s
       // gates its static serves the same way). Server actions and postponed resumes legitimately
-      // POST to a page URL.
+      // POST to a page URL — and a form-submitted action carries no `next-action` header, only a
+      // form content-type, so ask Next the same way base-server does.
       if (
         !['GET', 'HEAD'].includes(request.method) &&
         readOnlyPathnames.has(resolution.resolvedPathname) &&
-        !request.headers.has('next-action') &&
+        !getIsPossibleServerAction({
+          method: request.method,
+          headers: request.headers,
+        } as Parameters<typeof getIsPossibleServerAction>[0]) &&
         !request.headers.has('next-resume')
       ) {
         return applyResolutionToThisResponse(
