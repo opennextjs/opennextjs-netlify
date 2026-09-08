@@ -282,8 +282,7 @@ async function renderErrorPage(
     const locale = locales.find((value) => value.toLowerCase() === segment) ?? defaultLocale
     candidates.push(`${basePath}/${locale}/${status}`)
   }
-  candidates.push(`${basePath}/${status}`)
-  candidates.push(`${basePath}/_error`)
+  candidates.push(`${basePath}/${status}`, `${basePath}/_error`)
 
   const pathname = candidates.find((candidate) => handlerDefsByPathname.has(candidate))
   const handler = pathname ? handlerDefsByPathname.get(pathname) : undefined
