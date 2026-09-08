@@ -111,6 +111,30 @@ export function isNextDataPathname(
  * route modules see them, both key data-request behaviour (`x-nextjs-rewrite`,
  * `x-nextjs-matched-path`) off the header rather than the URL.
  */
+// Next's router-server drops these from every incoming request before doing anything with it
+// (`filterInternalHeaders`): they are how Next's own tiers talk to each other, so honouring them
+// from outside lets a client drive routing, or inject cookies through `x-middleware-set-cookie`.
+const INTERNAL_REQUEST_HEADERS = [
+  'x-middleware-rewrite',
+  'x-middleware-redirect',
+  'x-middleware-set-cookie',
+  'x-middleware-skip',
+  'x-middleware-override-headers',
+  'x-middleware-next',
+  'x-now-route-matches',
+  'x-matched-path',
+  'x-nextjs-data',
+  'x-next-resume-state-length',
+  'next-resume',
+]
+
+export function stripInternalRequestHeaders(headers: Headers): Headers {
+  for (const name of INTERNAL_REQUEST_HEADERS) {
+    headers.delete(name)
+  }
+  return headers
+}
+
 export function setNextDataHeader(headers: Headers, url: URL, routing: RoutingBasics): Headers {
   if (isNextDataPathname(url.pathname, routing)) {
     headers.set('x-nextjs-data', '1')

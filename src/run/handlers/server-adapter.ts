@@ -21,6 +21,7 @@ import {
   preferStaticPathnameAfterRewrite,
   resolveRoutes,
   setNextDataHeader,
+  stripInternalRequestHeaders,
 } from '../../adapter-runtime-shared/next-routing.js'
 import type {
   I18nForRouting,
@@ -745,14 +746,22 @@ export default async function ServerHandler(request: Request, requestContext: Re
 
     let resolution: ResolveRoutesResult
 
+    // Without the routing edge function in front (no middleware, or it isn't deployed) this is where
+    // the request enters, so drop the headers Next's own tiers use to talk to each other, like
+    // router-server does. Behind the edge function they are ours: middleware puts the cookies it set
+    // in `x-middleware-set-cookie` for the render.
     const serializedResolution = request.headers.get('x-next-route-resolution')
+    const requestHeaders = serializedResolution
+      ? new Headers(request.headers)
+      : stripInternalRequestHeaders(new Headers(request.headers))
+
     if (serializedResolution) {
       // Resolution was computed by the routing edge function — skip resolveRoutes
       resolution = deserializeResolution(serializedResolution)
     } else {
       // No edge function (standalone mode fallback, or edge function not deployed)
       try {
-        const routingHeaders = setNextDataHeader(new Headers(request.headers), url, routingBasics)
+        const routingHeaders = setNextDataHeader(new Headers(requestHeaders), url, routingBasics)
         resolution = await resolveRoutes({
           url: addDefaultLocaleForRouting(
             url,
@@ -870,7 +879,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
       }
 
       const handlerHeaders = setNextDataHeader(
-        new Headers(request.headers),
+        new Headers(requestHeaders),
         new URL(publicUrl),
         routingBasics,
       )

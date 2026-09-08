@@ -23,6 +23,7 @@ import {
   resolveRoutes,
   responseToMiddlewareResult,
   setNextDataHeader,
+  stripInternalRequestHeaders,
 } from '../adapter-runtime-shared/next-routing.js'
 import type { ResolveRoutesResult } from '../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../adapter-runtime-shared/proxy-external-rewrite.js'
@@ -160,7 +161,13 @@ export async function runNextRouting(
   // Cast config values — local type definitions are intentionally loose
   // since this file runs in Deno without type-checking. The next-routing
   // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
-  const routingHeaders = setNextDataHeader(new Headers(request.headers), url, routingConfig)
+  // the edge function is where a request enters, so this is the boundary Next's router-server
+  // filters at; `x-nextjs-data` is set back from the URL right after
+  const routingHeaders = setNextDataHeader(
+    stripInternalRequestHeaders(new Headers(request.headers)),
+    url,
+    routingConfig,
+  )
   // A request body can only be read once, and both middleware and the origin need it. Tee it when
   // middleware actually runs (Next buffers the whole body for the same reason, see
   // `getCloneableBody`/`cloneBodyStream`) and keep the branch nobody read out of the way.
@@ -269,7 +276,7 @@ export async function runNextRouting(
       const externalRequest =
         middlewareRequestHeaders || originBody !== request.body
           ? new Request(request, {
-              headers: middlewareRequestHeaders ?? request.headers,
+              headers: middlewareRequestHeaders ?? routingHeaders,
               body: originBody,
               // @ts-expect-error duplex is needed for streaming bodies
               duplex: 'half',
