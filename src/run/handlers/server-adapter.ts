@@ -234,9 +234,12 @@ extendedGlobalThis[RouterServerContextSymbol] = {
 
 /**
  * Custom error page for the request, like Next's router: 404 renders pages router `/404` (locale
- * variant first), else app router `/_not-found`; 500 renders `/500`, else `/_error`. Static error
- * HTML is served with Next's default headers for error pages rather than the permanent caching a
- * direct request to a fully static page gets.
+ * variant first), else app router `/_not-found`; 500 renders `/500`. Both fall back to `/_error`,
+ * which is what a Pages Router app with a custom `_error` but no `404.js` has. The page is invoked
+ * with the requested URL (Next passes the error page as `invokePath`, `req.url` stays the original,
+ * and `pages/_error` reports it as `reqUrl`/`asPath`). Static error HTML is served with Next's
+ * default headers for error pages rather than the permanent caching a direct request to a fully
+ * static page gets.
  */
 async function renderErrorPage(
   status: 404 | 500,
@@ -250,10 +253,11 @@ async function renderErrorPage(
     const locale = locales.find((value) => value.toLowerCase() === segment) ?? defaultLocale
     candidates.push(`${basePath}/${locale}/${status}`)
   }
-  candidates.push(
-    `${basePath}/${status}`,
-    status === 404 ? `${basePath}/_not-found` : `${basePath}/_error`,
-  )
+  candidates.push(`${basePath}/${status}`)
+  if (status === 404) {
+    candidates.push(`${basePath}/_not-found`)
+  }
+  candidates.push(`${basePath}/_error`)
 
   const pathname = candidates.find((candidate) => handlerDefsByPathname.has(candidate))
   const handler = pathname ? handlerDefsByPathname.get(pathname) : undefined
@@ -262,7 +266,7 @@ async function renderErrorPage(
   }
 
   const response = await handler({
-    request: new Request(new URL(pathname, request.url), { headers: request.headers }),
+    request: new Request(request.url, { headers: request.headers }),
     requestContext,
     resolution: {},
     tracer,
