@@ -136,7 +136,13 @@ function serializeResolution(resolution: ResolveRoutesResult): string {
     serialized.externalRewrite = resolution.externalRewrite.toString()
   }
 
-  return JSON.stringify(serialized)
+  // The resolution travels in a header, and headers are ByteStrings: a non-ASCII character
+  // anywhere in it (a unicode search param, say) makes `Headers.set` throw. JSON's own `\uXXXX`
+  // escapes keep it ASCII and `JSON.parse` turns them back into the original characters.
+  return JSON.stringify(serialized).replace(
+    /[\u0080-\uFFFF]/g,
+    (character) => `\\u${character.codePointAt(0)?.toString(16).padStart(4, '0')}`,
+  )
 }
 
 /**
