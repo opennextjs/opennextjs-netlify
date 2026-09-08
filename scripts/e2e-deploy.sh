@@ -150,25 +150,24 @@ if ! "${INSTALL[@]}" >> .adapter-deploy.log 2>&1; then
   exit 1
 fi
 
-# A next.config.ts with a TOP-LEVEL AWAIT can only be loaded by Node's native
-# TypeScript resolution. Next's default path transpiles the config to CJS and
-# require()s it, which throws ERR_REQUIRE_ASYNC_MODULE on an async module, and
-# the build dies before the adapter ever runs (transpile-config.ts). The native
-# path is gated on this env var, normally set by `next build
+# The next-config-ts-native-{ts,mts} fixtures need Node's native TypeScript
+# resolution for next.config.(ts|mts): their configs carry a deliberate
+# top-level await, and Next's default path transpiles the config to CJS and
+# require()s it, which throws ERR_REQUIRE_ASYNC_MODULE on an async module. The
+# build then dies before the adapter ever runs (transpile-config.ts). The
+# native path is gated on this env var, normally set by `next build
 # --experimental-next-config-strip-types` (bin/next.ts).
 #
-# Upstream runs exactly these fixtures (test/e2e/app-dir/next-config-ts-native-
-# {ts,mts}, whose configs carry a deliberate top-level await to prove native
-# mode) in dedicated jobs that export the same two variables
-# (build_and_test.yml). Its deploy job never hits them: it runs Node 20, where
-# `process.features.typescript` is undefined and the tests skip themselves. We
-# need Node >= 22.13 for netlify-cli, so they run here and would otherwise fail
-# on a config Next simply cannot load.
+# Upstream runs these two directories in dedicated jobs that export the same
+# variable (build_and_test.yml); its deploy job never reaches them, because it
+# runs Node 20, where `process.features.typescript` is undefined and the tests
+# skip themselves. We need Node >= 22.13 for netlify-cli, so they run here.
 #
-# Scoped to the fixtures that cannot work without it — matching a top-level
-# `await` (column 0, so a nested one in a function body doesn't count) covers
-# all 26 of them and none of the other 57 next.config.ts fixtures, which keep
-# the default transpile path a real user's build uses.
+# Scoped to those directories rather than to every TS config, so the other 57
+# next.config.ts fixtures keep the transpile path a real user's build takes.
+# TEST_FILE_PATH is the absolute path of the running test file: e2e-utils sets
+# it at module scope (test/lib/e2e-utils/index.ts) and next-deploy passes its
+# whole env to this script.
 #
 # Upstream also exports NODE_OPTIONS=--experimental-transform-types, for Node
 # versions where type stripping is still behind a flag. We must not: pnpm
@@ -177,15 +176,14 @@ fi
 # — Node >= 22.18 strips types by default, which is what makes
 # `process.features.typescript` truthy in the first place, and these configs
 # only use erasable syntax.
-for ts_config in next.config.ts next.config.mts; do
-  if [ -f "$ts_config" ] && grep -qE '^[^[:space:]].*\bawait\b' "$ts_config"; then
+case "${TEST_FILE_PATH:-}" in
+  */next-config-ts-native-ts/*|*/next-config-ts-native-mts/*)
     export __NEXT_NODE_NATIVE_TS_LOADER_ENABLED=true
     if [ -n "${ADAPTER_DEBUG_LOGS:-}" ]; then
-      echo "native TS config resolution enabled for $ts_config" >&2
+      echo "native TS config resolution enabled for $TEST_FILE_PATH" >&2
     fi
-    break
-  fi
-done
+    ;;
+esac
 
 # Create netlify.toml pointing to the installed plugin
 cat > netlify.toml <<'EOF'
