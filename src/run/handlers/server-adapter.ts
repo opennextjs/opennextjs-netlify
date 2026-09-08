@@ -257,8 +257,10 @@ extendedGlobalThis[RouterServerContextSymbol] = {
 }
 
 /**
- * Custom error page for the request, like Next's router: 404 renders pages router `/404` (locale
- * variant first), else app router `/_not-found`; 500 renders `/500`. Both fall back to `/_error`,
+ * Custom error page for the request, like Next's router: 404 renders app router `/_not-found` if
+ * the app has one, else pages router `/404` (locale variant first); 500 renders `/500`. The app
+ * entry wins even over a custom `pages/404` and even under i18n, which is what base-server does
+ * (it looks up `/_not-found/page` first and only falls back to `/404`). Both fall back to `/_error`,
  * which is what a Pages Router app with a custom `_error` but no `404.js` has. The page is invoked
  * with the requested URL (Next passes the error page as `invokePath`, `req.url` stays the original,
  * and `pages/_error` reports it as `reqUrl`/`asPath`). Static error HTML is served with Next's
@@ -271,6 +273,9 @@ async function renderErrorPage(
 ): Promise<Response> {
   const url = new URL(request.url)
   const candidates: string[] = []
+  if (status === 404) {
+    candidates.push(`${basePath}/_not-found`)
+  }
   if (manifest.config.i18n) {
     const { locales, defaultLocale } = manifest.config.i18n
     const segment = url.pathname.slice(basePath.length).split('/')[1]?.toLowerCase()
@@ -278,9 +283,6 @@ async function renderErrorPage(
     candidates.push(`${basePath}/${locale}/${status}`)
   }
   candidates.push(`${basePath}/${status}`)
-  if (status === 404) {
-    candidates.push(`${basePath}/_not-found`)
-  }
   candidates.push(`${basePath}/_error`)
 
   const pathname = candidates.find((candidate) => handlerDefsByPathname.has(candidate))
