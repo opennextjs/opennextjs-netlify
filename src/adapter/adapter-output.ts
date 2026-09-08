@@ -78,6 +78,28 @@ function normalizeAdapterOutput(
 // too, except for `/api/` requests, so there `api` gets consumed as the locale (a
 // "/((?!api|...).*)" exclusion matcher then matches `/api/x` on its remainder, and a `/api/:path*`
 // matcher never matches). Let the locale segment match empty exactly where @next/routing skips it.
+// API routes are not localized: Next emits no locale-prefixed API outputs and its router 404s an
+// explicitly locale-prefixed API request, yet the adapter output builds their dynamic routes with a
+// mandatory locale segment (`shouldLocalize` is just `Boolean(config.i18n)` in build-complete.ts).
+// @next/routing skips locale prefixing for `/api/` by design, so those routes could never match and
+// every dynamic API route 404'd. Drop the locale from them.
+const I18N_DYNAMIC_ROUTE_LOCALE_GROUP = '(?<nextLocale>[^/]{1,})/'
+function removeLocaleFromApiDynamicRoute<
+  T extends { source?: string; sourceRegex: string; destination?: string },
+>(route: T): T {
+  if (
+    !route.source?.startsWith('/api/') ||
+    !route.sourceRegex.includes(I18N_DYNAMIC_ROUTE_LOCALE_GROUP)
+  ) {
+    return route
+  }
+  return {
+    ...route,
+    sourceRegex: route.sourceRegex.replace(I18N_DYNAMIC_ROUTE_LOCALE_GROUP, ''),
+    destination: route.destination?.replace('/$nextLocale', ''),
+  }
+}
+
 const I18N_MATCHER_LOCALE_GROUP = '(?:\\/((?!_next\\/)[^/.]{1,}))'
 const I18N_MATCHER_LOCALE_GROUP_OR_API = '(?:(?=\\/api\\/)|(?!\\/api\\/)\\/((?!_next\\/)[^/.]{1,}))'
 function fixAdapterOutputForNextRouting(
@@ -102,6 +124,9 @@ function fixAdapterOutputForNextRouting(
       // config rewrites never apply to data requests. Next's router always normalizes data requests
       // to the page path before routing (and the lib denormalizes again before matching outputs).
       shouldNormalizeNextData: true,
+      dynamicRoutes: onBuildCompleteAdapterCtx.config.i18n
+        ? onBuildCompleteAdapterCtx.routing.dynamicRoutes.map(removeLocaleFromApiDynamicRoute)
+        : onBuildCompleteAdapterCtx.routing.dynamicRoutes,
       middlewareMatchers: onBuildCompleteAdapterCtx.config.i18n
         ? onBuildCompleteAdapterCtx.routing.middlewareMatchers.map((matcher) => ({
             ...matcher,
