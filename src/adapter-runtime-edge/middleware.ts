@@ -151,6 +151,8 @@ export async function runNextRouting(
 ): Promise<Response | undefined> {
   const url = new URL(request.url)
   let middlewareResponse: Response | undefined
+  // headers middleware set on its own response, e.g. `NextResponse.next({ headers })`
+  let middlewareResponseHeaders: Headers | undefined
   // resolveRoutes only returns response headers, request headers modified by middleware
   // (x-middleware-override-headers / x-middleware-request-*) are applied in place to this object
   let middlewareRequestHeaders: Headers | undefined
@@ -240,6 +242,8 @@ export async function runNextRouting(
         delete middlewareResult.redirect
         middlewareResult.responseHeaders?.delete('location')
       }
+
+      middlewareResponseHeaders = middlewareResult.responseHeaders
 
       if (middlewareResult.bodySent) {
         // Store for later use if middleware sent a body response
@@ -334,5 +338,25 @@ export async function runNextRouting(
     },
   )
   // context.next() forwards to the origin (server handler or CDN)
-  return applyResolutionToThisResponse(await context.next(forwardRequest))
+  const originResponse = applyResolutionToThisResponse(await context.next(forwardRequest))
+
+  // Next applies the middleware response headers to the final response, and they win over what the
+  // origin sent: `applyResolutionToResponse` keeps an origin cache-control (a CDN-served static
+  // file carries the one we configured for it at build time), middleware asking for another one is
+  // the whole point of `NextResponse.next({ headers: { 'cache-control': … } })`.
+  if (!middlewareResponseHeaders) {
+    return originResponse
+  }
+  const headers = new Headers(originResponse.headers)
+  for (const [key, value] of middlewareResponseHeaders.entries()) {
+    if (key.toLowerCase().startsWith('x-middleware-')) {
+      continue
+    }
+    headers.set(key, value)
+  }
+  return new Response(originResponse.body, {
+    status: originResponse.status,
+    statusText: originResponse.statusText,
+    headers,
+  })
 }
