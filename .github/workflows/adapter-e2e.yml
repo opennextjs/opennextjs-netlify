@@ -373,6 +373,12 @@ jobs:
           NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ inputs.adapterMode && 'true' || '' }}
           NETLIFY_SITE_ID: 1d5a5c76-d445-4ae5-b694-b0d3f2e2c395
           NEXT_E2E_TEST_TIMEOUT: 240000
+          # Tells the harness these are adapter runs, so a test written for
+          # adapters takes its adapter branch (mostly `skipDeployment:
+          # !isAdapterTest`). It never reaches the Vercel token/team logic that
+          # also reads it: that lives past the custom-deploy-script early return
+          # in next-modes/next-deploy.ts.
+          NEXT_ENABLE_ADAPTER: ${{ inputs.adapterMode && '1' || '0' }}
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
           # Emit a jest-junit report per test file. jest.config.js sets
           # rootDir: 'test', so with IS_TURBOPACK_TEST the reports land in
