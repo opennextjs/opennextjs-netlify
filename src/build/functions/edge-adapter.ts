@@ -135,10 +135,20 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
     join(ctx.adapterOutput!.repoRoot, middlewareFilePath),
     'utf8',
   )
+  // Every edge entry is registered as `_ENTRIES['middleware_' + name]` (Next's entries.ts), the
+  // instrumentation hook included - a bundle with both holds `middleware_middleware` AND
+  // `middleware_instrumentation`. Picking the first key with that prefix therefore lands on
+  // instrumentation often enough, and its default is not a handler ("handler is not a function",
+  // killing the whole edge function). Address the middleware's own entry by name instead.
+  const middlewareEntryKey = `middleware_${middlewareOutput.id}`
   parts.push(
     `;// Middleware entry: ${middlewareFilePath} \n`,
     middlewareEntry,
-    `const middlewareEntryKey = Object.keys(_ENTRIES).find(entryKey => entryKey.startsWith("middleware_"));`,
+    `const middlewareEntryKey = ${JSON.stringify(middlewareEntryKey)} in _ENTRIES`,
+    `  ? ${JSON.stringify(middlewareEntryKey)}`,
+    `  : Object.keys(_ENTRIES).find(entryKey => entryKey.startsWith("middleware_") && entryKey !== "middleware_instrumentation");`,
+    // turbopack entries are promises so we await here to get actual entry
+    // non-turbopack entries are already resolved, so await does not change anything
     `export default await _ENTRIES[middlewareEntryKey].default;`,
   )
 
