@@ -121,11 +121,6 @@ export NEXT_TEST_DEPLOY_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-deploy.sh"
 export NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-logs.sh"
 export NEXT_TEST_CLEANUP_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-cleanup.sh"
 export IS_TURBOPACK_TEST=1
-# Tells the harness these are adapter runs, so a test written for adapters takes its
-# adapter branch (mostly `skipDeployment: !isAdapterTest`). It never reaches the Vercel
-# token/team logic that also reads it: that lives past the custom-deploy-script early
-# return in next-modes/next-deploy.ts.
-export NEXT_ENABLE_ADAPTER="$([ -n "${NETLIFY_NEXT_EXPERIMENTAL_ADAPTER:-}" ] && echo 1 || echo 0)"
 export NEXT_E2E_TEST_TIMEOUT=240000
 export NEXT_TELEMETRY_DISABLED=1
 export NODE_OPTIONS="--import $ADAPTER_DIR/tools/fetch-retry.mjs"
