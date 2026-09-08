@@ -5,9 +5,13 @@ import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { v4 } from 'uuid'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { SERVER_HANDLER_NAME } from '../../src/build/plugin-context.js'
 import { type FixtureTestContext } from '../utils/contexts.js'
-import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
+import {
+  createFixture,
+  getServerHandlerRuntimeModulesDir,
+  invokeFunction,
+  runPlugin,
+} from '../utils/fixture.js'
 import {
   countOfBlobServerGetsForKey,
   encodeBlobKey,
@@ -40,7 +44,7 @@ function mockCacheHandlerWithPausing(ctx: FixtureTestContext) {
   }
 
   const cacheHandlerPath = realpathSync(
-    join(ctx.functionDist, SERVER_HANDLER_NAME, `.netlify/dist/run/handlers/cache.cjs`),
+    join(getServerHandlerRuntimeModulesDir(ctx), `dist/run/handlers/cache.cjs`),
   )
   const CacheHandler = require(cacheHandlerPath).default
   // this is really hacky, but because depending on version Next uses either require or await import
@@ -65,7 +69,7 @@ function mockCacheHandlerWithPausing(ctx: FixtureTestContext) {
 
 function spyOnRequestContext(ctx: FixtureTestContext) {
   const requestContextPath = realpathSync(
-    join(ctx.functionDist, SERVER_HANDLER_NAME, `.netlify/dist/run/handlers/request-context.cjs`),
+    join(getServerHandlerRuntimeModulesDir(ctx), `dist/run/handlers/request-context.cjs`),
   )
   const RequestContextModule = require(requestContextPath)
   const mockedRequestContextModule = {

@@ -12,7 +12,7 @@ import { createWriteStream, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, parse, relative } from 'node:path'
+import { basename, dirname, join, parse, relative, resolve } from 'node:path'
 import { env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { v4 } from 'uuid'
@@ -24,7 +24,7 @@ import {
   type FunctionInvocationOptions,
 } from './lambda-helpers.mjs'
 
-import { glob } from 'fast-glob'
+import { glob, globSync } from 'fast-glob'
 import {
   EDGE_HANDLER_NAME,
   PluginContext,
@@ -116,6 +116,14 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
   // due to changes in https://github.com/vercel/next.js/pull/86591 , this global is specific to instance of application and we to clean it up
   // from any previous function invocations that might have run in the same process
   delete globalThis[Symbol.for('next.server.manifests')]
+
+  // Netlify Adapter used Next.js inner machinery
+  delete globalThis[Symbol.for('@next/router-server-methods')]
+
+  // Netlify Adapter specific global to reset between tests
+  if (globalThis[Symbol.for('@netlify/adapter-test-reset')]) {
+    globalThis[Symbol.for('@netlify/adapter-test-reset')]()
+  }
 
   // require hook leaves modified "require" and "require.resolve" modified - we restore here to original
   // https://github.com/vercel/next.js/blob/812c26ab8741f68fbd6e2fe095510e0f03eac4c5/packages/next/src/server/require-hook.ts
@@ -411,19 +419,45 @@ export async function uploadBlobs(ctx: FixtureTestContext, blobsDir: string) {
   )
 }
 
+/**
+ * Directory holding the runtime modules (`.netlify/dist/...`) inside the built server handler. It's
+ * the handler root in standalone mode and the app dir inside the handler in adapter mode.
+ */
+export function getServerHandlerRuntimeModulesDir(ctx: FixtureTestContext): string {
+  const handlerDir = join(ctx.functionDist, SERVER_HANDLER_NAME)
+  if (existsSync(join(handlerDir, '.netlify/dist'))) {
+    return join(handlerDir, '.netlify')
+  }
+  const [cacheHandler] = globSync('*/**/.netlify/dist/run/handlers/cache.cjs', {
+    cwd: handlerDir,
+    dot: true,
+    absolute: true,
+  })
+  if (!cacheHandler) {
+    throw new Error(`Could not find runtime modules in ${handlerDir}`)
+  }
+  return cacheHandler.replace(/\/dist\/run\/handlers\/cache\.cjs$/, '')
+}
+
 export async function invokeFunction(
   ctx: FixtureTestContext,
   options: FunctionInvocationOptions = {},
 ) {
-  // now for the execution set the process working directory to the dist entry point
-  const cwdMock = vi
-    .spyOn(process, 'cwd')
-    .mockReturnValue(join(ctx.functionDist, SERVER_HANDLER_NAME))
+  // now for the execution set the process working directory to the dist entry point.
+  // The handler may chdir into the app dir on load (adapter and monorepo handlers do) and Next.js
+  // resolves manifests from process.cwd(), so track chdir instead of returning a fixed value. The
+  // module is cached across invocations within a test, so the tracked cwd has to live on ctx.
+  ctx.functionCwd ??= join(ctx.functionDist, SERVER_HANDLER_NAME)
+  const cwdMock = vi.spyOn(process, 'cwd').mockImplementation(() => ctx.functionCwd as string)
+  const chdirMock = vi.spyOn(process, 'chdir').mockImplementation((directory) => {
+    ctx.functionCwd = resolve(ctx.functionCwd as string, directory)
+  })
   try {
     const invokeFunctionImpl = await loadFunction(ctx, options)
     return await invokeFunctionImpl(options)
   } finally {
     cwdMock.mockRestore()
+    chdirMock.mockRestore()
   }
 }
 
@@ -618,9 +652,17 @@ export async function invokeSandboxedFunction(
   return result
 }
 
-export const EDGE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-middleware'
+const ADAPTER_EDGE_FUNCTION_NAME = '___netlify-edge-handler-adapter-middleware'
+
+export const EDGE_MIDDLEWARE_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : '___netlify-edge-handler-middleware'
 // Turbopack has different output than webpack
-export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = hasDefaultTurbopackBuilds()
-  ? EDGE_MIDDLEWARE_FUNCTION_NAME
-  : '___netlify-edge-handler-src-middleware'
-export const NODE_MIDDLEWARE_FUNCTION_NAME = '___netlify-edge-handler-node-middleware'
+export const EDGE_MIDDLEWARE_SRC_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : hasDefaultTurbopackBuilds()
+    ? EDGE_MIDDLEWARE_FUNCTION_NAME
+    : '___netlify-edge-handler-src-middleware'
+export const NODE_MIDDLEWARE_FUNCTION_NAME = process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+  ? ADAPTER_EDGE_FUNCTION_NAME
+  : '___netlify-edge-handler-node-middleware'
