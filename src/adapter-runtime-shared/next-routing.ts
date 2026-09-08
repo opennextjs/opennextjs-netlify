@@ -1,9 +1,43 @@
-import { ResolveRoutesResult } from '@next/routing'
+import { resolveRoutes as nextResolveRoutes } from '@next/routing'
+import type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
 import { detectDomainLocale } from 'next-with-adapters/dist/shared/lib/i18n/detect-domain-locale.js'
 import { getLocaleRedirect } from 'next-with-adapters/dist/shared/lib/i18n/get-locale-redirect.js'
 
-export { resolveRoutes, responseToMiddlewareResult } from '@next/routing'
+export { responseToMiddlewareResult } from '@next/routing'
 export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
+
+/**
+ * `resolveRoutes` with the repeated-slash rule Next applies before routing: a path holding `//` or
+ * a backslash is answered with a 308 to its normalized form (`normalizeRepeatedSlashes`, called
+ * from base-server and from router-server's own resolve-routes). `@next/routing` is extracted from
+ * the latter but left that call site behind, so every caller of the library would have to
+ * re-implement it - do it here instead, once, for the edge function and the server handler both.
+ * Reported as a 3xx with a `location`, the shape callers already handle.
+ *
+ * Without it a page renders but never hydrates, because the client router compares the browser's
+ * path against the rendered one. Drop this when the rule lands in `@next/routing` itself.
+ */
+export async function resolveRoutes(
+  params: ResolveRoutesParams,
+): Promise<ResolveRoutesResult> {
+  // `URL` percent-encodes a backslash in the path, so match that spelling too - Next tests the raw
+  // `req.url`, where the character is still a backslash
+  const { pathname } = params.url
+  if (pathname.includes('//') || /\\|%5c/i.test(pathname)) {
+    const normalized = new URL(params.url)
+    normalized.pathname = pathname
+      .replaceAll('\\', '/')
+      .replace(/%5c/gi, '/')
+      .replace(/\/{2,}/g, '/')
+    return {
+      status: 308,
+      resolvedHeaders: new Headers({
+        location: `${normalized.pathname}${normalized.search}`,
+      }),
+    }
+  }
+  return nextResolveRoutes(params)
+}
 
 // @next/routing stopped exporting this from its package index, so keep a copy for building
 // the URL that middleware sees (Next.js normalizes data URLs before invoking middleware).
