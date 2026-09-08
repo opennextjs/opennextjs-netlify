@@ -117,7 +117,7 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
       // so the `const { exports } = await WebAssembly.instantiate(wasm)` that Next compiles the
       // `import wasm from './x.wasm?module'` into gets `exports: undefined`
       parts.push(
-        `const ${name} = await WebAssembly.compile(Uint8Array.from(${JSON.stringify([...data])}))`,
+        `const ${name} = await WebAssembly.compile(Uint8Array.from(atob(${JSON.stringify(data.toString('base64'))}), (character) => character.charCodeAt(0)))`,
       )
     }
   }

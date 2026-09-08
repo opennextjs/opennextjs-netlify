@@ -184,7 +184,7 @@ const copyHandlerDependenciesForEdgeMiddleware = async (
       const data = await readFile(join(srcDir, wasmChunk.filePath))
       // a compiled module, like Next's own sandbox binds (`loadWasm`), see edge-adapter.ts
       parts.push(
-        `const ${wasmChunk.name} = await WebAssembly.compile(Uint8Array.from(${JSON.stringify([...data])}))`,
+        `const ${wasmChunk.name} = await WebAssembly.compile(Uint8Array.from(atob(${JSON.stringify(data.toString('base64'))}), (character) => character.charCodeAt(0)))`,
       )
     }
   }
