@@ -119,10 +119,12 @@ type InvokeHandlerArg = {
   runtime: 'nodejs' | 'edge'
   sourcePage: string
   pathname: string
-  isAppRoute: boolean
+  // route handlers and pages API routes: their `req.url` carries the rewrite-added query
+  foldsQueryIntoUrl: boolean
 }
 
 const appRouteIds = new Set(manifest.outputs.appRoutes.map((output) => output.id))
+const pagesApiIds = new Set(manifest.outputs.pagesApi.map((output) => output.id))
 // pages/app pages that are prerendered or fully static: those answer reads only, see readOnlyPathnames
 const staticPageOutputIds = new Set(
   [...manifest.outputs.pages, ...manifest.outputs.appPages].map((output) => output.id),
@@ -152,7 +154,7 @@ function createInvokeHandler(
     runtime: output.runtime,
     sourcePage: output.sourcePage,
     pathname: output.pathname,
-    isAppRoute: appRouteIds.has(output.id),
+    foldsQueryIntoUrl: appRouteIds.has(output.id) || pagesApiIds.has(output.id),
   })
 }
 
@@ -552,7 +554,7 @@ function getLocaleRequestMeta(request: Request, resolution: ResolveRoutesResult)
 }
 
 async function invokeHandler(
-  { id, entrypoint, runtime, sourcePage, pathname, isAppRoute }: InvokeHandlerArg,
+  { id, entrypoint, runtime, sourcePage, pathname, foldsQueryIntoUrl }: InvokeHandlerArg,
   { tracer, request, requestContext, resolution, span, invokeStatus }: CommonHandlerArg,
 ) {
   span?.setAttribute('matched.sourcePage', sourcePage)
@@ -579,10 +581,13 @@ async function invokeHandler(
     try {
       const handler = await loadHandler(entrypoint)
 
-      // route handlers (route.ts) read search params from the URL only, so rewrite-added query has
-      // nowhere else to travel. Other outputs get it via requestMeta below, keeping req.url public.
+      // Route handlers (route.ts) read search params from the URL only, so rewrite-added query has
+      // nowhere else to travel, and a deployed proxy is expected to put them in the URL an API route
+      // sees too (upstream middleware-rewrites "should preserve rewrite query and dynamic params in
+      // Pages API routes"). Pages keep `req.url` public: rewrite query reaches them as requestMeta,
+      // and asPath must not show it.
       let handlerRequest = request
-      if (isAppRoute && resolution.resolvedQuery) {
+      if (foldsQueryIntoUrl && resolution.resolvedQuery) {
         const url = new URL(request.url)
         for (const [key, valueOrValues] of Object.entries(resolution.resolvedQuery)) {
           url.searchParams.delete(key)
