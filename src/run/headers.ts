@@ -110,6 +110,16 @@ export const setVaryHeaders = (
     netlifyVaryValues.header.push(...getHeaderValueArray(vary))
   }
 
+  // Middleware-rewritten requests are cached by their rewrite target, but a dynamic response can
+  // depend on the requested URL (`request.url` in Route Handlers, `req.url` in getServerSideProps),
+  // which the edge passes in `x-next-public-url`. Netlify-Vary has to be the same for every response
+  // of a URL, so this doesn't depend on the header being present: without it there is a single
+  // variation. Responses coming from Next.js' own cache are rendered without the request, so they
+  // keep being shared between all public URLs rewriting to the same target.
+  if (!headers.has('x-nextjs-cache')) {
+    netlifyVaryValues.header.push('x-next-public-url')
+  }
+
   const path = new URL(request.url).pathname
   const locales = i18n && i18n.localeDetection !== false ? i18n.locales : []
 

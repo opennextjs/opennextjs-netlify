@@ -58,6 +58,48 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
   }
 }
 
+const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
+
+/**
+ * When the edge middleware rewrites, the function receives the rewrite target as its URL and the
+ * URL the client requested in a header. Next.js keeps the latter as the `initURL` request meta
+ * (public-facing redirects, `request.url` in Route Handlers, ...) and sets it from `req.url`
+ * unconditionally in more than one place, so a plain pre-set would be overwritten. A locked
+ * accessor survives those writes. Only the path and query are taken from the header, the origin is
+ * always the one of the actual request, so a client sending the header can't gain anything it
+ * couldn't already do by requesting that path directly.
+ */
+const lockInitURL = (req: object, request: Request) => {
+  const publicUrlHeader = request.headers.get('x-next-public-url')
+  if (!publicUrlHeader) {
+    return
+  }
+  try {
+    const publicUrl = new URL(publicUrlHeader, request.url)
+    // a `//host/...` pathname would be parsed as protocol-relative below and take over the origin
+    if (publicUrl.pathname.startsWith('//')) {
+      return
+    }
+    const initURL = new URL(`${publicUrl.pathname}${publicUrl.search}`, request.url).href
+    const meta = {}
+    Object.defineProperty(meta, 'initURL', {
+      get: () => initURL,
+      set() {
+        // Next.js' attachRequestMeta / resolveRoutes assign req.url here, keep the public URL
+      },
+      enumerable: true,
+      configurable: true,
+    })
+    Object.defineProperty(req, NEXT_REQUEST_META, {
+      value: meta,
+      writable: true,
+      configurable: true,
+    })
+  } catch {
+    // malformed header, Next.js falls back to deriving initURL from the rewritten URL
+  }
+}
+
 export default async (
   request: Request,
   _context: Context,
@@ -103,6 +145,7 @@ export default async (
     })
 
     disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
+    lockInitURL(req, request)
 
     const resProxy = augmentNextResponse(res, requestContext)
 

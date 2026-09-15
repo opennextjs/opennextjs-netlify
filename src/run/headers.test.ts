@@ -40,7 +40,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
         )
       })
 
@@ -56,7 +56,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|accept|accept-language,cookie=__prerender_bypass|__next_preview_data',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|accept|accept-language|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
         )
       })
 
@@ -77,7 +77,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
         )
       })
 
@@ -97,7 +97,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
         )
       })
 
@@ -117,7 +117,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,language=en|de|fr,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,language=en|de|fr,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE',
         )
       })
 
@@ -138,7 +138,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,language=en|de|fr,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,language=en|de|fr,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE',
         )
       })
 
@@ -161,7 +161,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-custom-header,language=en|de|fr|es,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE|ab_test,country=es',
+          'query,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url|x-custom-header,language=en|de|fr|es,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE|ab_test,country=es',
         )
       })
 
@@ -185,9 +185,22 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-custom-header,language=en|de|fr|es,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE|ab_test,country=es',
+          'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url|x-custom-header,language=en|de|fr|es,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE|ab_test,country=es',
         )
       })
+    })
+
+    test('without x-next-public-url for responses served from Next.js cache', () => {
+      const headers = new Headers({ 'x-nextjs-cache': 'HIT' })
+      const request = new Request(defaultUrl, { headers: { 'x-next-public-url': defaultUrl } })
+      vi.spyOn(headers, 'set')
+
+      setVaryHeaders(headers, request, defaultConfig)
+
+      expect(headers.set).toBeCalledWith(
+        'netlify-vary',
+        'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
+      )
     })
 
     test('with vary headers provided by Next.js before 15.3.0', () => {
@@ -202,7 +215,7 @@ describe('headers', () => {
 
       expect(headers.set).toBeCalledWith(
         'netlify-vary',
-        'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
+        'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
       )
     })
 
@@ -220,7 +233,7 @@ describe('headers', () => {
 
       expect(headers.set).toBeCalledWith(
         'netlify-vary',
-        'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-custom-header,language=es,cookie=__prerender_bypass|__next_preview_data|ab_test,country=es',
+        'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url|x-custom-header,language=es,cookie=__prerender_bypass|__next_preview_data|ab_test,country=es',
       )
     })
   })

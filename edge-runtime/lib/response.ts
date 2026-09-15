@@ -227,6 +227,9 @@ export const buildResponse = async ({
     }
     edgeResponse.headers.set('x-middleware-rewrite', relativeUrl)
     request.headers.set('x-middleware-rewrite', target)
+    // the server handler receives the rewrite target as its URL (that's the CDN cache key), so it
+    // needs the URL the client actually requested to be able to produce public-facing URLs
+    request.headers.set('x-next-public-url', request.url)
 
     // cookies set in middleware need to be available during the lambda request
     const newRequest = await cloneRequest(target, request)
