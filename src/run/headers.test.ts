@@ -8,6 +8,8 @@ import { generateRandomObjectID, startMockBlobStore } from '../../tests/utils/he
 import { createRequestContext, type RequestContext } from './handlers/request-context.cjs'
 import { getRewritePublicUrl, setCacheControlHeaders, setVaryHeaders } from './headers.js'
 
+const meta = (value: unknown) => ({ 'x-next-request-meta': JSON.stringify(value) })
+
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
   ctx.deployID = generateRandomObjectID()
@@ -228,7 +230,6 @@ describe('headers', () => {
   describe('getRewritePublicUrl', () => {
     const target = 'https://example.com/internal/abc/target?ref=xyz&added=1'
     const requestId = '01JTESTREQUESTID0000000000'
-    const meta = (value: unknown) => ({ 'x-next-request-meta': JSON.stringify(value) })
 
     test('returns nothing without the meta header', () => {
       const request = new Request(target, { headers: { 'x-nf-request-id': requestId } })
