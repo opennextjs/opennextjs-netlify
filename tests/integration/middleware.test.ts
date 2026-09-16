@@ -914,24 +914,28 @@ describe('public URL of a middleware rewrite in the server handler', () => {
   const target = '/api/echo-url?added=1'
   const publicUrl = 'https://example.netlify/test/public-prefix/echo?ref=xyz'
 
-  test<FixtureTestContext>('is used as request.url when vouched for by the request id', async (ctx) => {
-    await createFixture('middleware', ctx)
-    await runPlugin(ctx)
+  // Route Handlers derive request.url from initURL since https://github.com/vercel/next.js/pull/80008
+  test.skipIf(!nextVersionSatisfies('>=15.4.0'))<FixtureTestContext>(
+    'is used as request.url when vouched for by the request id',
+    async (ctx) => {
+      await createFixture('middleware', ctx)
+      await runPlugin(ctx)
 
-    const response = await invokeFunction(ctx, {
-      url: target,
-      headers: {
-        'x-nf-request-id': requestId,
-        'x-next-request-id': requestId,
-        'x-next-public-url': publicUrl,
-      },
-    })
+      const response = await invokeFunction(ctx, {
+        url: target,
+        headers: {
+          'x-nf-request-id': requestId,
+          'x-next-request-id': requestId,
+          'x-next-public-url': publicUrl,
+        },
+      })
 
-    expect(response.statusCode).toBe(200)
-    const url = new URL(JSON.parse(response.body).url)
-    expect(url.pathname).toBe('/test/public-prefix/echo')
-    expect(url.search).toBe('?ref=xyz&added=1')
-  })
+      expect(response.statusCode).toBe(200)
+      const url = new URL(JSON.parse(response.body).url)
+      expect(url.pathname).toBe('/test/public-prefix/echo')
+      expect(url.search).toBe('?ref=xyz&added=1')
+    },
+  )
 
   test<FixtureTestContext>('is ignored when the request id does not match', async (ctx) => {
     await createFixture('middleware', ctx)
