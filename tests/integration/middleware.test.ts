@@ -292,10 +292,9 @@ for (const {
 
         const origin = await LocalServer.run(async (req, res) => {
           expect(req.url).toBe('/rewrite-target')
-          expect(new URL(req.headers['x-next-public-url'] as string).pathname).toBe(
-            '/test/rewrite-internal',
-          )
-          expect(req.headers['x-next-request-id']).toBe('01JTESTREQUESTID0000000000')
+          const meta = JSON.parse(req.headers['x-next-request-meta'] as string)
+          expect(new URL(meta.publicUrl).pathname).toBe('/test/rewrite-internal')
+          expect(meta.requestID).toBe('01JTESTREQUESTID0000000000')
 
           res.write('Hello from origin!')
           res.end()
@@ -309,8 +308,10 @@ for (const {
           headers: {
             'x-nf-request-id': '01JTESTREQUESTID0000000000',
             // a client can't pre-populate what the edge sets on rewrite
-            'x-next-public-url': 'https://example.com/forged',
-            'x-next-request-id': 'forged',
+            'x-next-request-meta': JSON.stringify({
+              requestID: 'forged',
+              publicUrl: 'https://example.com/forged',
+            }),
           },
         })
 
@@ -325,8 +326,7 @@ for (const {
 
         const origin = await LocalServer.run(async (req, res) => {
           expect(req.url).toBe('/test/next')
-          expect(req.headers['x-next-public-url']).toBeUndefined()
-          expect(req.headers['x-next-request-id']).toBeUndefined()
+          expect(req.headers['x-next-request-meta']).toBeUndefined()
 
           res.write('Hello from origin!')
           res.end()
@@ -338,8 +338,10 @@ for (const {
           origin,
           url: '/test/next',
           headers: {
-            'x-next-public-url': 'https://example.com/forged',
-            'x-next-request-id': 'forged',
+            'x-next-request-meta': JSON.stringify({
+              requestID: 'forged',
+              publicUrl: 'https://example.com/forged',
+            }),
           },
         })
 
@@ -925,8 +927,7 @@ describe('public URL of a middleware rewrite in the server handler', () => {
         url: target,
         headers: {
           'x-nf-request-id': requestId,
-          'x-next-request-id': requestId,
-          'x-next-public-url': publicUrl,
+          'x-next-request-meta': JSON.stringify({ requestID: requestId, publicUrl }),
         },
       })
 
@@ -945,8 +946,7 @@ describe('public URL of a middleware rewrite in the server handler', () => {
       url: target,
       headers: {
         'x-nf-request-id': requestId,
-        'x-next-request-id': 'guessed',
-        'x-next-public-url': publicUrl,
+        'x-next-request-meta': JSON.stringify({ requestID: 'guessed', publicUrl }),
       },
     })
 

@@ -228,8 +228,9 @@ describe('headers', () => {
   describe('getRewritePublicUrl', () => {
     const target = 'https://example.com/internal/abc/target?ref=xyz&added=1'
     const requestId = '01JTESTREQUESTID0000000000'
+    const meta = (value: unknown) => ({ 'x-next-request-meta': JSON.stringify(value) })
 
-    test('returns nothing without the public URL header', () => {
+    test('returns nothing without the meta header', () => {
       const request = new Request(target, { headers: { 'x-nf-request-id': requestId } })
 
       expect(getRewritePublicUrl(request)).toBeUndefined()
@@ -239,8 +240,7 @@ describe('headers', () => {
       const request = new Request(target, {
         headers: {
           'x-nf-request-id': requestId,
-          'x-next-request-id': requestId,
-          'x-next-public-url': 'https://example.com/public/target?ref=xyz',
+          ...meta({ requestID: requestId, publicUrl: 'https://example.com/public/target?ref=xyz' }),
         },
       })
 
@@ -249,35 +249,39 @@ describe('headers', () => {
       )
     })
 
-    test('ignores a public URL header whose request id does not match', () => {
+    test('ignores meta whose request id does not match', () => {
       const request = new Request(target, {
         headers: {
           'x-nf-request-id': requestId,
-          'x-next-request-id': 'guessed',
-          'x-next-public-url': 'https://example.com/public/target',
+          ...meta({ requestID: 'guessed', publicUrl: 'https://example.com/public/target' }),
         },
       })
 
       expect(getRewritePublicUrl(request)).toBeUndefined()
     })
 
-    test('ignores a public URL header without a request id header', () => {
+    test('ignores meta without a request id', () => {
       const request = new Request(target, {
         headers: {
           'x-nf-request-id': requestId,
-          'x-next-public-url': 'https://example.com/public/target',
+          ...meta({ publicUrl: 'https://example.com/public/target' }),
         },
       })
 
       expect(getRewritePublicUrl(request)).toBeUndefined()
     })
 
-    test('ignores the headers when the platform request id is missing (local dev)', () => {
+    test('ignores a malformed meta header', () => {
       const request = new Request(target, {
-        headers: {
-          'x-next-request-id': requestId,
-          'x-next-public-url': 'https://example.com/public/target',
-        },
+        headers: { 'x-nf-request-id': requestId, 'x-next-request-meta': 'not json' },
+      })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('ignores meta when the platform request id is missing (local dev)', () => {
+      const request = new Request(target, {
+        headers: meta({ requestID: requestId, publicUrl: 'https://example.com/public/target' }),
       })
 
       expect(getRewritePublicUrl(request)).toBeUndefined()
@@ -287,8 +291,7 @@ describe('headers', () => {
       const request = new Request(target, {
         headers: {
           'x-nf-request-id': requestId,
-          'x-next-request-id': requestId,
-          'x-next-public-url': '//evil.example/public/target',
+          ...meta({ requestID: requestId, publicUrl: '//evil.example/public/target' }),
         },
       })
 

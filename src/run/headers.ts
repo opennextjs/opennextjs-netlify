@@ -1,6 +1,10 @@
 import type { Span } from '@netlify/otel/opentelemetry'
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
+import {
+  REQUEST_META_HEADER,
+  type RequestMeta,
+} from '../../edge-runtime/lib/private-request-meta.ts'
 import type { NetlifyCachedRouteValue, NetlifyCacheHandlerValue } from '../shared/cache-types.cjs'
 
 import { RequestContext } from './handlers/request-context.cjs'
@@ -8,17 +12,32 @@ import { recordWarning } from './handlers/tracer.cjs'
 import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
 /**
- * When the edge middleware rewrites, the function receives the rewrite target as its URL and the
- * URL the client requested in `x-next-public-url` (set in edge-runtime/lib/response.ts). Both are
- * plain request headers a client could send too, so the edge also copies the platform-generated
- * `x-nf-request-id` into `x-next-request-id`: a client can't predict the id its request will get,
- * so a matching pair can only have been set by our edge function. Anything else is ignored and
- * the request is handled as one for the rewrite target, which is also what the CDN caches it as.
+ * Reads the meta our edge function attached to this request, if it can be trusted: the request id
+ * it carries has to match the platform-generated one, which a client can't predict. Anything else
+ * is ignored, and the request is handled as one for the rewrite target, which is also what the CDN
+ * caches it as.
+ */
+const getRequestMeta = (request: Request): RequestMeta | undefined => {
+  const header = request.headers.get(REQUEST_META_HEADER)
+  const requestID = request.headers.get('x-nf-request-id')
+  if (!header || !requestID) {
+    return
+  }
+  try {
+    const meta = JSON.parse(header) as RequestMeta
+    return meta?.requestID === requestID ? meta : undefined
+  } catch {
+    // not ours or mangled in transit, ignore it
+  }
+}
+
+/**
+ * When the edge middleware rewrites, the server handler receives the rewrite target as its URL
+ * (that's the CDN cache key) and the URL the client requested in the request meta.
  */
 export const getRewritePublicUrl = (request: Request): URL | undefined => {
-  const publicUrlHeader = request.headers.get('x-next-public-url')
-  const requestId = request.headers.get('x-nf-request-id')
-  if (!publicUrlHeader || !requestId || request.headers.get('x-next-request-id') !== requestId) {
+  const publicUrlHeader = getRequestMeta(request)?.publicUrl
+  if (!publicUrlHeader) {
     return
   }
   try {
