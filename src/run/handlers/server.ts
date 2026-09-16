@@ -80,7 +80,16 @@ const lockInitURL = (req: object, request: Request) => {
     if (publicUrl.pathname.startsWith('//')) {
       return
     }
-    const initURL = new URL(`${publicUrl.pathname}${publicUrl.search}`, request.url).href
+    // query params the rewrite added are part of the routed request (Next.js merges them into
+    // `req.query`), so keep them in the URL too, the way Vercel's function URL has them
+    const search = new URLSearchParams(publicUrl.search)
+    for (const [key, value] of new URL(request.url).searchParams) {
+      if (!search.has(key)) {
+        search.append(key, value)
+      }
+    }
+    const query = search.toString()
+    const initURL = new URL(`${publicUrl.pathname}${query ? `?${query}` : ''}`, request.url).href
     const meta = {}
     Object.defineProperty(meta, 'initURL', {
       get: () => initURL,
