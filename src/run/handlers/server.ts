@@ -9,6 +9,7 @@ import { augmentNextResponse } from '../augment-next-response.js'
 import { getRunConfig, setRunConfig } from '../config.js'
 import {
   adjustDateHeader,
+  getRewritePublicUrl,
   setCacheControlHeaders,
   setCacheStatusHeader,
   setCacheTagsHeaders,
@@ -61,52 +62,26 @@ const disableFaultyTransferEncodingHandling = (res: ComputeJsOutgoingMessage) =>
 const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
 
 /**
- * When the edge middleware rewrites, the function receives the rewrite target as its URL and the
- * URL the client requested in a header. Next.js keeps the latter as the `initURL` request meta
- * (public-facing redirects, `request.url` in Route Handlers, ...) and sets it from `req.url`
- * unconditionally in more than one place, so a plain pre-set would be overwritten. A locked
- * accessor survives those writes. Only the path and query are taken from the header, the origin is
- * always the one of the actual request, so a client sending the header can't gain anything it
- * couldn't already do by requesting that path directly.
+ * Next.js keeps the URL the client requested as the `initURL` request meta (public-facing
+ * redirects, `request.url` in Route Handlers, ...) and sets it from `req.url` unconditionally in
+ * more than one place, so a plain pre-set would be overwritten. A locked accessor survives those
+ * writes.
  */
-const lockInitURL = (req: object, request: Request) => {
-  const publicUrlHeader = request.headers.get('x-next-public-url')
-  if (!publicUrlHeader) {
-    return
-  }
-  try {
-    const publicUrl = new URL(publicUrlHeader, request.url)
-    // a `//host/...` pathname would be parsed as protocol-relative below and take over the origin
-    if (publicUrl.pathname.startsWith('//')) {
-      return
-    }
-    // query params the rewrite added are part of the routed request (Next.js merges them into
-    // `req.query`), so keep them in the URL too, the way Vercel's function URL has them
-    const search = new URLSearchParams(publicUrl.search)
-    for (const [key, value] of new URL(request.url).searchParams) {
-      if (!search.has(key)) {
-        search.append(key, value)
-      }
-    }
-    const query = search.toString()
-    const initURL = new URL(`${publicUrl.pathname}${query ? `?${query}` : ''}`, request.url).href
-    const meta = {}
-    Object.defineProperty(meta, 'initURL', {
-      get: () => initURL,
-      set() {
-        // Next.js' attachRequestMeta / resolveRoutes assign req.url here, keep the public URL
-      },
-      enumerable: true,
-      configurable: true,
-    })
-    Object.defineProperty(req, NEXT_REQUEST_META, {
-      value: meta,
-      writable: true,
-      configurable: true,
-    })
-  } catch {
-    // malformed header, Next.js falls back to deriving initURL from the rewritten URL
-  }
+const lockInitURL = (req: object, initURL: string) => {
+  const meta = {}
+  Object.defineProperty(meta, 'initURL', {
+    get: () => initURL,
+    set() {
+      // Next.js' attachRequestMeta / resolveRoutes assign req.url here, keep the public URL
+    },
+    enumerable: true,
+    configurable: true,
+  })
+  Object.defineProperty(req, NEXT_REQUEST_META, {
+    value: meta,
+    writable: true,
+    configurable: true,
+  })
 }
 
 export default async (
@@ -154,7 +129,10 @@ export default async (
     })
 
     disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
-    lockInitURL(req, request)
+    const publicUrl = getRewritePublicUrl(request)
+    if (publicUrl) {
+      lockInitURL(req, publicUrl.href)
+    }
 
     const resProxy = augmentNextResponse(res, requestContext)
 

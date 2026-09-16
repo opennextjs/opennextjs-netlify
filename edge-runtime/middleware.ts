@@ -33,6 +33,11 @@ export async function handleMiddleware(
 ) {
   const url = new URL(request.url)
 
+  // only the rewrite branch in buildResponse may set these, a client must not be able to
+  // pre-populate them (or have middleware copy them into its request header overrides)
+  request.headers.delete('x-next-public-url')
+  request.headers.delete('x-next-request-id')
+
   const reqLogger = logger
     .withLogLevel(
       request.headers.has(InternalHeaders.NFDebugLogging) ? LogLevel.Debug : LogLevel.Log,

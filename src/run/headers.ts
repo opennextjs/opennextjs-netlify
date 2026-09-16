@@ -7,6 +7,40 @@ import { RequestContext } from './handlers/request-context.cjs'
 import { recordWarning } from './handlers/tracer.cjs'
 import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/storage.cjs'
 
+/**
+ * When the edge middleware rewrites, the function receives the rewrite target as its URL and the
+ * URL the client requested in `x-next-public-url` (set in edge-runtime/lib/response.ts). Both are
+ * plain request headers a client could send too, so the edge also copies the platform-generated
+ * `x-nf-request-id` into `x-next-request-id`: a client can't predict the id its request will get,
+ * so a matching pair can only have been set by our edge function. Anything else is ignored and
+ * the request is handled as one for the rewrite target, which is also what the CDN caches it as.
+ */
+export const getRewritePublicUrl = (request: Request): URL | undefined => {
+  const publicUrlHeader = request.headers.get('x-next-public-url')
+  const requestId = request.headers.get('x-nf-request-id')
+  if (!publicUrlHeader || !requestId || request.headers.get('x-next-request-id') !== requestId) {
+    return
+  }
+  try {
+    const publicUrl = new URL(publicUrlHeader, request.url)
+    // assigning pathname/search can't change the origin, unlike parsing a `//host/...` string
+    const url = new URL(request.url)
+    url.pathname = publicUrl.pathname
+    // query params the rewrite added are part of the routed request (Next.js merges them into
+    // `req.query`), so keep them in the URL too, the way Vercel's function URL has them
+    const search = new URLSearchParams(publicUrl.search)
+    for (const [key, value] of new URL(request.url).searchParams) {
+      if (!search.has(key)) {
+        search.append(key, value)
+      }
+    }
+    url.search = search.toString()
+    return url
+  } catch {
+    // malformed header, Next.js falls back to deriving initURL from the rewritten URL
+  }
+}
+
 const ALL_VARIATIONS = Symbol.for('ALL_VARIATIONS')
 interface NetlifyVaryValues {
   header: string[]
@@ -108,16 +142,6 @@ export const setVaryHeaders = (
   const vary = headers.get('vary')
   if (vary !== null) {
     netlifyVaryValues.header.push(...getHeaderValueArray(vary))
-  }
-
-  // Middleware-rewritten requests are cached by their rewrite target, but a dynamic response can
-  // depend on the requested URL (`request.url` in Route Handlers, `req.url` in getServerSideProps),
-  // which the edge passes in `x-next-public-url`. Netlify-Vary has to be the same for every response
-  // of a URL, so this doesn't depend on the header being present: without it there is a single
-  // variation. Responses coming from Next.js' own cache are rendered without the request, so they
-  // keep being shared between all public URLs rewriting to the same target.
-  if (!headers.has('x-nextjs-cache')) {
-    netlifyVaryValues.header.push('x-next-public-url')
   }
 
   const path = new URL(request.url).pathname

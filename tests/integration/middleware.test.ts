@@ -7,6 +7,7 @@ import {
   EDGE_MIDDLEWARE_SRC_FUNCTION_NAME,
   NODE_MIDDLEWARE_FUNCTION_NAME,
   invokeEdgeFunction,
+  invokeFunction,
   runPlugin,
 } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
@@ -282,6 +283,68 @@ for (const {
           'added a response header',
         ).toEqual('hello')
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+        expect(origin.calls).toBe(1)
+      })
+
+      test<FixtureTestContext>('should pass the public URL vouched for by the request id to the origin', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const origin = await LocalServer.run(async (req, res) => {
+          expect(req.url).toBe('/rewrite-target')
+          expect(new URL(req.headers['x-next-public-url'] as string).pathname).toBe(
+            '/test/rewrite-internal',
+          )
+          expect(req.headers['x-next-request-id']).toBe('01JTESTREQUESTID0000000000')
+
+          res.write('Hello from origin!')
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: '/test/rewrite-internal',
+          headers: {
+            'x-nf-request-id': '01JTESTREQUESTID0000000000',
+            // a client can't pre-populate what the edge sets on rewrite
+            'x-next-public-url': 'https://example.com/forged',
+            'x-next-request-id': 'forged',
+          },
+        })
+
+        expect(await response.text()).toBe('Hello from origin!')
+        expect(response.status).toBe(200)
+        expect(origin.calls).toBe(1)
+      })
+
+      test<FixtureTestContext>('should strip client-sent public URL headers when not rewriting', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const origin = await LocalServer.run(async (req, res) => {
+          expect(req.url).toBe('/test/next')
+          expect(req.headers['x-next-public-url']).toBeUndefined()
+          expect(req.headers['x-next-request-id']).toBeUndefined()
+
+          res.write('Hello from origin!')
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: '/test/next',
+          headers: {
+            'x-next-public-url': 'https://example.com/forged',
+            'x-next-request-id': 'forged',
+          },
+        })
+
+        expect(await response.text()).toBe('Hello from origin!')
+        expect(response.status).toBe(200)
         expect(origin.calls).toBe(1)
       })
     })
@@ -845,3 +908,47 @@ for (const {
 //   )
 // },
 // )
+
+describe('public URL of a middleware rewrite in the server handler', () => {
+  const requestId = '01JTESTREQUESTID0000000000'
+  const target = '/api/echo-url?added=1'
+  const publicUrl = 'https://example.netlify/test/public-prefix/echo?ref=xyz'
+
+  test<FixtureTestContext>('is used as request.url when vouched for by the request id', async (ctx) => {
+    await createFixture('middleware', ctx)
+    await runPlugin(ctx)
+
+    const response = await invokeFunction(ctx, {
+      url: target,
+      headers: {
+        'x-nf-request-id': requestId,
+        'x-next-request-id': requestId,
+        'x-next-public-url': publicUrl,
+      },
+    })
+
+    expect(response.statusCode).toBe(200)
+    const url = new URL(JSON.parse(response.body).url)
+    expect(url.pathname).toBe('/test/public-prefix/echo')
+    expect(url.search).toBe('?ref=xyz&added=1')
+  })
+
+  test<FixtureTestContext>('is ignored when the request id does not match', async (ctx) => {
+    await createFixture('middleware', ctx)
+    await runPlugin(ctx)
+
+    const response = await invokeFunction(ctx, {
+      url: target,
+      headers: {
+        'x-nf-request-id': requestId,
+        'x-next-request-id': 'guessed',
+        'x-next-public-url': publicUrl,
+      },
+    })
+
+    expect(response.statusCode).toBe(200)
+    const url = new URL(JSON.parse(response.body).url)
+    expect(url.pathname).toBe('/api/echo-url')
+    expect(url.search).toBe('?added=1')
+  })
+})

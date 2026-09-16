@@ -6,7 +6,7 @@ import { type FixtureTestContext } from '../../tests/utils/contexts.js'
 import { generateRandomObjectID, startMockBlobStore } from '../../tests/utils/helpers.js'
 
 import { createRequestContext, type RequestContext } from './handlers/request-context.cjs'
-import { setCacheControlHeaders, setVaryHeaders } from './headers.js'
+import { getRewritePublicUrl, setCacheControlHeaders, setVaryHeaders } from './headers.js'
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
@@ -40,7 +40,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
         )
       })
 
@@ -56,7 +56,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|accept|accept-language|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|accept|accept-language,cookie=__prerender_bypass|__next_preview_data',
         )
       })
 
@@ -77,7 +77,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
         )
       })
 
@@ -97,7 +97,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
         )
       })
 
@@ -117,7 +117,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,language=en|de|fr,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,language=en|de|fr,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE',
         )
       })
 
@@ -138,7 +138,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,language=en|de|fr,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE',
+          'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,language=en|de|fr,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE',
         )
       })
 
@@ -161,7 +161,7 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url|x-custom-header,language=en|de|fr|es,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE|ab_test,country=es',
+          'query,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-custom-header,language=en|de|fr|es,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE|ab_test,country=es',
         )
       })
 
@@ -185,22 +185,9 @@ describe('headers', () => {
 
         expect(headers.set).toBeCalledWith(
           'netlify-vary',
-          'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url|x-custom-header,language=en|de|fr|es,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE|ab_test,country=es',
+          'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-custom-header,language=en|de|fr|es,cookie=__prerender_bypass|__next_preview_data|NEXT_LOCALE|ab_test,country=es',
         )
       })
-    })
-
-    test('without x-next-public-url for responses served from Next.js cache', () => {
-      const headers = new Headers({ 'x-nextjs-cache': 'HIT' })
-      const request = new Request(defaultUrl, { headers: { 'x-next-public-url': defaultUrl } })
-      vi.spyOn(headers, 'set')
-
-      setVaryHeaders(headers, request, defaultConfig)
-
-      expect(headers.set).toBeCalledWith(
-        'netlify-vary',
-        'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
-      )
     })
 
     test('with vary headers provided by Next.js before 15.3.0', () => {
@@ -215,7 +202,7 @@ describe('headers', () => {
 
       expect(headers.set).toBeCalledWith(
         'netlify-vary',
-        'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url,cookie=__prerender_bypass|__next_preview_data',
+        'query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc,cookie=__prerender_bypass|__next_preview_data',
       )
     })
 
@@ -233,8 +220,82 @@ describe('headers', () => {
 
       expect(headers.set).toBeCalledWith(
         'netlify-vary',
-        'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-next-public-url|x-custom-header,language=es,cookie=__prerender_bypass|__next_preview_data|ab_test,country=es',
+        'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-custom-header,language=es,cookie=__prerender_bypass|__next_preview_data|ab_test,country=es',
       )
+    })
+  })
+
+  describe('getRewritePublicUrl', () => {
+    const target = 'https://example.com/internal/abc/target?ref=xyz&added=1'
+    const requestId = '01JTESTREQUESTID0000000000'
+
+    test('returns nothing without the public URL header', () => {
+      const request = new Request(target, { headers: { 'x-nf-request-id': requestId } })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('returns the public path with the query merged from the rewrite target when the request id matches', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-nf-request-id': requestId,
+          'x-next-request-id': requestId,
+          'x-next-public-url': 'https://example.com/public/target?ref=xyz',
+        },
+      })
+
+      expect(getRewritePublicUrl(request)?.href).toBe(
+        'https://example.com/public/target?ref=xyz&added=1',
+      )
+    })
+
+    test('ignores a public URL header whose request id does not match', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-nf-request-id': requestId,
+          'x-next-request-id': 'guessed',
+          'x-next-public-url': 'https://example.com/public/target',
+        },
+      })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('ignores a public URL header without a request id header', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-nf-request-id': requestId,
+          'x-next-public-url': 'https://example.com/public/target',
+        },
+      })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('ignores the headers when the platform request id is missing (local dev)', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-next-request-id': requestId,
+          'x-next-public-url': 'https://example.com/public/target',
+        },
+      })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('keeps the origin of the actual request', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-nf-request-id': requestId,
+          'x-next-request-id': requestId,
+          'x-next-public-url': '//evil.example/public/target',
+        },
+      })
+
+      const publicUrl = getRewritePublicUrl(request)
+
+      expect(publicUrl?.origin).toBe('https://example.com')
+      expect(publicUrl?.pathname).toBe('/public/target')
     })
   })
 
