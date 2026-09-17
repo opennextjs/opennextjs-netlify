@@ -6,7 +6,9 @@ import { type FixtureTestContext } from '../../tests/utils/contexts.js'
 import { generateRandomObjectID, startMockBlobStore } from '../../tests/utils/helpers.js'
 
 import { createRequestContext, type RequestContext } from './handlers/request-context.cjs'
-import { setCacheControlHeaders, setVaryHeaders } from './headers.js'
+import { getRewritePublicUrl, setCacheControlHeaders, setVaryHeaders } from './headers.js'
+
+const meta = (value: unknown) => ({ 'x-next-request-meta': JSON.stringify(value) })
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID
@@ -222,6 +224,82 @@ describe('headers', () => {
         'netlify-vary',
         'query=__nextDataReq|_rsc|item_id|page|per_page,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|x-custom-header,language=es,cookie=__prerender_bypass|__next_preview_data|ab_test,country=es',
       )
+    })
+  })
+
+  describe('getRewritePublicUrl', () => {
+    const target = 'https://example.com/internal/abc/target?ref=xyz&added=1'
+    const requestId = '01JTESTREQUESTID0000000000'
+
+    test('returns nothing without the meta header', () => {
+      const request = new Request(target, { headers: { 'x-nf-request-id': requestId } })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('returns the public path with the query merged from the rewrite target when the request id matches', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-nf-request-id': requestId,
+          ...meta({ requestID: requestId, publicUrl: 'https://example.com/public/target?ref=xyz' }),
+        },
+      })
+
+      expect(getRewritePublicUrl(request)?.href).toBe(
+        'https://example.com/public/target?ref=xyz&added=1',
+      )
+    })
+
+    test('ignores meta whose request id does not match', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-nf-request-id': requestId,
+          ...meta({ requestID: 'guessed', publicUrl: 'https://example.com/public/target' }),
+        },
+      })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('ignores meta without a request id', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-nf-request-id': requestId,
+          ...meta({ publicUrl: 'https://example.com/public/target' }),
+        },
+      })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('ignores a malformed meta header', () => {
+      const request = new Request(target, {
+        headers: { 'x-nf-request-id': requestId, 'x-next-request-meta': 'not json' },
+      })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('ignores meta when the platform request id is missing (local dev)', () => {
+      const request = new Request(target, {
+        headers: meta({ requestID: requestId, publicUrl: 'https://example.com/public/target' }),
+      })
+
+      expect(getRewritePublicUrl(request)).toBeUndefined()
+    })
+
+    test('keeps the origin of the actual request', () => {
+      const request = new Request(target, {
+        headers: {
+          'x-nf-request-id': requestId,
+          ...meta({ requestID: requestId, publicUrl: '//evil.example/public/target' }),
+        },
+      })
+
+      const publicUrl = getRewritePublicUrl(request)
+
+      expect(publicUrl?.origin).toBe('https://example.com')
+      expect(publicUrl?.pathname).toBe('/public/target')
     })
   })
 

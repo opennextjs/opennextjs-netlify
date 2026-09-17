@@ -7,6 +7,7 @@ import { getRunConfig, setRunConfig } from '../config.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
   adjustDateHeader,
+  getRewritePublicUrl,
   setCacheControlHeaders,
   setCacheStatusHeader,
   setCacheTagsHeaders,
@@ -33,6 +34,31 @@ const nextImportPromise = import('../next.cjs')
 
 let nextHandler: WorkerRequestHandler
 
+const NEXT_REQUEST_META = Symbol.for('NextInternalRequestMeta')
+
+/**
+ * Next.js keeps the URL the client requested as the `initURL` request meta (public-facing
+ * redirects, `request.url` in Route Handlers, ...) and sets it from `req.url` unconditionally in
+ * more than one place, so a plain pre-set would be overwritten. A locked accessor survives those
+ * writes.
+ */
+const lockInitURL = (req: object, initURL: string) => {
+  const meta = {}
+  Object.defineProperty(meta, 'initURL', {
+    get: () => initURL,
+    set() {
+      // Next.js' attachRequestMeta / resolveRoutes assign req.url here, keep the public URL
+    },
+    enumerable: true,
+    configurable: true,
+  })
+  Object.defineProperty(req, NEXT_REQUEST_META, {
+    value: meta,
+    writable: true,
+    configurable: true,
+  })
+}
+
 export default async (
   request: Request,
   _context: Context,
@@ -57,6 +83,11 @@ export default async (
 
   return await withActiveSpan(tracer, 'generate response', async (span) => {
     const { req, res } = toReqRes(request)
+
+    const publicUrl = getRewritePublicUrl(request)
+    if (publicUrl) {
+      lockInitURL(req, publicUrl.href)
+    }
 
     const resProxy = augmentNextResponse(res, requestContext)
 

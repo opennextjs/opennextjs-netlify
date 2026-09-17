@@ -102,5 +102,19 @@ const getResponse = (request: NextRequest) => {
     return NextResponse.redirect(new URL('/caching-redirect-target', request.url))
   }
 
+  // Public URLs are served from an internal route tree whose paths must not be directly visitable
+  if (request.nextUrl.pathname.startsWith('/test/internal-prefix/')) {
+    return new NextResponse(null, { status: 404 })
+  }
+  if (request.nextUrl.pathname.startsWith('/test/public-prefix/')) {
+    const url = request.nextUrl.clone()
+    url.pathname = url.pathname.replace('/test/public-prefix/', '/test/internal-prefix/abc123/')
+    return NextResponse.rewrite(url, {
+      request: {
+        headers: requestHeaders,
+      },
+    })
+  }
+
   return NextResponse.json({ error: 'Error' }, { status: 500 })
 }

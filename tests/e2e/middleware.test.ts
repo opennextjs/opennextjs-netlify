@@ -192,6 +192,28 @@ for (const { expectedRuntime, isNodeMiddleware, label, testWithSwitchableMiddlew
       expect(await direct?.headerValue('x-runtime')).toEqual(expectedRuntime)
     })
 
+    test('client navigation through a Route Handler redirect to a page behind a middleware rewrite keeps the public URL', async ({
+      page,
+      edgeOrNodeMiddleware,
+    }) => {
+      // Link -> RSC fetch of the Route Handler (307 from redirect()) -> browser follows to
+      // /test/public-prefix/target with RSC headers but no `_rsc` -> middleware rewrites it to
+      // /test/internal-prefix/abc123/target -> Next.js (>=16.3) answers with a 307 adding `_rsc`.
+      // That Location must be the public URL, otherwise the internal path ends up in the address bar
+      // (and the direct-access guard in middleware turns the follow-up into a 404).
+      await page.goto(`${edgeOrNodeMiddleware.url}/link-to-route-handler-redirect`)
+
+      await page.click('text=Route Handler redirect')
+
+      await expect(page.locator('h1')).toHaveText('Internal prefix target')
+      await expect(page.getByTestId('details')).toHaveText('code=abc123 ref=xyz')
+      await expect(page).toHaveURL(`${edgeOrNodeMiddleware.url}/test/public-prefix/target?ref=xyz`)
+
+      const reload = await page.reload()
+      expect(reload?.status()).toBe(200)
+      await expect(page.locator('h1')).toHaveText('Internal prefix target')
+    })
+
     test('Supports CJS dependencies in Edge Middleware', async ({ page, edgeOrNodeMiddleware }) => {
       const res = await page.goto(`${edgeOrNodeMiddleware.url}/test/next`)
 

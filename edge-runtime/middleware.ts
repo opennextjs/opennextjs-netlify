@@ -4,6 +4,7 @@ import matchers from './matchers.json' with { type: 'json' }
 import nextConfig from './next.config.json' with { type: 'json' }
 
 import { InternalHeaders } from './lib/headers.ts'
+import { REQUEST_META_HEADER } from './lib/private-request-meta.ts'
 import { logger, LogLevel } from './lib/logging.ts'
 import { buildNextRequest, localizeRequest, RequestData } from './lib/next-request.ts'
 import { buildResponse, FetchEventResult } from './lib/response.ts'
@@ -32,6 +33,10 @@ export async function handleMiddleware(
   nextHandler: NextHandler,
 ) {
   const url = new URL(request.url)
+
+  // only buildResponse may set this, a client must not be able to pre-populate it (or have
+  // middleware copy it into its request header overrides). See lib/private-request-meta.ts
+  request.headers.delete(REQUEST_META_HEADER)
 
   const reqLogger = logger
     .withLogLevel(
