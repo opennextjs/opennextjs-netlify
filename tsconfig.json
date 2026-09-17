@@ -5,7 +5,9 @@
     "moduleResolution": "NodeNext",
     "resolveJsonModule": true,
     "outDir": "./dist",
-    "rootDir": "src",
+    // src imports the edge runtime's private-request-meta.ts, which is outside "src" and is only
+    // ever resolved by esbuild, never emitted by tsc (the typecheck script passes --noEmit)
+    "allowImportingTsExtensions": true,
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true

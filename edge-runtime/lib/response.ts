@@ -4,7 +4,8 @@ import {
   type TextChunk,
 } from '../vendor/deno.land/x/htmlrewriter@v1.0.0/src/index.ts'
 
-import { updateModifiedHeaders } from './headers.ts'
+import { InternalHeaders, updateModifiedHeaders } from './headers.ts'
+import { REQUEST_META_HEADER, type RequestMeta } from './private-request-meta.ts'
 import type { StructuredLogger } from './logging.ts'
 import {
   addMiddlewareHeaders,
@@ -227,6 +228,13 @@ export const buildResponse = async ({
     }
     edgeResponse.headers.set('x-middleware-rewrite', relativeUrl)
     request.headers.set('x-middleware-rewrite', target)
+    // the server handler receives the rewrite target as its URL (that's the CDN cache key), so it
+    // needs the URL the client actually requested to be able to produce public-facing URLs
+    const requestID = request.headers.get(InternalHeaders.NFRequestID)
+    if (requestID) {
+      const meta: RequestMeta = { requestID, publicUrl: request.url }
+      request.headers.set(REQUEST_META_HEADER, JSON.stringify(meta))
+    }
 
     // cookies set in middleware need to be available during the lambda request
     const newRequest = await cloneRequest(target, request)
