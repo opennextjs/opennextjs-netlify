@@ -14,6 +14,7 @@
  */
 import type { Context } from '@netlify/edge-functions'
 
+import { REQUEST_META_HEADER, type RequestMeta } from '../../edge-runtime/lib/private-request-meta.ts'
 import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
@@ -169,6 +170,10 @@ export async function runNextRouting(
   // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
   // the edge function is where a request enters, so this is the boundary Next's router-server
   // filters at; `x-nextjs-data` is set back from the URL right after
+  // only this function may set the private meta header, a client must not be able to pre-populate
+  // it (nor middleware copy it into its request header overrides)
+  request.headers.delete(REQUEST_META_HEADER)
+
   const routingHeaders = setNextDataHeader(
     stripInternalRequestHeaders(new Headers(request.headers)),
     url,
@@ -318,15 +323,25 @@ export async function runNextRouting(
     }
   }
 
-  // Matched a pathname — forward to server handler or CDN with resolution header
+  // Matched a pathname — forward to server handler or CDN with the routing result
   const serialized = serializeResolution(resolution)
 
   // Clone the request, potentially adjusting URL for rewrites
   const forwardHeaders = new Headers(middlewareRequestHeaders ?? routingHeaders)
-  forwardHeaders.set('x-next-route-resolution', serialized)
-  // the forwarded URL is the rewrite target (so the CDN can cache by it), the server handler still
-  // needs the URL the client requested because that's what Next's route modules expect as req.url
-  forwardHeaders.set('x-next-public-url', request.url)
+  // The forwarded URL is the rewrite target (so the CDN can cache by it); the server handler needs
+  // the URL the client requested because that's what Next's route modules expect as `req.url`, and
+  // the resolution so it doesn't route a second time. Both ride in the private meta header, which
+  // the handler only honours when the request id in it matches the platform's - a client can't
+  // predict that, so it can't hand the handler a routing result of its own choosing.
+  const requestID = request.headers.get('x-nf-request-id')
+  if (requestID) {
+    const meta: RequestMeta = {
+      requestID,
+      publicUrl: request.url,
+      routeResolution: serialized,
+    }
+    forwardHeaders.set(REQUEST_META_HEADER, JSON.stringify(meta))
+  }
 
   // Apply any request headers from middleware
   if (resolution.resolvedHeaders) {

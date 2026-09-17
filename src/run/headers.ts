@@ -17,7 +17,7 @@ import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/sto
  * is ignored, and the request is handled as one for the rewrite target, which is also what the CDN
  * caches it as.
  */
-const getRequestMeta = (request: Request): RequestMeta | undefined => {
+export const getRequestMeta = (request: Request): RequestMeta | undefined => {
   const header = request.headers.get(REQUEST_META_HEADER)
   const requestID = request.headers.get('x-nf-request-id')
   if (!header || !requestID) {

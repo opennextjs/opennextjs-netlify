@@ -36,6 +36,7 @@ import { PLUGIN_DIR } from '../constants.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
   adjustDateHeader,
+  getRequestMeta,
   setCacheControlHeaders,
   setCacheStatusHeader,
   setCacheTagsHeaders,
@@ -708,7 +709,7 @@ async function invokeHandler(
 }
 
 /**
- * Deserialize a ResolveRoutesResult from the `x-next-route-resolution` header.
+ * Deserialize a ResolveRoutesResult from the private meta header the edge function sets.
  * The routing edge function serializes the resolution as JSON with
  * Headers → plain object, URL → string conversions.
  */
@@ -777,7 +778,8 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // the request enters, so drop the headers Next's own tiers use to talk to each other, like
     // router-server does. Behind the edge function they are ours: middleware puts the cookies it set
     // in `x-middleware-set-cookie` for the render.
-    const serializedResolution = request.headers.get('x-next-route-resolution')
+    const requestMeta = getRequestMeta(request)
+    const serializedResolution = requestMeta?.routeResolution
     const requestHeaders = serializedResolution
       ? new Headers(request.headers)
       : stripInternalRequestHeaders(new Headers(request.headers))
@@ -907,8 +909,8 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // Next's route modules expect req.url to be the URL the client requested (that's req.url and
       // asPath, and config rewrites are re-applied from it), the rewrite result travels separately.
       // The routing edge function forwards the rewrite target as the URL though (so the CDN can cache
-      // by it) and passes the requested URL in a header.
-      const publicUrl = request.headers.get('x-next-public-url') ?? request.url
+      // by it) and passes the requested URL in the private meta header.
+      const publicUrl = requestMeta?.publicUrl ?? request.url
 
       // Pages Router middleware prefetch (`Link` prefetch when middleware exists): Next's server
       // answers with an empty, non-cacheable result for pages without getStaticProps so the client
