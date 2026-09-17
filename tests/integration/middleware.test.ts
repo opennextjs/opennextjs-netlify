@@ -326,7 +326,17 @@ for (const {
 
         const origin = await LocalServer.run(async (req, res) => {
           expect(req.url).toBe('/test/next')
-          expect(req.headers['x-next-request-meta']).toBeUndefined()
+          const meta = req.headers['x-next-request-meta'] as string | undefined
+          if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+            // the resolved route travels in the same header, so adapter middleware sets it on every
+            // request - what the client sent still has to be gone
+            expect(JSON.parse(meta ?? '{}')).toMatchObject({
+              requestID: expect.not.stringMatching('forged'),
+              publicUrl: expect.not.stringMatching('example.com'),
+            })
+          } else {
+            expect(meta).toBeUndefined()
+          }
 
           res.write('Hello from origin!')
           res.end()
