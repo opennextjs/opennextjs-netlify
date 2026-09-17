@@ -17,9 +17,7 @@ export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
  * Without it a page renders but never hydrates, because the client router compares the browser's
  * path against the rendered one. Drop this when the rule lands in `@next/routing` itself.
  */
-export async function resolveRoutes(
-  params: ResolveRoutesParams,
-): Promise<ResolveRoutesResult> {
+export async function resolveRoutes(params: ResolveRoutesParams): Promise<ResolveRoutesResult> {
   // `URL` percent-encodes a backslash in the path, so match that spelling too - Next tests the raw
   // `req.url`, where the character is still a backslash
   const { pathname } = params.url

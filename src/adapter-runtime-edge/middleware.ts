@@ -14,7 +14,10 @@
  */
 import type { Context } from '@netlify/edge-functions'
 
-import { REQUEST_META_HEADER, type RequestMeta } from '../../edge-runtime/lib/private-request-meta.ts'
+import {
+  REQUEST_META_HEADER,
+  type RequestMeta,
+} from '../../edge-runtime/lib/private-request-meta.ts'
 import {
   addDefaultLocaleForRouting,
   applyResolutionToResponse,
