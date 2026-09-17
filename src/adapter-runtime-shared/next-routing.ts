@@ -299,9 +299,12 @@ export function getInvocationUrl(
   let { pathname } = resolution.invocationTarget
   const { query } = resolution.invocationTarget
   if (isDataRequest && !pathname.startsWith(dataPrefix)) {
-    const page =
+    // with `trailingSlash` the target ends in a slash - that's how middleware wrote it - while the
+    // data URL takes the page path without one
+    const page = (
       basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname
-    pathname = `${dataPrefix}${page === '' || page === '/' ? 'index' : page.slice(1)}.json`
+    ).replace(/\/$/, '')
+    pathname = `${dataPrefix}${page === '' ? 'index' : page.slice(1)}.json`
   }
 
   // undo the synthetic `/:path+/` -> `/$1` rewrite from fixAdapterOutputForNextRouting,
