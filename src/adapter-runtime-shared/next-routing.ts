@@ -34,7 +34,40 @@ export async function resolveRoutes(params: ResolveRoutesParams): Promise<Resolv
       }),
     }
   }
-  return nextResolveRoutes(params)
+  const resolution = await nextResolveRoutes(params)
+  return withMiddlewareRewriteTarget(resolution, params.url)
+}
+
+/**
+ * `resolveRoutes` applies a middleware rewrite to the URL it resolves against, but its "no match
+ * found" return carries only headers and status - the rewritten URL is dropped, so a caller can't
+ * tell a rewrite happened and would invoke the *pre-rewrite* page. Next itself rewrites and then
+ * 404s on the target (`next start` on a rewrite to a path with no route answers 404, not the
+ * original page), so recover the target from the rewrite header the resolution still carries.
+ * Drop this once `@next/routing` reports the rewritten URL on a no-match.
+ */
+function withMiddlewareRewriteTarget(
+  resolution: ResolveRoutesResult,
+  requestUrl: URL,
+): ResolveRoutesResult {
+  if (resolution.invocationTarget || resolution.redirect || resolution.externalRewrite) {
+    return resolution
+  }
+  const rewrite = resolution.resolvedHeaders?.get('x-middleware-rewrite')
+  if (!rewrite) {
+    return resolution
+  }
+  const target = new URL(rewrite, requestUrl)
+  if (target.origin !== requestUrl.origin) {
+    return resolution
+  }
+  const query = Object.fromEntries(target.searchParams.entries())
+  return {
+    ...resolution,
+    resolvedPathname: target.pathname,
+    resolvedQuery: query,
+    invocationTarget: { pathname: target.pathname, query },
+  }
 }
 
 // @next/routing stopped exporting this from its package index, so keep a copy for building
