@@ -33,7 +33,47 @@ setupWaitUntil()
 
 const nextImportPromise = import('../next.cjs')
 
-let nextHandler: WorkerRequestHandler
+type NextModule = Awaited<typeof nextImportPromise>
+
+type InitializedNextServer = {
+  nextHandler: WorkerRequestHandler
+  ensureOtelTracerPatchedForCacheComponents: NextModule['ensureOtelTracerPatchedForCacheComponents']
+}
+
+let initializedNextServer: InitializedNextServer | undefined
+let nextServerPromise: Promise<InitializedNextServer> | undefined
+
+const initializeNextServer = (
+  request: Request,
+  tracer: ReturnType<typeof getTracer>,
+): Promise<InitializedNextServer> => {
+  if (!nextServerPromise) {
+    nextServerPromise = withActiveSpan(tracer, 'initialize next server', async () => {
+      const { getMockedRequestHandler, ensureOtelTracerPatchedForCacheComponents } =
+        await nextImportPromise
+      const url = new URL(request.url)
+
+      const nextHandler = await getMockedRequestHandler(nextConfig, {
+        port: Number(url.port) || 443,
+        hostname: url.hostname,
+        dir: process.cwd(),
+        isDev: false,
+      })
+
+      return { nextHandler, ensureOtelTracerPatchedForCacheComponents }
+    })
+      .then((server) => {
+        initializedNextServer = server
+        return server
+      })
+      .catch((error) => {
+        nextServerPromise = undefined
+        throw error
+      })
+  }
+
+  return nextServerPromise
+}
 
 /**
  * When Next.js proxies requests externally, it writes the response back as-is.
@@ -66,19 +106,12 @@ export default async (
 ) => {
   const tracer = getTracer()
 
-  if (!nextHandler) {
-    await withActiveSpan(tracer, 'initialize next server', async () => {
-      const { getMockedRequestHandler } = await nextImportPromise
-      const url = new URL(request.url)
+  const { nextHandler, ensureOtelTracerPatchedForCacheComponents } =
+    initializedNextServer ?? (await initializeNextServer(request, tracer))
 
-      nextHandler = await getMockedRequestHandler(nextConfig, {
-        port: Number(url.port) || 443,
-        hostname: url.hostname,
-        dir: process.cwd(),
-        isDev: false,
-      })
-    })
-  }
+  // Per request, not during initialization: the platform only registers its OpenTelemetry
+  // SDK once a traced request arrives. See the note on the function itself.
+  ensureOtelTracerPatchedForCacheComponents(topLevelSpan)
 
   return await withActiveSpan(tracer, 'generate response', async (span) => {
     const { req, res } = toReqRes(request)
