@@ -62,9 +62,14 @@ function withMiddlewareRewriteTarget(
     return resolution
   }
   const query = Object.fromEntries(target.searchParams.entries())
+  // `resolvedPathname` is the lookup key, and output pathnames are keyed without a trailing slash
+  // (that is also the form `resolveRoutes` reports for a rewrite it matched itself), so canonicalise
+  // it or the handler lookup misses: "Routing matched but no matched output exists".
+  // `invocationTarget` keeps the URL middleware actually wrote.
   return {
     ...resolution,
-    resolvedPathname: target.pathname,
+    resolvedPathname:
+      target.pathname.length > 1 ? target.pathname.replace(/\/$/, '') : target.pathname,
     resolvedQuery: query,
     invocationTarget: { pathname: target.pathname, query },
   }
