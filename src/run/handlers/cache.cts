@@ -7,7 +7,8 @@ import { join as posixJoin } from 'node:path/posix'
 
 import type { Span } from '@netlify/otel/opentelemetry'
 import type { PrerenderManifest } from 'next/dist/build/index.js'
-import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
+// TODO(adapter): figure out how to make this work in adapter integration tests or just use constant
+// import { NEXT_CACHE_TAGS_HEADER } from 'next/dist/lib/constants.js'
 
 import {
   type CacheHandlerContext,
@@ -33,6 +34,8 @@ import {
   type TagStaleOrExpiredStatus,
 } from './tags-handler.cjs'
 import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
+
+const NEXT_CACHE_TAGS_HEADER = 'x-next-cache-tags'
 
 let memoizedPrerenderManifest: PrerenderManifest
 

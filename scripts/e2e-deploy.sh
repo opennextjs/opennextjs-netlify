@@ -21,30 +21,27 @@ fi
 # per-fixture temp dir, but initialize it empty to be defensive.
 : > .adapter-deploy.log
 
-# Push the fixture's env onto the Netlify site.
+# Hand the fixture's env to the deployed functions.
 #
-# A test declares env with nextTestSetup({ env: {...} }), and in deploy mode the
-# harness hands it to this script as JSON in NEXT_TEST_ENV
-# (next-modes/next-deploy.ts:62) — that is the ONLY channel. Exporting it here
-# would not be enough: the build runs inside `netlify deploy` and the server
-# runs later on Netlify's infrastructure, so anything the test expects to read
-# at build or request time has to exist where Netlify can see it. Site-level env
-# vars cover both — the build container gets them, and so does the deployed
-# function at request time.
+# The build half needs nothing: the harness spawns this script with the test's
+# env already in scriptEnv (next-modes/next-deploy.ts:70), so `netlify deploy`
+# inherits it. Only the deployed functions are a separate process, and `--env`
+# puts the variables on the deploy itself (netlify/cli#8413, CLI >= 27.2.0),
+# taking priority over site-level ones.
 #
-# Values are passed to the CLI as argv, so nothing needs quoting/escaping: no
-# shell re-parsing, no dotenv dialect to satisfy. node emits NUL-delimited
-# key/value pairs so that newlines, quotes, `#` and `=` inside a value survive
-# the trip through `read`.
+# This used to be `netlify env:set` per variable, which writes to the SHARED
+# site: parallel shards raced each other ("failed to set env var ...", 44 tests
+# in one run) and every variable leaked into every later deploy.
+#
+# NEXT_TEST_ENV is the same env as JSON. node emits it NUL-delimited so values
+# containing newlines, quotes, `#` or `=` survive `read`; from there they go to
+# the CLI as argv, with no shell or dotenv re-parsing to escape for.
+DEPLOY_ENV_ARGS=()
 if [ -n "${NEXT_TEST_ENV:-}" ]; then
   while IFS= read -r -d '' key && IFS= read -r -d '' value; do
-    if ! "$ADAPTER_DIR/node_modules/.bin/netlify" env:set "$key" "$value" >> .adapter-deploy.log 2>&1; then
-      echo "Error: failed to set env var $key"
-      cat .adapter-deploy.log
-      exit 1
-    fi
+    DEPLOY_ENV_ARGS+=(--env "$key=$value")
     if [ -n "${ADAPTER_DEBUG_LOGS:-}" ]; then
-      echo "env:set $key" >&2
+      echo "deploy env $key" >&2
     fi
   done < <(node -e "
 const env = JSON.parse(process.env.NEXT_TEST_ENV || '{}')
@@ -153,6 +150,41 @@ if ! "${INSTALL[@]}" >> .adapter-deploy.log 2>&1; then
   exit 1
 fi
 
+# The next-config-ts-native-{ts,mts} fixtures need Node's native TypeScript
+# resolution for next.config.(ts|mts): their configs carry a deliberate
+# top-level await, and Next's default path transpiles the config to CJS and
+# require()s it, which throws ERR_REQUIRE_ASYNC_MODULE on an async module. The
+# build then dies before the adapter ever runs (transpile-config.ts). The
+# native path is gated on this env var, normally set by `next build
+# --experimental-next-config-strip-types` (bin/next.ts).
+#
+# Upstream runs these two directories in dedicated jobs that export the same
+# variable (build_and_test.yml); its deploy job never reaches them, because it
+# runs Node 20, where `process.features.typescript` is undefined and the tests
+# skip themselves. We need Node >= 22.13 for netlify-cli, so they run here.
+#
+# Scoped to those directories rather than to every TS config, so the other 57
+# next.config.ts fixtures keep the transpile path a real user's build takes.
+# TEST_FILE_PATH is the absolute path of the running test file: e2e-utils sets
+# it at module scope (test/lib/e2e-utils/index.ts) and next-deploy passes its
+# whole env to this script.
+#
+# Upstream also exports NODE_OPTIONS=--experimental-transform-types, for Node
+# versions where type stripping is still behind a flag. We must not: pnpm
+# rejects it ("--experimental-transform-types is not allowed in NODE_OPTIONS",
+# exit 9) and fixtures run their post-build through pnpm. Nothing here needs it
+# — Node >= 22.18 strips types by default, which is what makes
+# `process.features.typescript` truthy in the first place, and these configs
+# only use erasable syntax.
+case "${TEST_FILE_PATH:-}" in
+  */next-config-ts-native-ts/*|*/next-config-ts-native-mts/*)
+    export __NEXT_NODE_NATIVE_TS_LOADER_ENABLED=true
+    if [ -n "${ADAPTER_DEBUG_LOGS:-}" ]; then
+      echo "native TS config resolution enabled for $TEST_FILE_PATH" >&2
+    fi
+    ;;
+esac
+
 # Create netlify.toml pointing to the installed plugin
 cat > netlify.toml <<'EOF'
 [build]
@@ -182,7 +214,7 @@ EOF
 # We deliberately do NOT also stream to stderr: run-tests.js buffers child output
 # and prints it only for failed tests, so sending it to stderr here as well would
 # duplicate the whole log in the GitHub Actions failed-test output.
-if ! NO_COLOR=1 NETLIFY_NEXT_SKEW_PROTECTION=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy >> .adapter-deploy.log 2>&1; then
+if ! NO_COLOR=1 NETLIFY_NEXT_SKEW_PROTECTION=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy "${DEPLOY_ENV_ARGS[@]}" >> .adapter-deploy.log 2>&1; then
   cat .adapter-deploy.log
   exit 1
 fi

@@ -13,6 +13,7 @@ export interface FixtureTestContext extends TestContext {
   blobServerOnRequestSpy: BlobsServer['onRequest']
   blobStore: ReturnType<typeof getStore>
   functionDist: string
+  functionCwd?: string
   edgeFunctionPort: number
   edgeFunctionOutput: WriteStream
   cleanup?: (() => Promise<void>)[]

@@ -4,12 +4,30 @@ import { join, resolve } from 'node:path'
 
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 
-import { PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
+import type { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
+
+import { ADAPTER_MANIFEST_FILE, PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
 import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
 
 export type RunConfig = {
   nextConfig: NextConfigComplete
+  nextVersion: string | null
   enableUseCacheHandler: boolean
+}
+
+/**
+ * Subset of the adapter output that is needed at runtime for route resolution
+ */
+export type AdapterManifest = Pick<
+  AdapterBuildCompleteContext,
+  'routing' | 'outputs' | 'buildId' | 'config'
+> & {
+  // key Next.js uses for RouterServerContext lookups, see adapter.ts
+  relativeProjectDir: string
+  // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)
+  relativeAppDir: string
+  // `public/` files: the CDN serves them, but routing needs to know they exist (see getPublicPathnames)
+  publicPathnames: string[]
 }
 
 /**
@@ -17,6 +35,17 @@ export type RunConfig = {
  */
 export const getRunConfig = async () => {
   return JSON.parse(await readFile(resolve(PLUGIN_DIR, RUN_CONFIG_FILE), 'utf-8')) as RunConfig
+}
+
+/**
+ * Get the adapter manifest written at build time.
+ * Uses the same PLUGIN_DIR resolution as getRunConfig() — both files are
+ * written to ctx.serverHandlerDir during the build.
+ */
+export const getAdapterManifest = async (): Promise<AdapterManifest> => {
+  return JSON.parse(
+    await readFile(resolve(PLUGIN_DIR, ADAPTER_MANIFEST_FILE), 'utf-8'),
+  ) as AdapterManifest
 }
 
 export type NextConfigForMultipleVersions = NextConfigComplete & {

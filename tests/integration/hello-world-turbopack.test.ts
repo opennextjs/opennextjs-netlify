@@ -6,10 +6,11 @@ import { v4 } from 'uuid'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import {
-  createFixture,
   EDGE_MIDDLEWARE_FUNCTION_NAME,
+  createFixture,
   invokeEdgeFunction,
   invokeFunction,
+  invokeSandboxedFunction,
   runPlugin,
 } from '../utils/fixture.js'
 import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
@@ -86,8 +87,10 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.43'))(
       await createFixture('hello-world-turbopack', ctx)
       await runPlugin(ctx)
 
-      // test the function call
-      const home = await invokeFunction(ctx, { url: '/edge-page' })
+      // invoke in a plain Node.js child: the in-process runner goes through vitest's module
+      // runner, which masks ESM/CJS interop and missing-global issues the bundled edge sandbox hit
+      // in a real function
+      const home = await invokeSandboxedFunction(ctx, { url: '/edge-page' })
       expect(home.statusCode).toBe(200)
       expect(load(home.body)('h1').text()).toBe('Hello, Next.js!')
     })

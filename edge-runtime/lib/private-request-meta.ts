@@ -12,6 +12,8 @@
 export type RequestMeta = {
   requestID: string
   publicUrl?: string
+  /** serialized `ResolveRoutesResult`, adapter mode only: routing ran in the edge function */
+  routeResolution?: string
 }
 
 export const REQUEST_META_HEADER = 'x-next-request-meta'
