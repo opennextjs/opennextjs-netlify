@@ -213,10 +213,8 @@ for (const pathname of manifest.publicPathnames) {
   )
 }
 
-const staticFilePathnames = new Set<string>()
 for (const output of manifest.outputs.staticFiles) {
   for (const alias of getPathnameAliases(output.pathname, basePath)) {
-    staticFilePathnames.add(alias)
     readOnlyPathnames.add(alias)
   }
   registerHandler(
@@ -300,12 +298,12 @@ async function renderErrorPage(
     invokeStatus: status,
   })
 
-  const headers = new Headers(response.headers)
-  if (staticFilePathnames.has(pathname)) {
-    headers.delete('netlify-cdn-cache-control')
-    headers.set('cache-control', 'private, no-cache, no-store, max-age=0, must-revalidate')
-  }
-  const errorResponse = new Response(response.body, { status, headers })
+  // The error page keeps the cache headers of whatever rendered it. A static `404.html` is build
+  // output that only a deploy can change, and a prerendered not-found carries its own revalidate,
+  // so both are cacheable; forcing no-store here would put an origin hit on every bot probe. That
+  // matches what Vercel serves for every not-found shape except a fully static `pages/404.js`,
+  // which they leave uncached (measured 2026-09-18, see docs/404-caching-vercel-matrix.md).
+  const errorResponse = new Response(response.body, { status, headers: response.headers })
   setCacheControlHeaders(errorResponse, request, requestContext)
   return errorResponse
 }
