@@ -1367,19 +1367,13 @@ test.describe('Page Router with basePath and i18n', () => {
 
     await expect(page.getByTestId('custom-404')).toHaveText('Custom 404 page for locale: en')
 
-    if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
-      // The 404 page is build output that only a deploy can change, so it is cached rather than
-      // re-rendered per request (see `cache 404s`).
-      expect(headers['debug-netlify-cdn-cache-control']).toMatch(
-        /(max-age|s-maxage)=31536000, durable/,
-      )
-      expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
-    } else {
-      expect(headers['debug-netlify-cdn-cache-control']).toMatch(
-        /no-cache, no-store, max-age=0, must-revalidate, durable/m,
-      )
-      expect(headers['cache-control']).toMatch(/no-cache,no-store,max-age=0,must-revalidate/m)
-    }
+    // Uncached in both modes, unlike the non-i18n fixture whose `404.js` has no `getStaticProps`
+    // and so is a static file: here `/en/404` is a prerender, and Next hardcodes `revalidate: 0`
+    // for any 404 page render without a `notFoundRevalidate` request meta.
+    expect(headers['debug-netlify-cdn-cache-control']).toMatch(
+      /no-cache, no-store, max-age=0, must-revalidate, durable/m,
+    )
+    expect(headers['cache-control']).toMatch(/no-cache,no-store,max-age=0,must-revalidate/m)
   })
 
   test('requesting a non existing page route that needs to be fetched from the blob store like 404.html (notFound: true)', async ({
