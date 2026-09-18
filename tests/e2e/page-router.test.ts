@@ -470,18 +470,27 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
 
     await expect(page.getByTestId('custom-404')).toHaveText('Custom 404 page')
 
-    // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
-    // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that
-    // it would not
-    const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
-    expect(headers['debug-netlify-cdn-cache-control']).toBe(
-      (shouldHavePrivateDirective ? 'private, ' : '') +
-        'no-cache, no-store, max-age=0, must-revalidate, durable',
-    )
-    expect(headers['cache-control']).toBe(
-      (shouldHavePrivateDirective ? 'private,' : '') +
-        'no-cache,no-store,max-age=0,must-revalidate',
-    )
+    if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+      // The 404 page is build output that only a deploy can change, so it is cached rather than
+      // re-rendered per request (see `cache 404s`).
+      expect(headers['debug-netlify-cdn-cache-control']).toMatch(
+        /(max-age|s-maxage)=31536000, durable/,
+      )
+      expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
+    } else {
+      // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
+      // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that
+      // it would not
+      const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
+      expect(headers['debug-netlify-cdn-cache-control']).toBe(
+        (shouldHavePrivateDirective ? 'private, ' : '') +
+          'no-cache, no-store, max-age=0, must-revalidate, durable',
+      )
+      expect(headers['cache-control']).toBe(
+        (shouldHavePrivateDirective ? 'private,' : '') +
+          'no-cache,no-store,max-age=0,must-revalidate',
+      )
+    }
   })
 
   test('should serve 404 page when requesting non existing page (marked with notFound: true in getStaticProps)', async ({
@@ -1358,10 +1367,19 @@ test.describe('Page Router with basePath and i18n', () => {
 
     await expect(page.getByTestId('custom-404')).toHaveText('Custom 404 page for locale: en')
 
-    expect(headers['debug-netlify-cdn-cache-control']).toMatch(
-      /no-cache, no-store, max-age=0, must-revalidate, durable/m,
-    )
-    expect(headers['cache-control']).toMatch(/no-cache,no-store,max-age=0,must-revalidate/m)
+    if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+      // The 404 page is build output that only a deploy can change, so it is cached rather than
+      // re-rendered per request (see `cache 404s`).
+      expect(headers['debug-netlify-cdn-cache-control']).toMatch(
+        /(max-age|s-maxage)=31536000, durable/,
+      )
+      expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
+    } else {
+      expect(headers['debug-netlify-cdn-cache-control']).toMatch(
+        /no-cache, no-store, max-age=0, must-revalidate, durable/m,
+      )
+      expect(headers['cache-control']).toMatch(/no-cache,no-store,max-age=0,must-revalidate/m)
+    }
   })
 
   test('requesting a non existing page route that needs to be fetched from the blob store like 404.html (notFound: true)', async ({
