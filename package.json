@@ -71,7 +71,7 @@
     "@types/picomatch": "^3.0.0",
     "@vercel/nft": "^0.30.0",
     "@web-std/file": "^3.0.3",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "cheerio": "^1.0.0-rc.12",
     "clean-package": "^2.2.0",
     "esbuild": "^0.27.0",
