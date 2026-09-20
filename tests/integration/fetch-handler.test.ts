@@ -201,6 +201,24 @@ test<FixtureTestContext>('if the fetch call is cached correctly (cached page res
   await runPluginStep(ctx, 'onPreBuild')
   await runPlugin(ctx)
 
+  // Build output is fresh as of the build (see prerendered.ts): the first request is a hit and
+  // nothing is regenerated, so the API is not called.
+  handlerCalled = 0
+  const fresh = await invokeFunction(ctx, { url: 'posts/1' })
+  await new Promise<void>((resolve) => setTimeout(resolve, 500))
+  expect(handlerCalled, 'API should NOT be hit for a fresh build entry').toBe(0)
+  expect(fresh.headers, 'prerendered page served fresh from the build').toEqual(
+    expect.objectContaining({
+      'cache-status': '"Next.js"; hit',
+      'netlify-cdn-cache-control': expect.stringMatching(
+        /(max-age|s-maxage)=5, stale-while-revalidate=/,
+      ),
+    }),
+  )
+
+  // let the build entry go stale: the flow below is stale → swr
+  await new Promise<void>((resolve) => setTimeout(resolve, 6_000))
+
   handlerCalled = 0
   const post1 = await invokeFunction(ctx, {
     url: 'posts/1',

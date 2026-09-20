@@ -399,10 +399,9 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
                   const { invokeFunction } = await loadSandboxedFunction(ctx)
 
                   if (isPrerendered) {
-                    const callPrerenderedStale = await invokeFunction({ url })
-                    expect(callPrerenderedStale.headers['cache-status']).toBe(
-                      '"Next.js"; hit; fwd=stale',
-                    )
+                    // build output is fresh as of the build, and a year is longer than this test
+                    const callPrerendered = await invokeFunction({ url })
+                    expect(callPrerendered.headers['cache-status']).toBe('"Next.js"; hit')
                   }
 
                   const call1 = await invokeFunction({ url })
@@ -443,10 +442,9 @@ describe.skipIf(!nextVersionSatisfies('>=15.3.0-canary.13'))('use cache', () => 
                   const { invokeFunction } = await loadSandboxedFunction(ctx)
 
                   if (isPrerendered) {
-                    const callPrerenderedStale = await invokeFunction({ url })
-                    expect(callPrerenderedStale.headers['cache-status']).toBe(
-                      '"Next.js"; hit; fwd=stale',
-                    )
+                    // fresh as of the build; whether the 5s TTL has passed by now depends on timing
+                    const callPrerendered = await invokeFunction({ url })
+                    expect(callPrerendered.headers['cache-status']).toMatch(/^"Next\.js"; hit/)
                   }
 
                   const call1 = await invokeFunction({ url })
