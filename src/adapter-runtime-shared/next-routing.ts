@@ -320,7 +320,18 @@ export function preferStaticPathnameAfterRewrite(
 }
 
 export function getPathnameAliases(pathname: string, basePath: string): string[] {
-  return pathname === `${basePath}/index` ? [pathname, basePath || '/'] : [pathname]
+  const aliases = pathname === `${basePath}/index` ? [pathname, basePath || '/'] : [pathname]
+  // Output pathnames are the decoded form Next emits (`/sticks & stones`, from a
+  // `generateStaticParams` value), while a request arrives percent-encoded and `URL.pathname` keeps
+  // the escapes - so register the encoded spelling as well or the lookup misses and answers 404.
+  // Next compares decoded instead, but decoding here would turn a literal `%` in an output pathname
+  // into a second, wrong spelling. Templates keep their brackets: `/%5Bid%5D` is not a route.
+  const encodedAliases = aliases
+    // templates keep their brackets: `/%5Bid%5D` is not a route
+    .filter((alias) => !alias.includes('['))
+    .map((alias) => alias.split('/').map(encodeURIComponent).join('/'))
+    .filter((encoded) => !aliases.includes(encoded))
+  return [...aliases, ...encodedAliases]
 }
 
 /**
