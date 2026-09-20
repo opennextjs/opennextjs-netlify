@@ -239,9 +239,14 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
         ...Object.entries(manifest.routes).map(
           ([route, prerenderManifestRoute]): Promise<void> =>
             limitConcurrentPrerenderContentHandling(async function writeRouteCacheEntry() {
-              const lastModified = prerenderManifestRoute.initialRevalidateSeconds
-                ? Date.now() - prerenderManifestRoute.initialRevalidateSeconds * 1000
-                : Date.now()
+              // Build output is fresh as of the build, the same as `next start`'s file-system
+              // cache and as Vercel (`x-vercel-cache: PRERENDER` then `HIT` for the full
+              // `revalidate`, measured 2026-09-20). This used to be backdated by `revalidate` so
+              // every ISR route regenerated on its first request (#235, guarding against stale
+              // build-time fetch data); that guard is now the `fetch-cache` exclusion from the
+              // build cache, and the backdating cost a regeneration per route per deploy and threw
+              // away route-handler prerenders outright.
+              const lastModified = Date.now()
               const key = routeToFilePath(route)
               let value: NetlifyIncrementalCacheValue
               switch (true) {
