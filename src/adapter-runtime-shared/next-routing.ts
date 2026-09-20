@@ -319,8 +319,23 @@ export function preferStaticPathnameAfterRewrite(
   }
 }
 
-export function getPathnameAliases(pathname: string, basePath: string): string[] {
+export function getPathnameAliases(
+  pathname: string,
+  basePath: string,
+  { trailingSlash = false }: { trailingSlash?: boolean } = {},
+): string[] {
   const aliases = pathname === `${basePath}/index` ? [pathname, basePath || '/'] : [pathname]
+  // With `trailingSlash: true` a request keeps its slash all the way through routing - Next's own
+  // rewrite sources are generated with one (`/:lang(en|es)/`) - while outputs are keyed without it.
+  // Registering the slashed spelling lets the lookup match without rewriting the URL first, which
+  // would strip the slash before those rewrites ever get to match.
+  if (trailingSlash) {
+    for (const alias of aliases) {
+      if (alias !== (basePath || '/') && !alias.endsWith('/') && !alias.slice(1).includes('.')) {
+        aliases.push(`${alias}/`)
+      }
+    }
+  }
   // Output pathnames are the decoded form Next emits (`/sticks & stones`, from a
   // `generateStaticParams` value), while a request arrives percent-encoded and `URL.pathname` keeps
   // the escapes - so register the encoded spelling as well or the lookup misses and answers 404.

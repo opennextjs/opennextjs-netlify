@@ -308,10 +308,11 @@ async function writeRoutingEdgeFunctionEntry(
  * requests arrive as `/fr/ssr`, and that locale has to survive to the handler.
  */
 function collectNonLocalizedPathnames(adapterOutput: AdapterBuildCompleteContext): string[] {
+  const trailingSlash = adapterOutput.config.trailingSlash ?? false
   const basePath = adapterOutput.config.basePath || ''
   const { outputs } = adapterOutput
   return [...outputs.staticFiles, ...outputs.pagesApi].flatMap((output) =>
-    getPathnameAliases(output.pathname, basePath),
+    getPathnameAliases(output.pathname, basePath, { trailingSlash }),
   )
 }
 
@@ -319,6 +320,7 @@ function collectNonLocalizedPathnames(adapterOutput: AdapterBuildCompleteContext
  * Collect all pathnames from the adapter output for route resolution.
  */
 function collectAllPathnames(adapterOutput: AdapterBuildCompleteContext): string[] {
+  const trailingSlash = adapterOutput.config.trailingSlash ?? false
   const pathnames = new Set<string>()
   const basePath = adapterOutput.config.basePath || ''
   const { outputs } = adapterOutput
@@ -331,7 +333,7 @@ function collectAllPathnames(adapterOutput: AdapterBuildCompleteContext): string
     ...outputs.prerenders,
     ...outputs.staticFiles,
   ]) {
-    for (const alias of getPathnameAliases(output.pathname, basePath)) {
+    for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
       pathnames.add(alias)
     }
   }

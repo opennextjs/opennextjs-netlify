@@ -108,9 +108,10 @@ type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
 const handlerDefsByPathname = new Map<string, Handler>()
 const handlerDefsId = new Map<string, Handler>()
 const basePath = manifest.config.basePath || ''
+const trailingSlash = manifest.config.trailingSlash ?? false
 const routingBasics = { basePath, buildId: manifest.buildId }
 function registerHandler(pathname: string, handler: Handler) {
-  for (const alias of getPathnameAliases(pathname, basePath)) {
+  for (const alias of getPathnameAliases(pathname, basePath, { trailingSlash })) {
     handlerDefsByPathname.set(alias, handler)
   }
 }
@@ -171,7 +172,7 @@ for (const output of [
   handlerDefsId.set(output.id, handler)
   registerHandler(output.pathname, handler)
   if (ssgSourcePages.has(output.sourcePage)) {
-    for (const alias of getPathnameAliases(output.pathname, basePath)) {
+    for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
       ssgPathnames.add(alias)
     }
   }
@@ -186,11 +187,11 @@ for (const output of manifest.outputs.prerenders) {
   }
   registerHandler(output.pathname, parentHandler)
   if (staticPageOutputIds.has(output.parentOutputId)) {
-    for (const alias of getPathnameAliases(output.pathname, basePath)) {
+    for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
       readOnlyPathnames.add(alias)
     }
   }
-  for (const alias of getPathnameAliases(output.pathname, basePath)) {
+  for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
     ssgPathnames.add(alias)
   }
 }
@@ -214,7 +215,7 @@ for (const pathname of manifest.publicPathnames) {
 }
 
 for (const output of manifest.outputs.staticFiles) {
-  for (const alias of getPathnameAliases(output.pathname, basePath)) {
+  for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
     readOnlyPathnames.add(alias)
   }
   registerHandler(

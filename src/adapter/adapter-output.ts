@@ -105,15 +105,10 @@ const I18N_MATCHER_LOCALE_GROUP_OR_API = '(?:(?=\\/api\\/)|(?!\\/api\\/)\\/((?!_
 function fixAdapterOutputForNextRouting(
   onBuildCompleteAdapterCtx: AdapterBuildCompleteContext,
 ): AdapterBuildCompleteContext {
+  // `trailingSlash: true` used to be handled by rewriting `/x/` to `/x` here, but that ran before
+  // the config rewrites, whose sources Next generates *with* the slash (`/:lang(en|es)/`), so they
+  // could never match. Output lookup accepts the slashed spelling instead (`getPathnameAliases`).
   const beforeFiles = [...onBuildCompleteAdapterCtx.routing.beforeFiles]
-  if (onBuildCompleteAdapterCtx.config.trailingSlash) {
-    // normalizing trailing slash path to one without it to fix the output matching
-    beforeFiles.push({
-      source: '/:path+/',
-      sourceRegex: '^(?:\\/((?:[^\\/]+?)(?:\\/(?:[^\\/]+?))*))\\/$',
-      destination: '/$1',
-    })
-  }
 
   return {
     ...onBuildCompleteAdapterCtx,
