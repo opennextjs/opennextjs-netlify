@@ -17,7 +17,17 @@ export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
  * Without it a page renders but never hydrates, because the client router compares the browser's
  * path against the rendered one. Drop this when the rule lands in `@next/routing` itself.
  */
-export async function resolveRoutes(params: ResolveRoutesParams): Promise<ResolveRoutesResult> {
+/**
+ * `nonLocalizedPathnames` are the outputs Next never keys by locale (build assets, `public/` files,
+ * API routes), so a locale on a middleware rewrite to one of them is noise, not a route.
+ */
+export type ResolveRoutesParamsWithOutputs = ResolveRoutesParams & {
+  nonLocalizedPathnames?: string[]
+}
+
+export async function resolveRoutes(
+  params: ResolveRoutesParamsWithOutputs,
+): Promise<ResolveRoutesResult> {
   // `URL` percent-encodes a backslash in the path, so match that spelling too - Next tests the raw
   // `req.url`, where the character is still a backslash
   const { pathname } = params.url
@@ -35,7 +45,7 @@ export async function resolveRoutes(params: ResolveRoutesParams): Promise<Resolv
     }
   }
   const resolution = await nextResolveRoutes(params)
-  return withMiddlewareRewriteTarget(resolution, params.url)
+  return withMiddlewareRewriteTarget(resolution, params.url, params)
 }
 
 /**
@@ -46,9 +56,42 @@ export async function resolveRoutes(params: ResolveRoutesParams): Promise<Resolv
  * original page), so recover the target from the rewrite header the resolution still carries.
  * Drop this once `@next/routing` reports the rewritten URL on a no-match.
  */
+/**
+ * Next's web adapter localises every internal middleware rewrite (`adapter.ts`, "For rewrites we
+ * must always include the locale in the final pathname"), and Next's server then resolves the
+ * filesystem with the locale normalised away - so `next start` answers 200 for
+ * `/en/_next/static/chunks/x.js` and `/en/hello.txt`. Nothing strips it for us before the CDN, so
+ * do what that filesystem check does, but only for outputs Next never keys by locale: page outputs
+ * are keyed `/ssr` while their requests arrive as `/fr/ssr`, and that locale must reach the handler.
+ */
+function stripLocaleFromNonLocalizedTarget(
+  pathname: string,
+  {
+    basePath = '',
+    i18n,
+    nonLocalizedPathnames,
+  }: Pick<ResolveRoutesParamsWithOutputs, 'basePath' | 'i18n' | 'nonLocalizedPathnames'>,
+): string {
+  if (!i18n || !nonLocalizedPathnames || nonLocalizedPathnames.includes(pathname)) {
+    return pathname
+  }
+  const withoutBasePath =
+    basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname
+  const [, maybeLocale, ...rest] = withoutBasePath.split('/')
+  if (
+    !maybeLocale ||
+    !i18n.locales.some((value) => value.toLowerCase() === maybeLocale.toLowerCase())
+  ) {
+    return pathname
+  }
+  const candidate = `${basePath}/${rest.join('/')}`
+  return nonLocalizedPathnames.includes(candidate) ? candidate : pathname
+}
+
 function withMiddlewareRewriteTarget(
   resolution: ResolveRoutesResult,
   requestUrl: URL,
+  params: ResolveRoutesParamsWithOutputs,
 ): ResolveRoutesResult {
   if (resolution.invocationTarget || resolution.redirect || resolution.externalRewrite) {
     return resolution
@@ -61,6 +104,7 @@ function withMiddlewareRewriteTarget(
   if (target.origin !== requestUrl.origin) {
     return resolution
   }
+  target.pathname = stripLocaleFromNonLocalizedTarget(target.pathname, params)
   const query = Object.fromEntries(target.searchParams.entries())
   // `resolvedPathname` is the lookup key, and output pathnames are keyed without a trailing slash
   // (that is also the form `resolveRoutes` reports for a rewrite it matched itself), so canonicalise

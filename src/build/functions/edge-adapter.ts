@@ -263,6 +263,10 @@ async function writeRoutingEdgeFunctionEntry(
       caseSensitive: ctx.adapterOutput.config.experimental?.caseSensitiveRoutes,
     },
     pathnames: [...collectAllPathnames(ctx.adapterOutput), ...(await ctx.getPublicPathnames())],
+    nonLocalizedPathnames: [
+      ...collectNonLocalizedPathnames(ctx.adapterOutput),
+      ...(await ctx.getPublicPathnames()),
+    ],
     skipProxyUrlNormalize: ctx.adapterOutput.config.skipProxyUrlNormalize,
   } satisfies RoutingConfig
 
@@ -295,6 +299,19 @@ async function writeRoutingEdgeFunctionEntry(
     export default (req, context) => runNextRouting(req, context, routingConfig, middlewareConfig, nextConfig);
     export const config = { pattern: '.*' };
     `,
+  )
+}
+
+/**
+ * Outputs Next never keys by locale even under i18n: build assets, `public/` files (added by the
+ * caller) and API routes. Pages are deliberately absent - an SSR page is keyed `/ssr` while its
+ * requests arrive as `/fr/ssr`, and that locale has to survive to the handler.
+ */
+function collectNonLocalizedPathnames(adapterOutput: AdapterBuildCompleteContext): string[] {
+  const basePath = adapterOutput.config.basePath || ''
+  const { outputs } = adapterOutput
+  return [...outputs.staticFiles, ...outputs.pagesApi].flatMap((output) =>
+    getPathnameAliases(output.pathname, basePath),
   )
 }
 

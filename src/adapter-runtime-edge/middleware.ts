@@ -70,6 +70,8 @@ export interface RoutingConfig {
     shouldNormalizeNextData: boolean
   }
   pathnames: string[]
+  // static files, `public/` files and API routes: see collectNonLocalizedPathnames at build
+  nonLocalizedPathnames?: string[]
   skipProxyUrlNormalize?: boolean
 }
 
@@ -193,6 +195,7 @@ export async function runNextRouting(
     requestBody: request.body ?? new ReadableStream(),
     headers: routingHeaders,
     pathnames: routingConfig.pathnames,
+    nonLocalizedPathnames: routingConfig.nonLocalizedPathnames,
     i18n: (routingConfig.i18n ?? undefined) as Parameters<typeof resolveRoutes>[0]['i18n'],
     routes: routingConfig.routes as Parameters<typeof resolveRoutes>[0]['routes'],
     invokeMiddleware: async (middlewareCtx: MiddlewareContext) => {
