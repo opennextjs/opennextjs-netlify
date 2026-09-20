@@ -37,6 +37,20 @@ import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
 
 const NEXT_CACHE_TAGS_HEADER = 'x-next-cache-tags'
 
+/**
+ * Same rule as Next's `encodeHeaderSafe` (`server/lib/encode-header-safe.ts`): percent-encode only
+ * what an HTTP header cannot carry, and leave everything printable-ASCII alone. Crucially it is
+ * idempotent on `%xx`, which `encodeURI` is not - a key that already contains `%2F` (a dynamic
+ * param holding a path, say) came out as `%252F`, so the tag we attached never matched the one
+ * `revalidatePath`/`revalidateTag` purges, and the CDN entry was never invalidated.
+ */
+const OUT_OF_CLASS_CHAR = /[^\t\u0020-\u007E]/
+const OUT_OF_CLASS_RUN = /[^\t\u0020-\u007E]+/g
+const encodeCacheTag = (value: string): string =>
+  OUT_OF_CLASS_CHAR.test(value)
+    ? value.replace(OUT_OF_CLASS_RUN, (run) => encodeURIComponent(run))
+    : value
+
 let memoizedPrerenderManifest: PrerenderManifest
 
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
@@ -147,7 +161,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
     // Set cache tags for 404 pages as well so that the content can later be purged
     if (!cacheValue) {
-      const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeURI(key)}`]
+      const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeCacheTag(key)}`]
       requestContext.responseCacheTags = cacheTags
       return
     }
@@ -163,7 +177,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
       if (cacheValue.kind !== 'REDIRECT' && cacheValue.headers?.[NEXT_CACHE_TAGS_HEADER]) {
         const cacheTags = (cacheValue.headers[NEXT_CACHE_TAGS_HEADER] as string)
           .split(/,|%2c/gi)
-          .map(encodeURI)
+          .map(encodeCacheTag)
         requestContext.responseCacheTags = cacheTags
       } else if (
         ((cacheValue.kind === 'PAGE' || cacheValue.kind === 'PAGES') &&
@@ -174,7 +188,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         // so we need to generate appropriate cache tags for it
         // encode here to deal with non ASCII characters in the key
 
-        const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeURI(key)}`]
+        const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeCacheTag(key)}`]
         requestContext.responseCacheTags = cacheTags
       }
     }
@@ -500,7 +514,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         const requestContext = getRequestContext()
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
-          const tag = `_N_T_${key === '/index' ? '/' : encodeURI(key)}`
+          const tag = `_N_T_${key === '/index' ? '/' : encodeCacheTag(key)}`
 
           requestContext?.trackBackgroundWork(purgeEdgeCache(tag))
         }
