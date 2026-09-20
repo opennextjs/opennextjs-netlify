@@ -479,6 +479,19 @@ async function serverStaticFile(
     body = htmlFile.html
     status = 200
     headers.set('Content-Type', 'text/html; charset=utf-8')
+    // Next appends this to any response to a flight request, Pages Router included, "to avoid
+    // caching issues when navigating between pages and app" (`base-server` `setVaryHeader`). This
+    // handler answers from stored HTML without going through a route module, so do it here too.
+    if (request.headers.has('rsc')) {
+      headers.set(
+        'vary',
+        'rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch',
+      )
+    }
+    // ...and tell the CDN, which caches this response for a year: without it the entry is keyed by
+    // query alone, so a flight request that arrives without Next's `_rsc` cache-buster would be
+    // served the HTML copy. The invoke path does this for every other response.
+    setVaryHeaders(headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
     if (htmlFile.isFullyStaticPage) {
       // handle CDN Cache Control on fully static pages
       headers.set('cache-control', 'public, max-age=0, must-revalidate')
