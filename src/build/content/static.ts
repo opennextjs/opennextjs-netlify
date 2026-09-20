@@ -2,7 +2,6 @@ import { existsSync } from 'node:fs'
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 
-import { matchRoute } from '@next/routing'
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import glob from 'fast-glob'
@@ -13,6 +12,30 @@ import { PluginContext } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
+
+// `@next/routing` keeps `matchRoute` internal, and for rules with no `has`/`missing`/destination/
+// status it is just the source regex plus placeholder substitution in the header key and value
+// (`$1` per path segment, `$name` for a named group in an internal rule's regex).
+const matchHeaderRoute = (
+  route: { sourceRegex: string; headers?: Record<string, string> },
+  pathname: string,
+): Record<string, string> | undefined => {
+  const matches = pathname.match(new RegExp(route.sourceRegex))
+  if (!matches) {
+    return undefined
+  }
+  // one pass, so a captured value that looks like a placeholder is not substituted again
+  const replace = (value: string) =>
+    value.replace(/\$([A-Za-z_]\w*|[1-9]\d*)/g, (placeholder, name: string) => {
+      const index = Number(name)
+      return Number.isInteger(index) && index > 0 && index < matches.length
+        ? (matches[index] ?? '')
+        : (matches.groups?.[name] ?? placeholder)
+    })
+  return Object.fromEntries(
+    Object.entries(route.headers ?? {}).map(([key, value]) => [replace(key), replace(value)]),
+  )
+}
 
 /**
  * Assemble the static content for being uploaded to the blob storage
@@ -99,11 +122,7 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
             await cp(src, dest)
             const configHeaders = Object.assign(
               {},
-              ...headerRoutes.map(
-                (route) =>
-                  matchRoute(route, new URL(output.pathname, 'http://n'), new Headers(), true)
-                    .headers ?? {},
-              ),
+              ...headerRoutes.map((route) => matchHeaderRoute(route, output.pathname) ?? {}),
             ) as Record<string, string>
 
             if (!filePath.endsWith('.body')) {

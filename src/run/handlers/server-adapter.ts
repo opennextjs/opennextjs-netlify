@@ -262,9 +262,7 @@ extendedGlobalThis[RouterServerContextSymbol] = {
  * (it looks up `/_not-found/page` first and only falls back to `/404`). Both fall back to `/_error`,
  * which is what a Pages Router app with a custom `_error` but no `404.js` has. The page is invoked
  * with the requested URL (Next passes the error page as `invokePath`, `req.url` stays the original,
- * and `pages/_error` reports it as `reqUrl`/`asPath`). Static error HTML is served with Next's
- * default headers for error pages rather than the permanent caching a direct request to a fully
- * static page gets.
+ * and `pages/_error` reports it as `reqUrl`/`asPath`).
  */
 async function renderErrorPage(
   status: 404 | 500,
