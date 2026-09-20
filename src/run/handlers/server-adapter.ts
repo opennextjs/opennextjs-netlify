@@ -303,20 +303,38 @@ async function renderErrorPage(
   // which they leave uncached (measured 2026-09-18, see docs/404-caching-vercel-matrix.md).
   const errorResponse = new Response(response.body, { status, headers: response.headers })
   setCacheControlHeaders(errorResponse, request, requestContext)
+  // A cacheable 404 still has to miss for preview requests: a `fallback: false` path that is not
+  // prerendered answers 404 to everyone but renders for the preview cookie, and the static-file
+  // handler that produced this response only varies on the query.
+  setVaryHeaders(
+    errorResponse.headers,
+    request,
+    manifest.config as Parameters<typeof setVaryHeaders>[2],
+  )
   return errorResponse
 }
 
 // a literal request for the 404 page (or its locale variant) responds with 404, like Next's server
 // does, unless it's the on-demand revalidation of that page
-function isNotFoundPageRequest(request: Request, resolvedPathname: string): boolean {
+// A direct visit to `pages/404` or `pages/500` answers with that status, as Next's server and the
+// Vercel builder both do; without middleware there is nothing else to say otherwise.
+function isStatusPageRequest(
+  request: Request,
+  resolvedPathname: string,
+  status: 404 | 500,
+): boolean {
   if (request.headers.has('x-prerender-revalidate')) {
     return false
   }
-  if (resolvedPathname === `${basePath}/404`) {
+  if (resolvedPathname === `${basePath}/${status}`) {
     return true
   }
   const locales = manifest.config.i18n?.locales ?? []
-  return locales.some((locale) => resolvedPathname === `${basePath}/${locale}/404`)
+  return locales.some((locale) => resolvedPathname === `${basePath}/${locale}/${status}`)
+}
+
+function isNotFoundPageRequest(request: Request, resolvedPathname: string): boolean {
+  return isStatusPageRequest(request, resolvedPathname, 404)
 }
 
 // passed via requestMeta so Next.js renders our custom 404 page for `notFound: true` / `notFound()`
@@ -873,8 +891,12 @@ export default async function ServerHandler(request: Request, requestContext: Re
       span?.setAttribute('matched.pathname', resolution.resolvedPathname)
       const matchedHandler = handlerDefsByPathname.get(resolution.resolvedPathname)
       if (!matchedHandler) {
+        // A rewrite whose target has no output - middleware sending `/x` to `/en-EN/x` in an app
+        // with no such route, say. Next's router 404s on the target rather than erroring.
+        span?.setAttribute('matched.noOutput', true)
         return applyResolutionToThisResponse(
-          new Response('Routing matched but no matched output exists', { status: 500 }),
+          await renderErrorPage(404, { request, requestContext, tracer, span }),
+          404,
         )
       }
 
@@ -951,7 +973,15 @@ export default async function ServerHandler(request: Request, requestContext: Re
         // Next's server responds 404 here, and CACHE_404_PAGE cache-control handling keys off that
         const notFoundResponse = applyResolutionToThisResponse(handlerResponse, 404)
         setCacheControlHeaders(notFoundResponse, request, requestContext)
+        setVaryHeaders(
+          notFoundResponse.headers,
+          request,
+          manifest.config as Parameters<typeof setVaryHeaders>[2],
+        )
         return notFoundResponse
+      }
+      if (isStatusPageRequest(request, resolution.resolvedPathname, 500)) {
+        return applyResolutionToThisResponse(handlerResponse, 500)
       }
 
       return applyResolutionToThisResponse(handlerResponse, resolution.status)
