@@ -331,7 +331,7 @@ export function getPathnameAliases(
   // would strip the slash before those rewrites ever get to match.
   if (trailingSlash) {
     for (const alias of aliases) {
-      if (alias !== (basePath || '/') && !alias.endsWith('/') && !alias.slice(1).includes('.')) {
+      if (!alias.endsWith('/') && !alias.slice(1).includes('.')) {
         aliases.push(`${alias}/`)
       }
     }
