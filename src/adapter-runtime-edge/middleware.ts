@@ -210,7 +210,14 @@ export async function runNextRouting(
       // only normalizing data URLs unless skipMiddlewareUrlNormalize.
       const matchingUrl = normalizeNextDataUrl(url, routingConfig.basePath, routingConfig.buildId)
 
-      if (nextConfig?.trailingSlash && !matchingUrl.pathname.endsWith('/')) {
+      // Next's trailing-slash redirect runs before middleware, so middleware sees the slashed form -
+      // but only for paths Next actually slashes. `/_next/...` and anything that looks like a file
+      // are exempt there, and appending to those hands middleware a URL the client never requested.
+      const lastSegment = matchingUrl.pathname.slice(matchingUrl.pathname.lastIndexOf('/'))
+      const neverSlashed =
+        matchingUrl.pathname.startsWith(`${routingConfig.basePath}/_next/`) ||
+        lastSegment.includes('.')
+      if (nextConfig?.trailingSlash && !matchingUrl.pathname.endsWith('/') && !neverSlashed) {
         matchingUrl.pathname += '/'
       }
 
