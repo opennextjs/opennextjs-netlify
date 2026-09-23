@@ -6,6 +6,7 @@ import { join as posixJoin } from 'node:path/posix'
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 
+import type { AdapterManifest, AdapterManifestComputeOutput } from '../../run/config.js'
 import { ADAPTER_MANIFEST_FILE } from '../../run/constants.js'
 import type { PluginContextAdapter } from '../plugin-context.js'
 
@@ -13,6 +14,14 @@ import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
 import { writeRunConfig } from './server.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
+
+const computeOutput = (output: AdapterManifestComputeOutput): AdapterManifestComputeOutput => ({
+  id: output.id,
+  pathname: output.pathname,
+  sourcePage: output.sourcePage,
+  runtime: output.runtime,
+  filePath: output.filePath,
+})
 
 /**
  * Copy Next.js server code using adapter-provided traced assets instead of standalone output.
@@ -25,17 +34,37 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
 
     // Write the adapter manifest (routing + output metadata) for runtime use.
     // filePaths are already relative (rewritten in the adapter's onBuildComplete).
+    // Outputs are projected down to the fields the runtime reads: the traced `assets`/`assetsHashes`
+    // are only needed for the copying below and are ~96% of the serialized output, and the
+    // middleware output is consumed solely by the edge function (its `config.env` secrets included).
+    const manifest: AdapterManifest = {
+      routing: ctx.adapterOutput.routing,
+      outputs: {
+        pages: ctx.adapterOutput.outputs.pages.map(computeOutput),
+        pagesApi: ctx.adapterOutput.outputs.pagesApi.map(computeOutput),
+        appPages: ctx.adapterOutput.outputs.appPages.map(computeOutput),
+        appRoutes: ctx.adapterOutput.outputs.appRoutes.map(computeOutput),
+        prerenders: ctx.adapterOutput.outputs.prerenders.map(
+          ({ id, pathname, parentOutputId }) => ({
+            id,
+            pathname,
+            parentOutputId,
+          }),
+        ),
+        staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) => ({
+          pathname,
+          filePath,
+        })),
+      },
+      buildId: ctx.adapterOutput.buildId,
+      config: ctx.adapterOutput.config,
+      relativeProjectDir: ctx.adapterOutput.relativeProjectDir,
+      relativeAppDir: ctx.relativeAppDir,
+      publicPathnames: await ctx.getPublicPathnames(),
+    }
     await writeFile(
       join(ctx.serverHandlerDir, ADAPTER_MANIFEST_FILE),
-      JSON.stringify({
-        routing: ctx.adapterOutput.routing,
-        outputs: ctx.adapterOutput.outputs,
-        buildId: ctx.adapterOutput.buildId,
-        config: ctx.adapterOutput.config,
-        relativeProjectDir: ctx.adapterOutput.relativeProjectDir,
-        relativeAppDir: ctx.relativeAppDir,
-        publicPathnames: await ctx.getPublicPathnames(),
-      }),
+      JSON.stringify(manifest),
       'utf-8',
     )
 

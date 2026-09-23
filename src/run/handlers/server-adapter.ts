@@ -5,7 +5,6 @@ import { resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import type { Span } from '@opentelemetry/api'
-import type { AdapterOutput } from 'next-with-adapters'
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import { getIsPossibleServerAction } from 'next-with-adapters/dist/server/lib/server-action-request-meta.js'
@@ -31,6 +30,7 @@ import type {
 } from '../../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../../adapter-runtime-shared/proxy-external-rewrite.js'
 import { HtmlBlob } from '../../shared/blob-types.cjs'
+import type { AdapterManifestComputeOutput } from '../config.js'
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
@@ -144,13 +144,7 @@ const ssgSourcePages = new Set(
 )
 const ssgPathnames = new Set<string>()
 
-function createInvokeHandler(
-  output:
-    | AdapterOutput['PAGES']
-    | AdapterOutput['PAGES_API']
-    | AdapterOutput['APP_PAGE']
-    | AdapterOutput['APP_ROUTE'],
-): Handler {
+function createInvokeHandler(output: AdapterManifestComputeOutput): Handler {
   return invokeHandler.bind(null, {
     id: output.id,
     entrypoint: output.filePath,

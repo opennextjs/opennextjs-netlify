@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
+import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
@@ -16,12 +17,30 @@ export type RunConfig = {
 }
 
 /**
+ * Fields of a compute output that route resolution needs. The raw adapter output additionally
+ * carries `assets`/`assetsHashes`, which are only used for build-time file copying and account for
+ * ~96% of its serialized size, so the manifest is projected down to this (see writeAdapterManifest).
+ */
+export type AdapterManifestComputeOutput = Pick<
+  AdapterOutput['PAGES'],
+  'id' | 'pathname' | 'sourcePage' | 'runtime' | 'filePath'
+>
+
+/**
  * Subset of the adapter output that is needed at runtime for route resolution
  */
 export type AdapterManifest = Pick<
   AdapterBuildCompleteContext,
-  'routing' | 'outputs' | 'buildId' | 'config'
+  'routing' | 'buildId' | 'config'
 > & {
+  outputs: {
+    pages: AdapterManifestComputeOutput[]
+    pagesApi: AdapterManifestComputeOutput[]
+    appPages: AdapterManifestComputeOutput[]
+    appRoutes: AdapterManifestComputeOutput[]
+    prerenders: Pick<AdapterOutput['PRERENDER'], 'id' | 'pathname' | 'parentOutputId'>[]
+    staticFiles: Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'>[]
+  }
   // key Next.js uses for RouterServerContext lookups, see adapter.ts
   relativeProjectDir: string
   // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)
