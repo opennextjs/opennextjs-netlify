@@ -286,14 +286,20 @@ async function writeRoutingEdgeFunctionEntry(
     join(handlerDirectory, `${handlerName}.js`),
     `
     import { runNextRouting } from './adapter-runtime-edge/middleware.js';
-    import middlewareHandler from './server/middleware.js';
     import routingConfig from './routing-config.json' with { type: 'json' };
 
     const nextConfig = ${JSON.stringify(minimalNextConfig)};
 
+    let middlewareHandlerPromise = undefined
+
     const middlewareConfig = {
       enabled: true,
-      load: () => Promise.resolve(middlewareHandler),
+      load: () => {
+        if (!middlewareHandlerPromise) {
+          middlewareHandlerPromise = import('./server/middleware.js').then(mod => mod.default)
+        }
+        return middlewareHandlerPromise
+      }
     };
 
     export default (req, context) => runNextRouting(req, context, routingConfig, middlewareConfig, nextConfig);
