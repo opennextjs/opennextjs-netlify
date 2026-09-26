@@ -513,6 +513,22 @@ async function servePrerenderGroup(
     }
   }
 
+  // a PPR group's `.rsc` has no body of its own (its output's fallback has no file): it's a resume
+  if (
+    blob &&
+    !blob.variants[variant.pathname] &&
+    blob.postponed !== undefined &&
+    group.entry.resumeHeaders
+  ) {
+    const resumed = await resumePrerender(
+      { variant, entry: group.entry, postponed: blob.postponed },
+      args,
+    )
+    if (resumed) {
+      return resumed
+    }
+  }
+
   if (!blob?.variants[variant.pathname]) {
     nextCache = 'MISS'
     blob = await regeneratePrerenderGroup(groupKey, group, params, args)
@@ -564,7 +580,7 @@ async function resumePrerender(
     variant: PrerenderOutput
     entry: PrerenderOutput
     postponed: string
-    stored: PrerenderGroupBlob['variants'][string]
+    stored?: PrerenderGroupBlob['variants'][string]
   },
   args: CommonHandlerArg,
 ): Promise<Response | undefined> {
@@ -579,6 +595,9 @@ async function resumePrerender(
   const resume = { postponed, headers: entry.resumeHeaders }
   if (isRSCRequest) {
     return handler({ ...args, resume })
+  }
+  if (!stored) {
+    return
   }
 
   // the shell goes out right away, the resumed part streams after it once Next produces it
