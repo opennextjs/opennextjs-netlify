@@ -132,7 +132,11 @@ export function applyResolutionToResponse(
   const status = explicitStatus ?? resolution.status ?? response.status
   const matchedPath = status === 200 ? getNextDataMatchedPath(resolution, basePath) : undefined
   if (matchedPath && !headers.has('x-nextjs-matched-path')) {
-    headers.set('x-nextjs-matched-path', matchedPath)
+    // header values can't carry non-Latin-1 characters (`/products/事前レンダリング`)
+    headers.set(
+      'x-nextjs-matched-path',
+      matchedPath.replace(/[^\t\u0020-\u007E]+/g, (run) => encodeURIComponent(run)),
+    )
   }
 
   const finalResponse = new Response(response.body, {
