@@ -116,7 +116,8 @@ test.describe('Dynamic CMS', () => {
 
   test.describe('Invalidates getStaticProps redirect from durable cache', () => {
     // using postFix allows to rerun tests without having to redeploy the app because paths/keys will be unique for each test run
-    const postFix = Date.now()
+    // (and distinct from the 404 tests above, whose `Date.now()` can be the same)
+    const postFix = `${Date.now()}-redirect`
     for (const { label, contentKey, expectedCacheTag, urlPath, pathToRevalidate, isPageData } of [
       {
         label:
