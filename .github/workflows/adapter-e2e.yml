@@ -30,7 +30,7 @@ on:
   #   - cron: '0 2 * * *'
 
 # The Actions list is otherwise identical for the two modes.
-run-name: test-e2e-deploy (${{ inputs.adapterMode && 'adapter' || 'standalone' }}, ${{ inputs.nextjsRepo }}@${{ inputs.nextjsRef }})
+run-name: test-e2e-deploy (${{ inputs.adapterMode && 'adapter-minimal-mode' || 'standalone' }}, ${{ inputs.nextjsRepo }}@${{ inputs.nextjsRef }})
 
 jobs:
   build:
@@ -211,7 +211,7 @@ jobs:
             "nextjsSha": "$NEXT_SHA",
             "nextjsVersion": "$NEXT_VERSION",
             "nextjsFromSource": $BUILD_NEXTJS,
-            "mode": "${{ inputs.adapterMode && 'adapter' || 'standalone' }}"
+            "mode": "${{ inputs.adapterMode && 'adapter-minimal-mode' || 'standalone' }}"
           }
           JSON
           cat adapter/adapter-e2e-metadata.json
