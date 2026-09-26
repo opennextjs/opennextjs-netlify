@@ -11,6 +11,7 @@ import {
   decodePageBlobKey,
   generateRandomObjectID,
   getBlobEntries,
+  isAdapterMode,
   startMockBlobStore,
 } from '../utils/helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
@@ -34,22 +35,26 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
   await runPlugin(ctx)
 
   const entries = await getBlobEntries(ctx)
-  expect(entries.map(({ key }) => decodePageBlobKey(key, 50)).sort()).toEqual([
-    '/fallback-true/[slug]',
-    '/fallback-true/prerendered',
-    '/products/an-incredibly-long-product-',
-    '/products/prerendered',
-    '/products/事前レンダリング,te',
-    '/static/revalidate-automatic',
-    '/static/revalidate-manual',
-    '/static/revalidate-slow',
-    '/static/revalidate-slow-data',
-    '404.html',
-    '500.html',
-    'fallback-true/[slug].html',
-    'static/fully-static.html',
-    // the real key is much longer and ends in a hash, but we only assert on the first 50 chars to make it easier
-  ])
+  expect(entries.map(({ key }) => decodePageBlobKey(key, 50)).sort()).toEqual(
+    [
+      '/fallback-true/[slug]',
+      '/fallback-true/prerendered',
+      '/products/an-incredibly-long-product-',
+      '/products/prerendered',
+      '/products/事前レンダリング,te',
+      // the adapter output has a prerender (404.html) for the `notFound: true` page
+      isAdapterMode ? '/static/not-found' : undefined,
+      '/static/revalidate-automatic',
+      '/static/revalidate-manual',
+      '/static/revalidate-slow',
+      '/static/revalidate-slow-data',
+      '404.html',
+      '500.html',
+      'fallback-true/[slug].html',
+      'static/fully-static.html',
+      // the real key is much longer and ends in a hash, but we only assert on the first 50 chars to make it easier
+    ].filter(Boolean),
+  )
 
   // test that it should request the 404.html file
   const call1 = await invokeFunction(ctx, { url: 'static/revalidate-not-existing' })
