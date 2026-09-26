@@ -38,7 +38,7 @@ export type AdapterManifest = Pick<
     pagesApi: AdapterManifestComputeOutput[]
     appPages: AdapterManifestComputeOutput[]
     appRoutes: AdapterManifestComputeOutput[]
-    prerenders: Pick<AdapterOutput['PRERENDER'], 'id' | 'pathname' | 'parentOutputId'>[]
+    prerenders: Pick<AdapterOutput['PRERENDER'], 'id' | 'pathname' | 'parentOutputId' | 'route'>[]
     staticFiles: Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'>[]
   }
   // key Next.js uses for RouterServerContext lookups, see adapter.ts

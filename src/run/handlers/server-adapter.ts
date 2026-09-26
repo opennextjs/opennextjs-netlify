@@ -103,9 +103,16 @@ const basePath = manifest.config.basePath || ''
 // `@next/routing` resolves requests to these pathnames as given, so they double as handler keys
 const routablePathnames: ResolveRoutesParams['pathnames'] = []
 type RoutablePathnameType = Exclude<ResolveRoutesParams['pathnames'][number], string>['type']
-function registerHandler(pathname: string, type: RoutablePathnameType, handler: Handler) {
+function registerHandler(
+  pathname: string,
+  type: RoutablePathnameType,
+  handler: Handler,
+  route?: string,
+) {
   handlerDefsByPathname.set(pathname, handler)
-  routablePathnames.push({ pathname, type })
+  routablePathnames.push(
+    route && route !== pathname ? { pathname, type, route } : { pathname, type },
+  )
 }
 
 type InvokeHandlerArg = {
@@ -168,7 +175,9 @@ for (const output of manifest.outputs.prerenders) {
       `Prerender output ${output.id} has parentOutputId ${output.parentOutputId} which does not exist`,
     )
   }
-  registerHandler(output.pathname, 'PRERENDER', parentHandler)
+  // params come from the route a prerender renders: `/en/posts/[slug]` may be a shell of
+  // `/[locale]/posts/[slug]`
+  registerHandler(output.pathname, 'PRERENDER', parentHandler, output.route)
   if (staticPageOutputIds.has(output.parentOutputId)) {
     readOnlyPathnames.add(output.pathname)
   }

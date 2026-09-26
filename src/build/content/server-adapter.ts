@@ -45,10 +45,11 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         appPages: ctx.adapterOutput.outputs.appPages.map(computeOutput),
         appRoutes: ctx.adapterOutput.outputs.appRoutes.map(computeOutput),
         prerenders: ctx.adapterOutput.outputs.prerenders.map(
-          ({ id, pathname, parentOutputId }) => ({
+          ({ id, pathname, parentOutputId, route }) => ({
             id,
             pathname,
             parentOutputId,
+            route,
           }),
         ),
         staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) => ({

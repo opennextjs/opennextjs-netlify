@@ -313,7 +313,7 @@ async function writeRoutingEdgeFunctionEntry(
  */
 function collectPathnames(
   adapterOutput: AdapterBuildCompleteContext,
-): Array<{ pathname: string; type: string }> {
+): Array<{ pathname: string; type: string; route?: string }> {
   const { outputs } = adapterOutput
   return [
     ...outputs.pages,
@@ -322,5 +322,11 @@ function collectPathnames(
     ...outputs.appRoutes,
     ...outputs.prerenders,
     ...outputs.staticFiles,
-  ].map(({ pathname, type }) => ({ pathname, type }))
+  ].map((output) =>
+    // params come from the route a prerender renders: `/en/posts/[slug]` may be a shell of
+    // `/[locale]/posts/[slug]`
+    'route' in output && output.route !== output.pathname
+      ? { pathname: output.pathname, type: output.type, route: output.route }
+      : { pathname: output.pathname, type: output.type },
+  )
 }
