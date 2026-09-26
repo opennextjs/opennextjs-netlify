@@ -46,7 +46,17 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         appPages: ctx.adapterOutput.outputs.appPages.map(computeOutput),
         appRoutes: ctx.adapterOutput.outputs.appRoutes.map(computeOutput),
         prerenders: ctx.adapterOutput.outputs.prerenders.map(
-          ({ id, pathname, parentOutputId, route, groupId, config, routeType, ...output }) => ({
+          ({
+            id,
+            pathname,
+            parentOutputId,
+            route,
+            groupId,
+            config,
+            routeType,
+            pprChain,
+            ...output
+          }) => ({
             id,
             pathname,
             parentOutputId,
@@ -57,6 +67,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
             bypassToken: config.bypassToken,
             isGroupEntry: routeType !== undefined,
             fallbackShell: isFallbackShell({ routeType, ...output }),
+            resumeHeaders: pprChain?.headers,
           }),
         ),
         staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) => ({

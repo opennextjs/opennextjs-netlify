@@ -47,6 +47,8 @@ export type AdapterManifest = Pick<
         isGroupEntry: boolean
         // a static shell to serve while the path is not generated (`fallback: true`)
         fallbackShell: boolean
+        // PPR: headers of the request resuming a postponed render (`next-resume: 1`)
+        resumeHeaders?: Record<string, string>
       })[]
     staticFiles: Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'>[]
   }

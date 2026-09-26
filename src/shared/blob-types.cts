@@ -26,6 +26,8 @@ export type PrerenderGroupBlob = {
   expire: number | undefined
   tags: string[]
   variants: Record<string, { status: number; headers: Record<string, string>; body: string }>
+  // PPR: the shell's postponed state, to resume the rest of the page with
+  postponed?: string
 }
 
 export const getPrerenderGroupBlobKey = (entryPathname: string) =>

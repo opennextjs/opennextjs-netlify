@@ -438,6 +438,7 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
               body: body.toString('base64'),
             }
           }
+          group.postponed = entry.fallback?.postponedState
           group.tags = getPrerenderGroupTags(
             entry.pathname,
             group.variants[entry.pathname]?.headers['x-next-cache-tags'],
