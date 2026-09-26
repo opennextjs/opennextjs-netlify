@@ -104,7 +104,10 @@ test.describe('Dynamic CMS', () => {
         expect(response3?.status()).toEqual(404)
         expect(headers3['cache-control']).toEqual('public,max-age=0,must-revalidate')
         expect(headers3['cache-status']).toMatch(
-          /"Next.js"; fwd=miss\s*(,|\n)\s*"Netlify Durable"; fwd=stale; ttl=[0-9]+; stored\s*(,|\n)\s*"Netlify Edge"; fwd=(stale|miss)/,
+          // adapter mode serves the 404 the revalidation stored, like the 200 above
+          process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+            ? /"Next.js"; hit\s*(,|\n)\s*"Netlify Durable"; fwd=stale; ttl=[0-9]+; stored\s*(,|\n)\s*"Netlify Edge"; fwd=(stale|miss)/
+            : /"Next.js"; fwd=miss\s*(,|\n)\s*"Netlify Durable"; fwd=stale; ttl=[0-9]+; stored\s*(,|\n)\s*"Netlify Edge"; fwd=(stale|miss)/,
         )
         expect(headers3['debug-netlify-cache-tag']).toEqual(expectedCacheTag)
         expect(headers3['debug-netlify-cdn-cache-control']).toMatch(

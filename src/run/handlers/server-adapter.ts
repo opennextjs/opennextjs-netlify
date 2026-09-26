@@ -434,11 +434,6 @@ async function servePrerenderGroup(
   )
   const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
   let blob = await store.get<PrerenderGroupBlob>(groupKey, 'prerenderGroup.get')
-  // like Next, a not-found (`notFound: true`) isn't served from the cache but rendered again; it is
-  // still stored, so that an earlier version of the page can't come back
-  if (blob?.variants[group.entry.pathname]?.status === 404) {
-    blob = null
-  }
   let nextCache: 'HIT' | 'STALE' | 'MISS' = 'HIT'
 
   if (onDemand) {
