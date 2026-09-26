@@ -45,6 +45,22 @@ describe('page router', () => {
     console.time('runPlugin')
     await runPlugin(ctx)
     console.timeEnd('runPlugin')
+    // Build output is fresh as of the build (see prerendered.ts): the first request is a hit, not a
+    // regeneration.
+    const fresh = await invokeFunction(ctx, { url: 'static/revalidate-automatic' })
+    expect(fresh.statusCode).toBe(200)
+    expect(fresh.headers, 'prerendered page served fresh from the build').toEqual(
+      expect.objectContaining({
+        'cache-status': '"Next.js"; hit',
+        'netlify-cdn-cache-control': expect.stringMatching(
+          /(max-age|s-maxage)=5, stale-while-revalidate=/,
+        ),
+      }),
+    )
+    ctx.blobServerOnRequestSpy.mockClear()
+
+    // let the build entries go stale (revalidate-slow has a 10s TTL): the flow below is stale → swr
+    await new Promise<void>((resolve) => setTimeout(resolve, 11_000))
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
     expect(blobEntries.map(({ key }) => decodeBlobKey(key.substring(0, 50))).sort()).toEqual([
@@ -69,8 +85,7 @@ describe('page router', () => {
     const call1Date = load(call1.body)('[data-testid="date-now"]').text()
     expect(call1.statusCode).toBe(200)
     expect(load(call1.body)('h1').text()).toBe('Show #71')
-    // Prerendered content is always cached as expired, so first invocation will
-    // be stale, while fresh is generated in background
+    // past `revalidate`, so the first invocation is stale while fresh is generated in background
     expect(call1.headers, 'a stale page served with swr').toEqual(
       expect.objectContaining({
         'cache-status': '"Next.js"; hit; fwd=stale',
@@ -214,6 +229,22 @@ describe('app router', () => {
     console.time('runPlugin')
     await runPlugin(ctx)
     console.timeEnd('runPlugin')
+    // Build output is fresh as of the build (see prerendered.ts): the first request is a hit, not a
+    // regeneration.
+    const fresh = await invokeFunction(ctx, { url: 'posts/1' })
+    expect(fresh.statusCode).toBe(200)
+    expect(fresh.headers, 'prerendered page served fresh from the build').toEqual(
+      expect.objectContaining({
+        'cache-status': '"Next.js"; hit',
+        'netlify-cdn-cache-control': expect.stringMatching(
+          /(max-age|s-maxage)=5, stale-while-revalidate=/,
+        ),
+      }),
+    )
+    ctx.blobServerOnRequestSpy.mockClear()
+
+    // let the build entry go stale: the flow below is stale → swr
+    await new Promise<void>((resolve) => setTimeout(resolve, 6_000))
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
     expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
@@ -398,6 +429,22 @@ describe('route', () => {
   test<FixtureTestContext>('route handler with cacheable response', async (ctx) => {
     await createFixture('server-components', ctx)
     await runPlugin(ctx)
+    // Build output is fresh as of the build (see prerendered.ts): the first request is a hit, not a
+    // regeneration.
+    const fresh = await invokeFunction(ctx, { url: '/api/revalidate-handler' })
+    expect(fresh.statusCode).toBe(200)
+    expect(fresh.headers, 'prerendered route served fresh from the build').toEqual(
+      expect.objectContaining({
+        'cache-status': '"Next.js"; hit',
+        'netlify-cdn-cache-control': expect.stringMatching(
+          /(max-age|s-maxage)=7, stale-while-revalidate=/,
+        ),
+      }),
+    )
+    ctx.blobServerOnRequestSpy.mockClear()
+
+    // let the build entry go stale: the flow below is stale → swr
+    await new Promise<void>((resolve) => setTimeout(resolve, 8_000))
 
     // check if the route got prerendered
     const blobEntry = await ctx.blobStore.get(encodeBlobKey('/api/revalidate-handler'), {

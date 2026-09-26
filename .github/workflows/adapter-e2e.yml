@@ -7,11 +7,11 @@ on:
     inputs:
       nextjsRepo:
         description: "Next.js repo (owner/name) — e.g. a fork carrying test changes"
-        default: "vercel/next.js"
+        default: "pieh/next.js"
         type: string
       nextjsRef:
         description: "Next.js repo ref (branch/tag/SHA)"
-        default: "canary"
+        default: "e2e-tests-adjustments"
         type: string
       # Uncheck to test a fixture or adapter change against published next
       # without paying for a Rust compile.
@@ -19,8 +19,18 @@ on:
         description: "Build Next.js + next-swc from source (default: install published next from npm)"
         default: false
         type: boolean
+      # Same switch run-tests.yml's matrix flips: NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true
+      # makes onPreBuild hand next.js the adapter (src/index.ts) instead of the
+      # standalone output path.
+      adapterMode:
+        description: "Run the adapter in adapter mode (NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true) instead of standalone"
+        default: true
+        type: boolean
   # schedule:
   #   - cron: '0 2 * * *'
+
+# The Actions list is otherwise identical for the two modes.
+run-name: test-e2e-deploy (${{ inputs.adapterMode && 'adapter' || 'standalone' }}, ${{ inputs.nextjsRepo }}@${{ inputs.nextjsRef }})
 
 jobs:
   build:
@@ -47,7 +57,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
 
       - uses: denoland/setup-deno@v2
         with:
@@ -200,7 +210,8 @@ jobs:
             "nextjsRef": "${{ inputs.nextjsRef }}",
             "nextjsSha": "$NEXT_SHA",
             "nextjsVersion": "$NEXT_VERSION",
-            "nextjsFromSource": $BUILD_NEXTJS
+            "nextjsFromSource": $BUILD_NEXTJS,
+            "mode": "${{ inputs.adapterMode && 'adapter' || 'standalone' }}"
           }
           JSON
           cat adapter/adapter-e2e-metadata.json
@@ -263,7 +274,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
 
       - uses: denoland/setup-deno@v2
         with:
@@ -327,6 +338,27 @@ jobs:
             echo "@next/env: published (from npm)"
           fi
 
+      # `run-tests.js --timings --group N/16` bin-packs the shards from a
+      # `{ test file: seconds }` map it reads as test-timings.json in its cwd (nextjs).
+      # Without one it splits round-robin, which is what leaves shards finishing tens of
+      # minutes apart — the map totals ~7.4h, so a balanced split is ~28m a shard.
+      #
+      # The file is committed here rather than fetched: it is derived data that changes
+      # only when we regenerate it (from the ingest app's Timings tab, which takes the
+      # median per file over recent runs), and a committed copy keeps the test job free of
+      # a network dependency it would have to tolerate failing anyway.
+      #
+      # Tolerated as missing on purpose: a stale or deleted file should cost the run a
+      # worse split, not fail all 16 shards over an optimisation.
+      - name: Use committed test timings
+        run: |
+          if [ -f adapter/test-timings.json ]; then
+            cp adapter/test-timings.json nextjs/test-timings.json
+            echo "timings: $(node -p 'Object.keys(require("./nextjs/test-timings.json")).length') files"
+          else
+            echo "no adapter/test-timings.json — shards will be split round-robin"
+          fi
+
       - name: Run deploy tests
         working-directory: nextjs
         env:
@@ -334,6 +366,11 @@ jobs:
           ADAPTER_TARBALL: ${{ github.workspace }}/adapter/adapter-package.tgz
           IS_TURBOPACK_TEST: 1
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          # Reaches each fixture's build by inheritance alone: run-tests.js -> jest
+          # -> next-deploy.ts (execa, ...process.env) -> e2e-deploy.sh -> `netlify
+          # deploy` -> plugin child, where onPreBuild reads it. Empty rather than
+          # "false" in standalone mode: src/index.ts checks truthiness.
+          NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ inputs.adapterMode && 'true' || '' }}
           NETLIFY_SITE_ID: 1d5a5c76-d445-4ae5-b694-b0d3f2e2c395
           NEXT_E2E_TEST_TIMEOUT: 240000
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json

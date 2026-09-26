@@ -56,17 +56,27 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
   expect(call1.statusCode).toBe(404)
   expect(load(call1.body)('p').text()).toBe('Custom 404 page')
 
-  // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
-  // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that it
-  // would not
-  const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
-  expect(call1.headers, 'a cache hit on the first invocation of a prerendered page').toEqual(
-    expect.objectContaining({
-      'netlify-cdn-cache-control':
-        (shouldHavePrivateDirective ? 'private, ' : '') +
-        'no-cache, no-store, max-age=0, must-revalidate, durable',
-    }),
-  )
+  if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+    // The 404 page is build output that only a deploy can change, so it is served with the static
+    // file's cache headers rather than re-rendered per request (see `cache 404s`).
+    expect(call1.headers, 'a cache hit on the first invocation of a prerendered page').toEqual(
+      expect.objectContaining({
+        'netlify-cdn-cache-control': 'max-age=31536000, durable',
+      }),
+    )
+  } else {
+    // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
+    // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that it
+    // would not
+    const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
+    expect(call1.headers, 'a cache hit on the first invocation of a prerendered page').toEqual(
+      expect.objectContaining({
+        'netlify-cdn-cache-control':
+          (shouldHavePrivateDirective ? 'private, ' : '') +
+          'no-cache, no-store, max-age=0, must-revalidate, durable',
+      }),
+    )
+  }
 })
 
 test<FixtureTestContext>('linked static resources are placed in correct place in publish directory (no basePath)', async (ctx) => {

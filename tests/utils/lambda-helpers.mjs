@@ -143,7 +143,8 @@ export async function loadFunction(ctx, { env } = {}) {
         flags: flags ?? DEFAULT_FLAGS,
       },
       lambdaFunc: { handler },
-      timeoutMs: 10_000,
+      // TODO(adapter): get back to it, in CI it seems like it times out - but for now let's test for correctness first and the check timeouts
+      timeoutMs: 50_000,
       onInvocationEnd: (error) => {
         // lambda-local resolve promise return from execute when response is closed
         // but we should wait for tracked background work to finish

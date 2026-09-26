@@ -6,6 +6,7 @@ import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import { glob } from 'fast-glob'
 
+import { copyNextServerCodeFromAdapter } from '../content/server-adapter.js'
 import {
   copyNextDependencies,
   copyNextServerCode,
@@ -23,12 +24,17 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
     // we need to copy them to the functions-internal folder
     const { included_files: includedFiles = [] } = ctx.netlifyConfig.functions?.['*'] || {}
 
+    // included_files globs are relative to process.cwd() and the app dir relative to that is
+    // PACKAGE_PATH. In adapter mode relativeAppDir is relative to Next's repoRoot (the git root),
+    // which differs from cwd when a base dir is set, so it can't be used to strip the app dir here.
+    const appDirFromCwd = ctx.hasAdapter() ? ctx.constants.PACKAGE_PATH || '' : ctx.relativeAppDir
+
     // we also force including the .env files to ensure those are available in the lambda
     includedFiles.push(
-      posixJoin(ctx.relativeAppDir, '.env'),
-      posixJoin(ctx.relativeAppDir, '.env.production'),
-      posixJoin(ctx.relativeAppDir, '.env.local'),
-      posixJoin(ctx.relativeAppDir, '.env.production.local'),
+      posixJoin(appDirFromCwd, '.env'),
+      posixJoin(appDirFromCwd, '.env.production'),
+      posixJoin(appDirFromCwd, '.env.local'),
+      posixJoin(appDirFromCwd, '.env.production.local'),
     )
 
     span.setAttribute('next.includedFiles', includedFiles.join(','))
@@ -44,7 +50,7 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
           // The distDir must not be the package path therefore we need to rely on the
           // serverHandlerDir instead of the serverHandlerRootDir
           // therefore we need to remove the package path from the filePath
-          join(ctx.serverHandlerDir, relative(ctx.relativeAppDir, filePath)),
+          join(ctx.serverHandlerDir, relative(appDirFromCwd, filePath)),
           {
             recursive: true,
             force: true,
@@ -53,16 +59,17 @@ const copyHandlerDependencies = async (ctx: PluginContext) => {
       )
     }
 
+    const fileList = await glob('dist/**/*', { cwd: ctx.pluginDir })
+
     // We need to create a package.json file with type: module to make sure that the runtime modules
-    // are handled correctly as ESM modules
+    // are handled correctly as ESM modules. Pushed after the await above so a rejection can't go
+    // unhandled while the glob is pending (e.g. when the build fails and the dir is cleaned up).
     promises.push(
       writeFile(
         join(ctx.serverHandlerRuntimeModulesDir, 'package.json'),
         JSON.stringify({ type: 'module' }),
       ),
     )
-
-    const fileList = await glob('dist/**/*', { cwd: ctx.pluginDir })
 
     for (const filePath of fileList) {
       promises.push(
@@ -81,7 +88,7 @@ const writeHandlerManifest = async (ctx: PluginContext) => {
     join(ctx.serverHandlerRootDir, `${SERVER_HANDLER_NAME}.json`),
     JSON.stringify({
       config: {
-        name: 'Next.js Server Handler',
+        name: ctx.hasAdapter() ? 'Next.js Adapter Server Handler' : 'Next.js Server Handler',
         generator: `${ctx.pluginName}@${ctx.pluginVersion}`,
         nodeBundler: 'none',
         // the folders can vary in monorepos based on the folder structure of the user so we have to glob all
@@ -107,6 +114,15 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
   const templateVariables: Record<string, string> = {
     '{{useRegionalBlobs}}': ctx.useRegionalBlobs.toString(),
   }
+
+  // Adapter mode uses a dedicated template that works for both monorepo and non-monorepo setups
+  if (ctx.hasAdapter()) {
+    const template = await readFile(join(templatesDir, 'handler-adapter.tmpl.js'), 'utf-8')
+    templateVariables['{{cwd}}'] = posixJoin(ctx.relativeAppDir)
+    templateVariables['{{runtimeModulesDir}}'] = `./${posixJoin(ctx.relativeAppDir, '.netlify')}`
+    return applyTemplateVariables(template, templateVariables)
+  }
+
   // In this case it is a monorepo and we need to use a own template for it
   // as we have to change the process working directory
   if (ctx.relativeAppDir.length !== 0) {
@@ -140,12 +156,19 @@ export const createServerHandler = async (ctx: PluginContext) => {
   await tracer.withActiveSpan('createServerHandler', async () => {
     await mkdir(join(ctx.serverHandlerRuntimeModulesDir), { recursive: true })
 
-    await copyNextServerCode(ctx)
-    await copyNextDependencies(ctx)
+    if (ctx.hasAdapter()) {
+      await copyNextServerCodeFromAdapter(ctx)
+    } else {
+      await copyNextServerCode(ctx)
+      await copyNextDependencies(ctx)
+    }
+
     await copyHandlerDependencies(ctx)
     await writeHandlerManifest(ctx)
     await writeHandlerFile(ctx)
 
-    await verifyHandlerDirStructure(ctx)
+    if (!ctx.hasAdapter()) {
+      await verifyHandlerDirStructure(ctx)
+    }
   })
 }

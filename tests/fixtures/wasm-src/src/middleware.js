@@ -2,8 +2,8 @@ import wasm from './add.wasm?module'
 const instance$ = WebAssembly.instantiate(wasm)
 
 async function increment(a) {
-  const { instance } = await instance$
-  return instance.exports.add_one(a)
+  const { exports } = await instance$
+  return exports.add_one(a)
 }
 export default async function middleware(request) {
   const input = Number(request.nextUrl.searchParams.get('input')) || 1

@@ -8,6 +8,7 @@ const nextConfig = {
   experimental: {
     nodeMiddleware: true,
   },
+  generateBuildId: () => 'build-id',
   webpack: (config) => {
     // this is a trigger to generate multiple `.next/server/middleware-[hash].js` files instead of
     // single `.next/server/middleware.js` file

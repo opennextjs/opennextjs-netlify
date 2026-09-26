@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
@@ -12,6 +12,30 @@ import { PluginContext } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
+
+// `@next/routing` keeps `matchRoute` internal, and for rules with no `has`/`missing`/destination/
+// status it is just the source regex plus placeholder substitution in the header key and value
+// (`$1` per path segment, `$name` for a named group in an internal rule's regex).
+const matchHeaderRoute = (
+  route: { sourceRegex: string; headers?: Record<string, string> },
+  pathname: string,
+): Record<string, string> | undefined => {
+  const matches = pathname.match(new RegExp(route.sourceRegex))
+  if (!matches) {
+    return undefined
+  }
+  // one pass, so a captured value that looks like a placeholder is not substituted again
+  const replace = (value: string) =>
+    value.replace(/\$([A-Za-z_]\w*|[1-9]\d*)/g, (placeholder, name: string) => {
+      const index = Number(name)
+      return Number.isInteger(index) && index > 0 && index < matches.length
+        ? (matches[index] ?? '')
+        : (matches.groups?.[name] ?? placeholder)
+    })
+  return Object.fromEntries(
+    Object.entries(route.headers ?? {}).map(([key, value]) => [replace(key), replace(value)]),
+  )
+}
 
 /**
  * Assemble the static content for being uploaded to the blob storage
@@ -67,8 +91,72 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
           recursive: true,
         })
       }
-      if (existsSync(join(ctx.publishDir, 'static'))) {
-        await cp(join(ctx.publishDir, 'static'), join(ctx.staticDir, basePath, '_next/static'), {
+      const { adapterOutput, relativeAppDir, staticDir, netlifyConfig, publishDir } = ctx
+      if (adapterOutput) {
+        // the adapter output lists `<distDir>/static` and the static metadata routes (robots.txt,
+        // sitemap.xml, manifest.webmanifest, static opengraph-image...) that Next writes to
+        // `server/app/<route>.body`; `public/` is not in it (copied above). Static HTML pages stay
+        // on blobs: the function handles their 404 status and durable caching.
+        const { repoRoot, config, outputs, routing } = adapterOutput
+        const distDir = join(relativeAppDir, config.distDir)
+        const cdnServedPrefixes = [`${distDir}/static/`, `${distDir}/server/app/`]
+        // `headers()` from next.config: the routing tables apply them before middleware runs, but a
+        // file the CDN serves never reaches routing, so bake them into the deploy config. Rules with
+        // `has`/`missing` conditions or a status (the internal redirects) can't be evaluated here.
+        const headerRoutes = routing.beforeMiddleware.filter(
+          (route) =>
+            route.headers && !route.destination && !route.status && !route.has && !route.missing,
+        )
+        await Promise.all(
+          outputs.staticFiles.map(async (output) => {
+            // filePaths are repoRoot-relative once normalizeAdapterOutput ran, absolute before
+            const filePath = isAbsolute(output.filePath)
+              ? relative(repoRoot, output.filePath)
+              : output.filePath
+            if (!cdnServedPrefixes.some((prefix) => filePath.startsWith(prefix))) {
+              return
+            }
+            const src = join(repoRoot, filePath)
+            const dest = join(staticDir, output.pathname)
+            await mkdir(dirname(dest), { recursive: true })
+            await cp(src, dest)
+            const configHeaders = Object.assign(
+              {},
+              ...headerRoutes.map((route) => matchHeaderRoute(route, output.pathname) ?? {}),
+            ) as Record<string, string>
+
+            if (!filePath.endsWith('.body')) {
+              if (Object.keys(configHeaders).length !== 0) {
+                netlifyConfig.headers.push({ for: output.pathname, values: configHeaders })
+              }
+              return
+            }
+            // the adapter output has no headers for STATIC_FILE outputs, Next's `.meta` sidecar has
+            // the ones the route handler set (the CDN would guess `.webmanifest` wrong). Internal
+            // `x-next-*` ones (cache tags) mean nothing for a file the CDN serves.
+            let headers: Record<string, string> = {}
+            try {
+              const meta = JSON.parse(
+                await readFile(`${src.slice(0, -'.body'.length)}.meta`, 'utf-8'),
+              ) as { headers?: Record<string, string> }
+              headers = meta.headers ?? {}
+            } catch {
+              // no sidecar: the CDN's extension-based content-type will have to do
+            }
+            const values = {
+              ...Object.fromEntries(
+                Object.entries(headers).filter(([name]) => !name.startsWith('x-next-')),
+              ),
+              // `headers()` wins over what the route handler set, like in Next
+              ...configHeaders,
+            }
+            if (Object.keys(values).length !== 0) {
+              netlifyConfig.headers.push({ for: output.pathname, values })
+            }
+          }),
+        )
+      } else if (existsSync(join(publishDir, 'static'))) {
+        await cp(join(publishDir, 'static'), join(staticDir, basePath, '_next/static'), {
           recursive: true,
         })
       }

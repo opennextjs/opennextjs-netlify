@@ -3,13 +3,50 @@ import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
+import type { AdapterOutput } from 'next-with-adapters'
 
-import { PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
+import type { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
+
+import { ADAPTER_MANIFEST_FILE, PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
 import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
 
 export type RunConfig = {
   nextConfig: NextConfigComplete
+  nextVersion: string | null
   enableUseCacheHandler: boolean
+}
+
+/**
+ * Fields of a compute output that route resolution needs. The raw adapter output additionally
+ * carries `assets`/`assetsHashes`, which are only used for build-time file copying and account for
+ * ~96% of its serialized size, so the manifest is projected down to this (see writeAdapterManifest).
+ */
+export type AdapterManifestComputeOutput = Pick<
+  AdapterOutput['PAGES'],
+  'id' | 'pathname' | 'sourcePage' | 'runtime' | 'filePath'
+>
+
+/**
+ * Subset of the adapter output that is needed at runtime for route resolution
+ */
+export type AdapterManifest = Pick<
+  AdapterBuildCompleteContext,
+  'routing' | 'buildId' | 'config'
+> & {
+  outputs: {
+    pages: AdapterManifestComputeOutput[]
+    pagesApi: AdapterManifestComputeOutput[]
+    appPages: AdapterManifestComputeOutput[]
+    appRoutes: AdapterManifestComputeOutput[]
+    prerenders: Pick<AdapterOutput['PRERENDER'], 'id' | 'pathname' | 'parentOutputId' | 'route'>[]
+    staticFiles: Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'>[]
+  }
+  // key Next.js uses for RouterServerContext lookups, see adapter.ts
+  relativeProjectDir: string
+  // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)
+  relativeAppDir: string
+  // `public/` files: the CDN serves them, but routing needs to know they exist (see getPublicPathnames)
+  publicPathnames: string[]
 }
 
 /**
@@ -17,6 +54,17 @@ export type RunConfig = {
  */
 export const getRunConfig = async () => {
   return JSON.parse(await readFile(resolve(PLUGIN_DIR, RUN_CONFIG_FILE), 'utf-8')) as RunConfig
+}
+
+/**
+ * Get the adapter manifest written at build time.
+ * Uses the same PLUGIN_DIR resolution as getRunConfig() — both files are
+ * written to ctx.serverHandlerDir during the build.
+ */
+export const getAdapterManifest = async (): Promise<AdapterManifest> => {
+  return JSON.parse(
+    await readFile(resolve(PLUGIN_DIR, ADAPTER_MANIFEST_FILE), 'utf-8'),
+  ) as AdapterManifest
 }
 
 export type NextConfigForMultipleVersions = NextConfigComplete & {
