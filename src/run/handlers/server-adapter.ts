@@ -710,22 +710,14 @@ async function renderErrorPage(
     return new Response(status === 404 ? 'Not Found' : 'Internal Server Error', { status })
   }
 
-  const handlerArgs: CommonHandlerArg = {
+  const response = await handler({
     request: new Request(request.url, { headers: request.headers }),
     requestContext,
     resolution: {},
     tracer,
     span,
     invokeStatus: status,
-  }
-  // a prerendered error page (`getStaticProps` in `pages/404.js`) keeps its revalidate
-  const prerender = prerendersByPathname.get(pathname)
-  const group = prerender?.isGroupEntry ? prerenderGroups.get(prerender.groupId) : undefined
-  const response =
-    (prerender &&
-      group?.entry &&
-      (await servePrerenderGroup(prerender, group as Required<PrerenderGroup>, handlerArgs))) ||
-    (await handler(handlerArgs))
+  })
 
   // The error page keeps the cache headers of whatever rendered it. A static `404.html` is build
   // output that only a deploy can change, and a prerendered not-found carries its own revalidate,
