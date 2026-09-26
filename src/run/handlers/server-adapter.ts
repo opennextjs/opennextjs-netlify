@@ -10,6 +10,7 @@ import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-sh
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import { getIsPossibleServerAction } from 'next-with-adapters/dist/server/lib/server-action-request-meta.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
+import { isBot } from 'next-with-adapters/dist/shared/lib/router/utils/is-bot.js'
 
 import {
   applyResolutionToResponse,
@@ -354,7 +355,8 @@ async function regeneratePrerenderGroup(
   groupKey: string,
   group: Required<PrerenderGroup>,
   params: URLSearchParams,
-  args: CommonHandlerArg,
+  // `onDemandToken`: the regeneration is `res.revalidate()`, which Next reports as on-demand
+  { onDemandToken, ...args }: CommonHandlerArg & { onDemandToken?: string },
 ): Promise<PrerenderGroupBlob> {
   const invocationId = randomUUID()
   const variants: PrerenderGroupBlob['variants'] = {}
@@ -375,7 +377,9 @@ async function regeneratePrerenderGroup(
     url.search = params.toString()
     const response = await handler({
       ...args,
-      request: new Request(url),
+      request: new Request(url, {
+        headers: onDemandToken ? { 'x-prerender-revalidate': onDemandToken } : {},
+      }),
       resolution: {},
       invocationId,
       raw: true,
@@ -435,7 +439,10 @@ async function servePrerenderGroup(
     if (onDemand.onlyGenerated && !blob) {
       return new Response('This page could not be found', { status: 404 })
     }
-    blob = await regeneratePrerenderGroup(groupKey, group, params, args)
+    blob = await regeneratePrerenderGroup(groupKey, group, params, {
+      ...args,
+      onDemandToken: group.entry.bypassToken,
+    })
     requestContext.trackBackgroundWork(purgeEdgeCache(blob.tags))
     nextCache = 'MISS'
   } else if (blob) {
@@ -457,7 +464,14 @@ async function servePrerenderGroup(
     }
   }
 
-  if (!blob && !onDemand && variant === group.entry && group.entry.fallbackShell) {
+  if (
+    !blob &&
+    !onDemand &&
+    variant === group.entry &&
+    group.entry.fallbackShell &&
+    // like Next, crawlers get the page rendered instead
+    !isBot(request.headers.get('user-agent') ?? '')
+  ) {
     // like a CDN serving the prerender's fallback: the client then asks for the path's data, which
     // generates the group
     const shell = await store.get<PrerenderGroupBlob>(
