@@ -148,7 +148,9 @@ export ADAPTER_DEBUG_LOGS=1
 # skip `pnpm pack` for testing as it's slow because of the large native
 # binary"). That covers crates/ and turbopack/crates/, and costs nothing since
 # the binary is already built.
-if ls "$NEXTJS_DIR/packages/next-swc/native/"*.node >/dev/null 2>&1; then
+# E2E_SKIP_LOCAL_SWC=1 when testing published next (NEXT_TEST_VERSION): a local binary built from
+# another revision breaks its build
+if [ "${E2E_SKIP_LOCAL_SWC:-0}" != 1 ] && ls "$NEXTJS_DIR/packages/next-swc/native/"*.node >/dev/null 2>&1; then
   export NEXT_TEST_NATIVE_DIR="$NEXTJS_DIR/packages/next-swc/native"
   echo "→ next-swc: local build ($(cd "$NEXTJS_DIR" && git rev-parse --short HEAD))" >&2
 else
