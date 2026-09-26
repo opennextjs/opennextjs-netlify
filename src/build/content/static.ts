@@ -109,7 +109,7 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
         )
         await Promise.all(
           outputs.staticFiles.map(async (output) => {
-            // filePaths are repoRoot-relative once fixAdapterOutputForNextRouting ran, absolute before
+            // filePaths are repoRoot-relative once normalizeAdapterOutput ran, absolute before
             const filePath = isAbsolute(output.filePath)
               ? relative(repoRoot, output.filePath)
               : output.filePath

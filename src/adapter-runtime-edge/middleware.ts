@@ -19,14 +19,10 @@ import {
   type RequestMeta,
 } from '../../edge-runtime/lib/private-request-meta.ts'
 import {
-  addDefaultLocaleForRouting,
   applyResolutionToResponse,
   getInvocationUrl,
-  normalizeNextDataUrl,
-  preferStaticPathnameAfterRewrite,
   resolveRoutes,
   responseToMiddlewareResult,
-  setNextDataHeader,
   stripInternalRequestHeaders,
 } from '../adapter-runtime-shared/next-routing.js'
 import type { ResolveRoutesResult } from '../adapter-runtime-shared/next-routing.js'
@@ -69,9 +65,8 @@ export interface RoutingConfig {
     fallback: Array<Route>
     shouldNormalizeNextData: boolean
   }
-  pathnames: string[]
-  // static files, `public/` files and API routes: see collectNonLocalizedPathnames at build
-  nonLocalizedPathnames?: string[]
+  // output pathnames with the output type (`public/` files as `STATIC_FILE`), see collectPathnames
+  pathnames: Array<{ pathname: string; type: string }>
   skipProxyUrlNormalize?: boolean
 }
 
@@ -114,6 +109,7 @@ function serializeResolution(resolution: ResolveRoutesResult): string {
     resolvedQuery: resolution.resolvedQuery ?? null,
     invocationTarget: resolution.invocationTarget ?? null,
     routeMatches: resolution.routeMatches ?? null,
+    invocation: resolution.invocation ?? null,
     status: resolution.status ?? null,
     redirect: null,
     externalRewrite: null,
@@ -174,28 +170,25 @@ export async function runNextRouting(
   // since this file runs in Deno without type-checking. The next-routing
   // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
   // the edge function is where a request enters, so this is the boundary Next's router-server
-  // filters at; `x-nextjs-data` is set back from the URL right after
+  // filters at; `resolveRoutes` sets `x-nextjs-data` back from the URL
   // only this function may set the private meta header, a client must not be able to pre-populate
   // it (nor middleware copy it into its request header overrides)
   request.headers.delete(REQUEST_META_HEADER)
 
-  const routingHeaders = setNextDataHeader(
-    stripInternalRequestHeaders(new Headers(request.headers)),
-    url,
-    routingConfig,
-  )
+  const routingHeaders = stripInternalRequestHeaders(new Headers(request.headers))
   // A request body can only be read once, and both middleware and the origin need it. Tee it when
   // middleware actually runs (Next buffers the whole body for the same reason, see
   // `getCloneableBody`/`cloneBodyStream`) and keep the branch nobody read out of the way.
   let originBody = request.body
   const resolution = await resolveRoutes({
-    url: addDefaultLocaleForRouting(url, routingConfig, routingHeaders),
+    url,
     buildId: routingConfig.buildId,
     basePath: routingConfig.basePath,
+    trailingSlash: nextConfig?.trailingSlash,
+    skipMiddlewareUrlNormalize: nextConfig?.skipMiddlewareUrlNormalize,
     requestBody: request.body ?? new ReadableStream(),
     headers: routingHeaders,
-    pathnames: routingConfig.pathnames,
-    nonLocalizedPathnames: routingConfig.nonLocalizedPathnames,
+    pathnames: routingConfig.pathnames as Parameters<typeof resolveRoutes>[0]['pathnames'],
     i18n: (routingConfig.i18n ?? undefined) as Parameters<typeof resolveRoutes>[0]['i18n'],
     routes: routingConfig.routes as Parameters<typeof resolveRoutes>[0]['routes'],
     invokeMiddleware: async (middlewareCtx: MiddlewareContext) => {
@@ -205,28 +198,15 @@ export async function runNextRouting(
         return {}
       }
 
-      // resolveRoutes already checked middlewareMatchers, this is just building the URL middleware sees.
-      // Next.js passes the URL as requested (middlewareCtx.url has default locale prefix added by resolveRoutes),
-      // only normalizing data URLs unless skipMiddlewareUrlNormalize.
-      const matchingUrl = normalizeNextDataUrl(url, routingConfig.basePath, routingConfig.buildId)
-
-      // Next's trailing-slash redirect runs before middleware, so middleware sees the slashed form -
-      // but only for paths Next actually slashes. `/_next/...` and anything that looks like a file
-      // are exempt there, and appending to those hands middleware a URL the client never requested.
-      const lastSegment = matchingUrl.pathname.slice(matchingUrl.pathname.lastIndexOf('/'))
-      const neverSlashed =
-        matchingUrl.pathname.startsWith(`${routingConfig.basePath}/_next/`) ||
-        lastSegment.includes('.')
-      if (nextConfig?.trailingSlash && !matchingUrl.pathname.endsWith('/') && !neverSlashed) {
-        matchingUrl.pathname += '/'
-      }
-
+      // resolveRoutes already checked middlewareMatchers. `middlewareCtx.url` is the URL as
+      // requested, as Next passes it: Next's middleware adapter normalizes data URLs and the
+      // trailing slash itself (from `x-nextjs-data` and `nextConfig`).
       // Load and invoke middleware directly — construct RequestData inline
       // instead of going through handleMiddlewareRaw/buildNextRequest which
       // would double-normalize URLs (routing library already normalizes).
       const handler = await middlewareConfig.load()
 
-      const middlewareRequestUrl = nextConfig?.skipMiddlewareUrlNormalize ? url : matchingUrl
+      const middlewareRequestUrl = middlewareCtx.url
 
       const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
       let middlewareBody: ReadableStream | undefined
@@ -283,7 +263,7 @@ export async function runNextRouting(
 
       return middlewareResult
     },
-  }).then((resolved) => preferStaticPathnameAfterRewrite(resolved, url, routingConfig))
+  })
 
   const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
 
@@ -365,19 +345,13 @@ export async function runNextRouting(
     }
   }
 
-  const forwardRequest = new Request(
-    getInvocationUrl(request, resolution, {
-      ...routingConfig,
-      trailingSlash: nextConfig?.trailingSlash,
-    }),
-    {
-      method: request.method,
-      headers: forwardHeaders,
-      body: originBody,
-      // @ts-expect-error duplex is needed for streaming bodies
-      duplex: 'half',
-    },
-  )
+  const forwardRequest = new Request(getInvocationUrl(request, resolution), {
+    method: request.method,
+    headers: forwardHeaders,
+    body: originBody,
+    // @ts-expect-error duplex is needed for streaming bodies
+    duplex: 'half',
+  })
   // context.next() forwards to the origin (server handler or CDN)
   const originResponse = applyResolutionToThisResponse(await context.next(forwardRequest))
 

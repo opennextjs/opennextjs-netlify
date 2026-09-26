@@ -9,22 +9,13 @@ import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-sh
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import { getIsPossibleServerAction } from 'next-with-adapters/dist/server/lib/server-action-request-meta.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
-import { isDynamicRoute } from 'next-with-adapters/dist/shared/lib/router/utils/is-dynamic.js'
-import { getRouteMatcher } from 'next-with-adapters/dist/shared/lib/router/utils/route-matcher.js'
-import { getRouteRegex } from 'next-with-adapters/dist/shared/lib/router/utils/route-regex.js'
 
 import {
-  addDefaultLocaleForRouting,
   applyResolutionToResponse,
-  getPathnameAliases,
-  isNextDataPathname,
-  preferStaticPathnameAfterRewrite,
   resolveRoutes,
-  setNextDataHeader,
   stripInternalRequestHeaders,
 } from '../../adapter-runtime-shared/next-routing.js'
 import type {
-  I18nForRouting,
   ResolveRoutesParams,
   ResolveRoutesResult,
 } from '../../adapter-runtime-shared/next-routing.js'
@@ -108,12 +99,12 @@ type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
 const handlerDefsByPathname = new Map<string, Handler>()
 const handlerDefsId = new Map<string, Handler>()
 const basePath = manifest.config.basePath || ''
-const trailingSlash = manifest.config.trailingSlash ?? false
-const routingBasics = { basePath, buildId: manifest.buildId }
-function registerHandler(pathname: string, handler: Handler) {
-  for (const alias of getPathnameAliases(pathname, basePath, { trailingSlash })) {
-    handlerDefsByPathname.set(alias, handler)
-  }
+// `@next/routing` resolves requests to these pathnames as given, so they double as handler keys
+const routablePathnames: ResolveRoutesParams['pathnames'] = []
+type RoutablePathnameType = Exclude<ResolveRoutesParams['pathnames'][number], string>['type']
+function registerHandler(pathname: string, type: RoutablePathnameType, handler: Handler) {
+  handlerDefsByPathname.set(pathname, handler)
+  routablePathnames.push({ pathname, type })
 }
 
 type InvokeHandlerArg = {
@@ -121,13 +112,8 @@ type InvokeHandlerArg = {
   entrypoint: string
   runtime: 'nodejs' | 'edge'
   sourcePage: string
-  pathname: string
-  // route handlers and pages API routes: their `req.url` carries the rewrite-added query
-  foldsQueryIntoUrl: boolean
 }
 
-const appRouteIds = new Set(manifest.outputs.appRoutes.map((output) => output.id))
-const pagesApiIds = new Set(manifest.outputs.pagesApi.map((output) => output.id))
 // pages/app pages that are prerendered or fully static: those answer reads only, see readOnlyPathnames
 const staticPageOutputIds = new Set(
   [...manifest.outputs.pages, ...manifest.outputs.appPages].map((output) => output.id),
@@ -150,25 +136,27 @@ function createInvokeHandler(output: AdapterManifestComputeOutput): Handler {
     entrypoint: output.filePath,
     runtime: output.runtime,
     sourcePage: output.sourcePage,
-    pathname: output.pathname,
-    foldsQueryIntoUrl: appRouteIds.has(output.id) || pagesApiIds.has(output.id),
   })
 }
 
-// outputs that invoke compute
-for (const output of [
-  ...manifest.outputs.pages,
-  ...manifest.outputs.pagesApi,
-  ...manifest.outputs.appPages,
-  ...manifest.outputs.appRoutes,
-]) {
+// outputs that invoke compute (the runtime manifest is minimized, output types come from the list)
+for (const [type, outputs] of [
+  ['PAGES', manifest.outputs.pages],
+  ['PAGES_API', manifest.outputs.pagesApi],
+  ['APP_PAGE', manifest.outputs.appPages],
+  ['APP_ROUTE', manifest.outputs.appRoutes],
+] as const) {
+  for (const output of outputs) {
+    registerComputeOutput(type, output)
+  }
+}
+
+function registerComputeOutput(type: RoutablePathnameType, output: AdapterManifestComputeOutput) {
   const handler = createInvokeHandler(output)
   handlerDefsId.set(output.id, handler)
-  registerHandler(output.pathname, handler)
+  registerHandler(output.pathname, type, handler)
   if (ssgSourcePages.has(output.sourcePage)) {
-    for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
-      ssgPathnames.add(alias)
-    }
+    ssgPathnames.add(output.pathname)
   }
 }
 
@@ -179,15 +167,11 @@ for (const output of manifest.outputs.prerenders) {
       `Prerender output ${output.id} has parentOutputId ${output.parentOutputId} which does not exist`,
     )
   }
-  registerHandler(output.pathname, parentHandler)
+  registerHandler(output.pathname, 'PRERENDER', parentHandler)
   if (staticPageOutputIds.has(output.parentOutputId)) {
-    for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
-      readOnlyPathnames.add(alias)
-    }
+    readOnlyPathnames.add(output.pathname)
   }
-  for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
-    ssgPathnames.add(alias)
-  }
+  ssgPathnames.add(output.pathname)
 }
 
 // serve static files
@@ -204,21 +188,19 @@ function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
 for (const pathname of manifest.publicPathnames) {
   registerHandler(
     pathname,
+    'STATIC_FILE',
     createStaticFileHandler({ filePath: `public${pathname.slice(basePath.length)}`, pathname }),
   )
 }
 
 for (const output of manifest.outputs.staticFiles) {
-  for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
-    readOnlyPathnames.add(alias)
-  }
+  readOnlyPathnames.add(output.pathname)
   registerHandler(
     output.pathname,
+    'STATIC_FILE',
     createStaticFileHandler({ filePath: output.filePath, pathname: output.pathname }),
   )
 }
-
-const allPathnames = [...handlerDefsByPathname.keys()]
 
 type NodeHandlerFn = (
   req: IncomingMessage,
@@ -499,48 +481,6 @@ async function serverStaticFile(
   })
 }
 
-// Route params for the module. `nxtP` query keys cover matches through `dynamicRoutes`, but a
-// middleware rewrite straight to a concrete path of a dynamic page (`/to-ssg → /ssg/hello`) carries
-// them nowhere else; Next's router derives them from the invoked path the same way.
-const routeMatchers = new Map<string, ReturnType<typeof getRouteMatcher>>()
-function getRouteParams(template: string, pathname: string | undefined) {
-  if (!pathname || !isDynamicRoute(template)) {
-    return
-  }
-  let matcher = routeMatchers.get(template)
-  if (!matcher) {
-    matcher = getRouteMatcher(getRouteRegex(template))
-    routeMatchers.set(template, matcher)
-  }
-  let page = pathname
-  const dataPrefix = `${basePath}/_next/data/${manifest.buildId}/`
-  if (page.startsWith(dataPrefix)) {
-    const rest = page.slice(dataPrefix.length).replace(/\.json$/, '')
-    page = rest === 'index' ? basePath || '/' : `${basePath}/${rest}`
-  }
-  const locale = getPathnameLocale(page)
-  if (locale) {
-    const rest = page.slice(basePath.length)
-    page = `${basePath}${rest.slice(locale.length + 1) || '/'}`
-  }
-  return matcher(page) || undefined
-}
-
-// locale segment of a page or `/_next/data/<buildId>/<locale>/…json` pathname
-function getPathnameLocale(pathname: string): string | undefined {
-  if (!manifest.config.i18n) {
-    return undefined
-  }
-  let rest = basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname
-  const dataPrefix = `/_next/data/${manifest.buildId}`
-  if (rest.startsWith(`${dataPrefix}/`)) {
-    // the index data path of a locale is `<locale>.json`
-    rest = rest.slice(dataPrefix.length).replace(/\.json$/, '')
-  }
-  const [, first = ''] = rest.split('/')
-  return manifest.config.i18n.locales.find((value) => value.toLowerCase() === first.toLowerCase())
-}
-
 // Next's router answers a no-match for `_next/static` assets with plain text instead of rendering
 // the 404 page (router-server "404 case"). It does the same for non-HTML `sec-fetch-dest` requests,
 // but upstream tests expect the HTML 404 for those when deployed (Vercel's CDN behaviour), so only
@@ -565,21 +505,8 @@ function isPlainNotFoundRequest(url: URL): boolean {
   return pathname.startsWith('/_next/static/')
 }
 
-// Next's router detects the locale from the requested path and overrides it with the one of a
-// middleware rewrite target; the module only sees req.url (the requested path) so pass it on
-function getLocaleRequestMeta(request: Request, resolution: ResolveRoutesResult) {
-  if (!manifest.config.i18n) {
-    return {}
-  }
-  const locale =
-    (resolution.invocationTarget && getPathnameLocale(resolution.invocationTarget.pathname)) ??
-    getPathnameLocale(new URL(request.url).pathname) ??
-    manifest.config.i18n.defaultLocale
-  return { locale, defaultLocale: manifest.config.i18n.defaultLocale }
-}
-
 async function invokeHandler(
-  { id, entrypoint, runtime, sourcePage, pathname, foldsQueryIntoUrl }: InvokeHandlerArg,
+  { id, entrypoint, runtime, sourcePage }: InvokeHandlerArg,
   { tracer, request, requestContext, resolution, span, invokeStatus }: CommonHandlerArg,
 ) {
   span?.setAttribute('matched.sourcePage', sourcePage)
@@ -593,7 +520,7 @@ async function invokeHandler(
           requestContext,
           manifest,
           query: resolution.resolvedQuery,
-          routeParams: getRouteParams(pathname, resolution.invocationTarget?.pathname),
+          routeParams: resolution.invocation?.requestMeta.params,
         })
       } catch (error) {
         console.error('edge runtime output error', error)
@@ -606,22 +533,12 @@ async function invokeHandler(
     try {
       const handler = await loadHandler(entrypoint)
 
-      // Route handlers (route.ts) read search params from the URL only, so rewrite-added query has
-      // nowhere else to travel, and a deployed proxy is expected to put them in the URL an API route
-      // sees too (upstream middleware-rewrites "should preserve rewrite query and dynamic params in
-      // Pages API routes"). Pages keep `req.url` public: rewrite query reaches them as requestMeta,
-      // and asPath must not show it.
-      let handlerRequest = request
-      if (foldsQueryIntoUrl && resolution.resolvedQuery) {
-        const url = new URL(request.url)
-        for (const [key, valueOrValues] of Object.entries(resolution.resolvedQuery)) {
-          url.searchParams.delete(key)
-          for (const value of Array.isArray(valueOrValues) ? valueOrValues : [valueOrValues]) {
-            url.searchParams.append(key, value)
-          }
-        }
-        handlerRequest = new Request(url, request)
-      }
+      // `@next/routing` says how to invoke the matched output (`req.url`, request meta), quirks
+      // included; error pages are invoked without a resolution
+      const { invocation } = resolution
+      const handlerRequest = invocation
+        ? new Request(new URL(invocation.url, request.url), request)
+        : request
 
       // Convert Web Request to Node.js IncomingMessage/ServerResponse
       const { req, res } = toReqRes(handlerRequest)
@@ -635,12 +552,7 @@ async function invokeHandler(
       const nextHandlerPromise = handler(req, res, {
         waitUntil: requestContext.trackBackgroundWork,
         requestMeta: {
-          initURL: request.url,
-          // rewrite result (with nxtP-prefixed route params), the module re-derives config rewrites
-          // from req.url itself but can't know about middleware ones
-          query: resolution.resolvedQuery,
-          params: getRouteParams(pathname, resolution.invocationTarget?.pathname),
-          ...getLocaleRequestMeta(request, resolution),
+          ...(invocation?.requestMeta ?? { initURL: request.url }),
           render404,
           revalidate,
         },
@@ -741,6 +653,7 @@ function deserializeResolution(serialized: string): ResolveRoutesResult {
     resolvedQuery: ResolveRoutesResult['resolvedQuery'] | null
     invocationTarget: ResolveRoutesResult['invocationTarget'] | null
     routeMatches: Record<string, string> | null
+    invocation?: ResolveRoutesResult['invocation'] | null
     resolvedHeaders: Record<string, string> | null
     status: number | null
     redirect: { url: string; status: number } | null
@@ -761,6 +674,9 @@ function deserializeResolution(serialized: string): ResolveRoutesResult {
   }
   if (parsed.routeMatches !== null) {
     resolution.routeMatches = parsed.routeMatches
+  }
+  if (parsed.invocation) {
+    resolution.invocation = parsed.invocation
   }
   if (parsed.status !== null) {
     resolution.status = parsed.status
@@ -812,22 +728,13 @@ export default async function ServerHandler(request: Request, requestContext: Re
     } else {
       // No edge function (standalone mode fallback, or edge function not deployed)
       try {
-        const routingHeaders = setNextDataHeader(new Headers(requestHeaders), url, routingBasics)
         resolution = await resolveRoutes({
-          url: addDefaultLocaleForRouting(
-            url,
-            {
-              basePath: manifest.config.basePath || '',
-              buildId: manifest.buildId,
-              i18n: manifest.config.i18n as I18nForRouting | null,
-            },
-            routingHeaders,
-          ),
+          url,
           buildId: manifest.buildId,
           basePath: manifest.config.basePath || '',
           requestBody: request.body ?? new ReadableStream(),
-          headers: routingHeaders,
-          pathnames: allPathnames,
+          headers: requestHeaders,
+          pathnames: routablePathnames,
           // Cast i18n config — next-with-adapters uses readonly arrays while @next/routing expects mutable
           i18n: (manifest.config.i18n ?? undefined) as ResolveRoutesParams['i18n'],
           routes: {
@@ -840,14 +747,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
             // Return a no-op result.
             return {}
           },
-        }).then((resolved) =>
-          preferStaticPathnameAfterRewrite(resolved, url, {
-            pathnames: allPathnames,
-            basePath: manifest.config.basePath || '',
-            buildId: manifest.buildId,
-            i18n: manifest.config.i18n as I18nForRouting | null,
-          }),
-        )
+        })
       } catch (error) {
         console.error('route resolution error', error)
         getLogger().withError(error).error('route resolution error')
@@ -943,7 +843,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // does the real data request on navigation instead of running getServerSideProps twice
       if (
         request.headers.has('x-middleware-prefetch') &&
-        isNextDataPathname(new URL(publicUrl).pathname, routingBasics) &&
+        resolution.invocation?.headers['x-nextjs-data'] &&
         !ssgPathnames.has(resolution.resolvedPathname)
       ) {
         return applyResolutionToThisResponse(
@@ -957,11 +857,13 @@ export default async function ServerHandler(request: Request, requestContext: Re
         )
       }
 
-      const handlerHeaders = setNextDataHeader(
-        new Headers(requestHeaders),
-        new URL(publicUrl),
-        routingBasics,
-      )
+      // `x-nextjs-data` as routing decided it: set for data requests, never trusted from the client
+      const handlerHeaders = new Headers(requestHeaders)
+      if (resolution.invocation?.headers['x-nextjs-data']) {
+        handlerHeaders.set('x-nextjs-data', '1')
+      } else {
+        handlerHeaders.delete('x-nextjs-data')
+      }
 
       const handlerResponse = await matchedHandler({
         request: new Request(publicUrl, {

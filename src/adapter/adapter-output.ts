@@ -17,7 +17,7 @@ export type AdapterBuildCompleteContext = NonNullable<
 export function normalizeAndFixAdapterOutput(
   onBuildCompleteAdapterCtx: AdapterBuildCompleteContext,
 ): AdapterBuildCompleteContext {
-  return fixAdapterOutputForNextRouting(normalizeAdapterOutput(onBuildCompleteAdapterCtx))
+  return normalizeAdapterOutput(onBuildCompleteAdapterCtx)
 }
 
 function normalizeAdapterOutput(
@@ -47,109 +47,6 @@ function normalizeAdapterOutput(
       middleware: onBuildCompleteAdapterCtx.outputs.middleware
         ? rewriteOutputFilePath(onBuildCompleteAdapterCtx.outputs.middleware)
         : undefined,
-    },
-  }
-}
-
-// Some routing rules don't play with @next/routing (at least as it works today)
-// so this is meant to massage things a bit so it works - ideally this is eventually removed
-// once things are either fixed upstream ... or maybe assumptions we've made about hot it should
-// are proven incorrect and we'll adjust usage to fit.
-// Both workarounds below re-verified as still needed against @next/routing@16.3.4.
-// this primarily focus on those rules:
-
-// this seems to match on next-data request due to processing order in @next/routing - it normalizes
-// data request before handling redirects, so those /_next/data requests match on this rule
-//   {
-//     "source": "/:notfile((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+)",
-//     "sourceRegex": "^(?:\\/((?!\\.well-known(?:\\/.*)?)(?:[^/]+\\/)*[^/\\.]+))$",
-//     "headers": {
-//       "Location": "/$1/"
-//     },
-//     "status": 308,
-//     "priority": true
-//   }
-// ],
-
-// additionally, when trailingSlash: true, the pathname matching for static files is not working
-
-// with i18n, middleware matchers get a mandatory locale segment ("/:nextInternalLocale((?!_next/)[^/.]{1,})")
-// because Next's router adds the default locale to every request before matching. @next/routing does
-// too, except for `/api/` requests, so there `api` gets consumed as the locale (a
-// "/((?!api|...).*)" exclusion matcher then matches `/api/x` on its remainder, and a `/api/:path*`
-// matcher never matches). Let the locale segment match empty exactly where @next/routing skips it.
-// API routes are not localized: Next emits no locale-prefixed API outputs and its router 404s an
-// explicitly locale-prefixed API request, yet the adapter output builds their dynamic routes with a
-// mandatory locale segment (`shouldLocalize` is just `Boolean(config.i18n)` in build-complete.ts).
-// @next/routing skips locale prefixing for `/api/` by design, so those routes could never match and
-// every dynamic API route 404'd. Drop the locale from them.
-const I18N_DYNAMIC_ROUTE_LOCALE_GROUP = '(?<nextLocale>[^/]{1,})/'
-function removeLocaleFromApiDynamicRoute<
-  T extends { source?: string; sourceRegex: string; destination?: string },
->(route: T): T {
-  if (
-    !route.source?.startsWith('/api/') ||
-    !route.sourceRegex.includes(I18N_DYNAMIC_ROUTE_LOCALE_GROUP)
-  ) {
-    return route
-  }
-  return {
-    ...route,
-    sourceRegex: route.sourceRegex.replace(I18N_DYNAMIC_ROUTE_LOCALE_GROUP, ''),
-    destination: route.destination?.replace('/$nextLocale', ''),
-  }
-}
-
-const I18N_MATCHER_LOCALE_GROUP = '(?:\\/((?!_next\\/)[^/.]{1,}))'
-const I18N_MATCHER_LOCALE_GROUP_OR_API = '(?:(?=\\/api\\/)|(?!\\/api\\/)\\/((?!_next\\/)[^/.]{1,}))'
-function fixAdapterOutputForNextRouting(
-  onBuildCompleteAdapterCtx: AdapterBuildCompleteContext,
-): AdapterBuildCompleteContext {
-  // `trailingSlash: true` used to be handled by rewriting `/x/` to `/x` here, but that ran before
-  // the config rewrites, whose sources Next generates *with* the slash (`/:lang(en|es)/`), so they
-  // could never match. Output lookup accepts the slashed spelling instead (`getPathnameAliases`).
-  const beforeFiles = [...onBuildCompleteAdapterCtx.routing.beforeFiles]
-
-  return {
-    ...onBuildCompleteAdapterCtx,
-    routing: {
-      ...onBuildCompleteAdapterCtx.routing,
-      // Next only sets this when middleware and pages coexist; without it the lib matches
-      // beforeFiles/afterFiles rewrites against the raw `/_next/data/<buildId>/…json` path, so
-      // config rewrites never apply to data requests. Next's router always normalizes data requests
-      // to the page path before routing (and the lib denormalizes again before matching outputs).
-      shouldNormalizeNextData: true,
-      dynamicRoutes: onBuildCompleteAdapterCtx.config.i18n
-        ? onBuildCompleteAdapterCtx.routing.dynamicRoutes.map(removeLocaleFromApiDynamicRoute)
-        : onBuildCompleteAdapterCtx.routing.dynamicRoutes,
-      middlewareMatchers: onBuildCompleteAdapterCtx.config.i18n
-        ? onBuildCompleteAdapterCtx.routing.middlewareMatchers.map((matcher) => ({
-            ...matcher,
-            sourceRegex: matcher.sourceRegex.replace(
-              I18N_MATCHER_LOCALE_GROUP,
-              I18N_MATCHER_LOCALE_GROUP_OR_API,
-            ),
-          }))
-        : onBuildCompleteAdapterCtx.routing.middlewareMatchers,
-      beforeMiddleware: onBuildCompleteAdapterCtx.routing.beforeMiddleware.map((rule) => {
-        let maybeConvertedRule = rule
-        // due to ordering process in @next/routing, this rule DOES match on data requests,
-        // even if it shouldn't (/_next/data/build-id/page.json -> /page)
-        if (rule.source?.startsWith('/:notfile')) {
-          maybeConvertedRule = {
-            ...rule,
-            missing: [
-              {
-                type: 'header',
-                key: 'x-nextjs-data',
-              },
-            ],
-          }
-        }
-
-        return maybeConvertedRule
-      }),
-      beforeFiles,
     },
   }
 }

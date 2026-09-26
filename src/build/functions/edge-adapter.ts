@@ -6,7 +6,6 @@ import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
 import { RoutingConfig } from '../../adapter-runtime-edge/middleware.js'
-import { getPathnameAliases } from '../../adapter-runtime-shared/next-routing.js'
 import { EDGE_HANDLER_NAME, PluginContextAdapter } from '../plugin-context.js'
 
 import { writeEdgeManifest } from './edge.js'
@@ -252,6 +251,8 @@ async function writeRoutingEdgeFunctionEntry(
   const nextConfig = ctx.buildConfig
   const handlerName = getAdapterHandlerName()
 
+  // `public/` files are not adapter outputs, routing treats them like static files
+  const publicPathnames = await ctx.getPublicPathnames()
   // Write the routing config as a JSON file for the edge function to import
   const routingConfig = {
     buildId: ctx.adapterOutput.buildId,
@@ -262,10 +263,9 @@ async function writeRoutingEdgeFunctionEntry(
       ...ctx.adapterOutput.routing,
       caseSensitive: ctx.adapterOutput.config.experimental?.caseSensitiveRoutes,
     },
-    pathnames: [...collectAllPathnames(ctx.adapterOutput), ...(await ctx.getPublicPathnames())],
-    nonLocalizedPathnames: [
-      ...collectNonLocalizedPathnames(ctx.adapterOutput),
-      ...(await ctx.getPublicPathnames()),
+    pathnames: [
+      ...collectPathnames(ctx.adapterOutput),
+      ...publicPathnames.map((pathname) => ({ pathname, type: 'STATIC_FILE' })),
     ],
     skipProxyUrlNormalize: ctx.adapterOutput.config.skipProxyUrlNormalize,
   } satisfies RoutingConfig
@@ -309,40 +309,18 @@ async function writeRoutingEdgeFunctionEntry(
 }
 
 /**
- * Outputs Next never keys by locale even under i18n: build assets, `public/` files (added by the
- * caller) and API routes. Pages are deliberately absent - an SSR page is keyed `/ssr` while its
- * requests arrive as `/fr/ssr`, and that locale has to survive to the handler.
+ * Output pathnames with their output type, for route resolution.
  */
-function collectNonLocalizedPathnames(adapterOutput: AdapterBuildCompleteContext): string[] {
-  const trailingSlash = adapterOutput.config.trailingSlash ?? false
-  const basePath = adapterOutput.config.basePath || ''
+function collectPathnames(
+  adapterOutput: AdapterBuildCompleteContext,
+): Array<{ pathname: string; type: string }> {
   const { outputs } = adapterOutput
-  return [...outputs.staticFiles, ...outputs.pagesApi].flatMap((output) =>
-    getPathnameAliases(output.pathname, basePath, { trailingSlash }),
-  )
-}
-
-/**
- * Collect all pathnames from the adapter output for route resolution.
- */
-function collectAllPathnames(adapterOutput: AdapterBuildCompleteContext): string[] {
-  const trailingSlash = adapterOutput.config.trailingSlash ?? false
-  const pathnames = new Set<string>()
-  const basePath = adapterOutput.config.basePath || ''
-  const { outputs } = adapterOutput
-
-  for (const output of [
+  return [
     ...outputs.pages,
     ...outputs.pagesApi,
     ...outputs.appPages,
     ...outputs.appRoutes,
     ...outputs.prerenders,
     ...outputs.staticFiles,
-  ]) {
-    for (const alias of getPathnameAliases(output.pathname, basePath, { trailingSlash })) {
-      pathnames.add(alias)
-    }
-  }
-
-  return [...pathnames]
+  ].map(({ pathname, type }) => ({ pathname, type }))
 }

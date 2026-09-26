@@ -943,7 +943,11 @@ describe('public URL of a middleware rewrite in the server handler', () => {
   const publicUrl = 'https://example.netlify/test/public-prefix/echo?ref=xyz'
 
   // Route Handlers derive request.url from initURL since https://github.com/vercel/next.js/pull/80008
-  test.skipIf(!nextVersionSatisfies('>=15.4.0'))<FixtureTestContext>(
+  // Standalone only: in adapter mode the edge function always sends its routing result along with the
+  // public URL, the server handler never routes a request the edge function already rewrote.
+  test.skipIf(
+    !nextVersionSatisfies('>=15.4.0') || Boolean(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER),
+  )<FixtureTestContext>(
     'is used as request.url when vouched for by the request id',
     async (ctx) => {
       await createFixture('middleware', ctx)
