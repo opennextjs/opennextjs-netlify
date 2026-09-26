@@ -473,20 +473,25 @@ test.skipIf(
 
   // check if the blob entries were successfully set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
-    [
-      shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-      isExperimentalPPRHardDeprecated() ? undefined : '/static-params/[id]',
-      shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-      shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-      '/dynamic-params/[id]',
-      '/index',
-      '/static-params/1',
-      '/static-params/2',
-      '/static-params/[id]',
-      '404.html',
-      '500.html',
-    ].filter(Boolean),
+  // whether adapter mode seeds `/_not-found` depends on the Next version making it a prerender
+  expect(
+    withoutStandaloneOnlyKeys(blobEntries.map(({ key }) => decodePageBlobKey(key))).sort(),
+  ).toEqual(
+    withoutStandaloneOnlyKeys(
+      [
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+        isExperimentalPPRHardDeprecated() ? undefined : '/static-params/[id]',
+        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+        '/dynamic-params/[id]',
+        '/index',
+        '/static-params/1',
+        '/static-params/2',
+        '/static-params/[id]',
+        '404.html',
+        '500.html',
+      ].filter(Boolean) as string[],
+    ),
   )
 
   // test the function call

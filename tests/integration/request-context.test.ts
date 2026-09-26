@@ -82,8 +82,12 @@ function spyOnRequestContext(ctx: FixtureTestContext) {
   return mockedRequestContextModule.getRequestContext
 }
 
+// These pause inside CacheHandler.get for pages. Adapter mode runs Next in minimal mode, where pages
+// don't go through the cache handler (they are served from prerender groups).
+const isAdapterMode = Boolean(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER)
+
 describe('request-context does NOT leak between concurrent requests', () => {
-  test<FixtureTestContext>('pages router', async (ctx) => {
+  test.skipIf(isAdapterMode)<FixtureTestContext>('pages router', async (ctx) => {
     await createFixture('page-router', ctx)
     await runPlugin(ctx)
 
@@ -159,7 +163,7 @@ describe('request-context does NOT leak between concurrent requests', () => {
     expect(countOfBlobServerGetsForKey(ctx, '/static/revalidate-automatic')).toBe(1)
   })
 
-  test<FixtureTestContext>('app router', async (ctx) => {
+  test.skipIf(isAdapterMode)<FixtureTestContext>('app router', async (ctx) => {
     await createFixture('server-components', ctx)
     await runPlugin(ctx)
 
