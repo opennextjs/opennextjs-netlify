@@ -67,6 +67,16 @@ fi
 # package.json edit below, which needs it) rather than where it's used later.
 export PACKAGE_MANAGER
 PACKAGE_MANAGER="$(node -p "(require('./package.json').packageManager || 'pnpm').split('@')[0]")"
+# Vercel installs a fixture without a lockfile with npm, ignoring the pnpm pin, and
+# some tests rely on it: next-dist-client-esm-import swaps its `link:` dependency
+# for `file:` in deploy mode, which npm installs as a symlink but pnpm copies into
+# node_modules, where its JSX isn't compiled.
+# TEST_FILE_PATH: see the native TS config case below.
+case "${TEST_FILE_PATH:-}" in
+  */next-dist-client-esm-import/*)
+    PACKAGE_MANAGER=npm
+    ;;
+esac
 
 # In deploy mode the Next.js harness creates the temp app with `skipInstall`
 # (test/lib/next-modes/next-deploy.ts -> createTestDir({ skipInstall: true })):
