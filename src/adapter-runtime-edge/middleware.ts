@@ -266,7 +266,11 @@ export async function runNextRouting(
     },
   })
 
-  const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
+  const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, {
+    request,
+    resolution,
+    basePath: routingConfig.basePath,
+  })
 
   // Handle redirect — return directly from edge, no lambda needed
   if (resolution.redirect) {

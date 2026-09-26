@@ -765,7 +765,11 @@ export default async function ServerHandler(request: Request, requestContext: Re
       }
     }
 
-    const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, request, resolution)
+    const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, {
+      request,
+      resolution,
+      basePath,
+    })
 
     if (resolution.redirect) {
       // Handle explicit redirect

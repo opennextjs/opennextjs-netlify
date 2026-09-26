@@ -72,9 +72,40 @@ export function isUnmatchedNextDataRequest(
   )
 }
 
-export function applyResolutionToResponse(
-  request: Request,
+/**
+ * `next start` (`base-server`) and Vercel's routes tell the client router which page a data request
+ * rendered, the rewrite target included: `/<locale><page>`. It needs it where the response itself
+ * can't say, like an automatically static page's HTML answering a data request.
+ */
+function getNextDataMatchedPath(
   resolution: ResolveRoutesResult,
+  basePath: string,
+): string | undefined {
+  const { resolvedPathname, invocation } = resolution
+  if (!resolvedPathname || !invocation?.headers['x-nextjs-data']) {
+    return
+  }
+  let pathname =
+    basePath && resolvedPathname.startsWith(basePath)
+      ? resolvedPathname.slice(basePath.length) || '/'
+      : resolvedPathname
+  const data = /^\/_next\/data\/[^/]+\/(.+)\.json$/.exec(pathname)
+  if (data) {
+    pathname = data[1] === 'index' ? '/' : `/${data[1]}`
+  }
+  const { locale } = invocation.requestMeta
+  if (locale && pathname !== `/${locale}` && !pathname.startsWith(`/${locale}/`)) {
+    pathname = `/${locale}${pathname === '/' ? '' : pathname}`
+  }
+  return pathname
+}
+
+export function applyResolutionToResponse(
+  {
+    request,
+    resolution,
+    basePath,
+  }: { request: Request; resolution: ResolveRoutesResult; basePath: string },
   response: Response,
   explicitStatus?: number,
 ): Response {
@@ -98,8 +129,14 @@ export function applyResolutionToResponse(
     }
   }
 
+  const status = explicitStatus ?? resolution.status ?? response.status
+  const matchedPath = status === 200 ? getNextDataMatchedPath(resolution, basePath) : undefined
+  if (matchedPath && !headers.has('x-nextjs-matched-path')) {
+    headers.set('x-nextjs-matched-path', matchedPath)
+  }
+
   const finalResponse = new Response(response.body, {
-    status: explicitStatus ?? resolution.status ?? response.status,
+    status,
     statusText: response.statusText,
     headers,
   })
