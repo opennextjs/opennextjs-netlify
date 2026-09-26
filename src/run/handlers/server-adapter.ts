@@ -24,6 +24,7 @@ import type {
 import { proxyExternalRewrite } from '../../adapter-runtime-shared/proxy-external-rewrite.js'
 import {
   getPrerenderGroupBlobKey,
+  getPrerenderGroupTags,
   HtmlBlob,
   type PrerenderGroupBlob,
 } from '../../shared/blob-types.cjs'
@@ -47,7 +48,7 @@ import {
 import { invokeEdgeRuntimeOutput } from './edge-runtime-sandbox.js'
 import { getRequestContext, type RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
-import { isAnyTagStaleOrExpired } from './tags-handler.cjs'
+import { isAnyTagStaleOrExpired, purgeEdgeCache } from './tags-handler.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
@@ -334,6 +335,17 @@ function parseNextCacheControl(
   }
 }
 
+// `/fallback-true/[slug]` with `nxtPslug=hello` is `/fallback-true/hello`
+function interpolatePrerenderPathname(pathname: string, params: URLSearchParams): string {
+  return pathname.replace(/\/\[(\[)?(?:\.{3})?([^\]]+)]]?/g, (segment, optional, name: string) => {
+    const values = params.getAll(`nxtP${name}`)
+    if (values.length !== 0) {
+      return `/${values.join('/')}`
+    }
+    return optional ? '' : segment
+  })
+}
+
 async function regeneratePrerenderGroup(
   groupKey: string,
   group: Required<PrerenderGroup>,
@@ -370,7 +382,10 @@ async function regeneratePrerenderGroup(
     lastModified: Date.now(),
     revalidate: cacheControl?.revalidate ?? false,
     expire: cacheControl?.expire,
-    tags: entryHeaders['x-next-cache-tags']?.split(',') ?? [],
+    tags: getPrerenderGroupTags(
+      interpolatePrerenderPathname(group.entry.pathname, params),
+      entryHeaders['x-next-cache-tags'],
+    ),
     variants,
   }
   if (cacheControl) {
@@ -380,10 +395,15 @@ async function regeneratePrerenderGroup(
   return blob
 }
 
+// `x-prerender-revalidate: <bypassToken>` (Pages Router `res.revalidate()`): regenerate now, and
+// with `x-prerender-revalidate-if-generated` only a group generated before
+type OnDemandRevalidate = { onlyGenerated: boolean }
+
 async function servePrerenderGroup(
   variant: PrerenderOutput,
   group: Required<PrerenderGroup>,
   args: CommonHandlerArg,
+  onDemand?: OnDemandRevalidate,
 ): Promise<Response | undefined> {
   const { request, requestContext, resolution } = args
   const params = getPrerenderGroupQuery(
@@ -398,7 +418,14 @@ async function servePrerenderGroup(
   let blob = await store.get<PrerenderGroupBlob>(groupKey, 'prerenderGroup.get')
   let nextCache: 'HIT' | 'STALE' | 'MISS' = 'HIT'
 
-  if (blob) {
+  if (onDemand) {
+    if (onDemand.onlyGenerated && !blob) {
+      return new Response('This page could not be found', { status: 404 })
+    }
+    blob = await regeneratePrerenderGroup(groupKey, group, params, args)
+    requestContext.trackBackgroundWork(purgeEdgeCache(blob.tags))
+    nextCache = 'MISS'
+  } else if (blob) {
     const age = (Date.now() - blob.lastModified) / 1000
     const tags = await isAnyTagStaleOrExpired(blob.tags, blob.lastModified)
     const expired = tags.expired || (blob.expire !== undefined && age > blob.expire)
@@ -433,6 +460,9 @@ async function servePrerenderGroup(
   response.headers.set('x-nextjs-cache', nextCache)
   if (nextCache !== 'MISS') {
     requestContext.responseCacheGetLastModified = blob.lastModified
+  }
+  if (!stored.headers['x-next-cache-tags']) {
+    requestContext.responseCacheTags ??= blob.tags
   }
   await applyCacheHeaders(response, request, requestContext)
   return response
@@ -1189,10 +1219,16 @@ export default async function ServerHandler(request: Request, requestContext: Re
         prerenderGroup?.entry &&
         !shouldBypassPrerender(prerenderVariant, request, url)
       ) {
+        const isOnDemandRevalidate =
+          prerenderVariant.bypassToken !== undefined &&
+          request.headers.get('x-prerender-revalidate') === prerenderVariant.bypassToken
         handlerResponse = await servePrerenderGroup(
           prerenderVariant,
           prerenderGroup as Required<PrerenderGroup>,
           handlerArgs,
+          isOnDemandRevalidate
+            ? { onlyGenerated: request.headers.has('x-prerender-revalidate-if-generated') }
+            : undefined,
         )
       }
       handlerResponse ??= await matchedHandler(handlerArgs)

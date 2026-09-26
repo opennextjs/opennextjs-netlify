@@ -10,7 +10,11 @@ import type { RouteMetadata } from 'next-with-cache-handler-v2/dist/export/route
 import pLimit from 'p-limit'
 import { satisfies } from 'semver'
 
-import { getPrerenderGroupBlobKey, type PrerenderGroupBlob } from '../../shared/blob-types.cjs'
+import {
+  getPrerenderGroupBlobKey,
+  getPrerenderGroupTags,
+  type PrerenderGroupBlob,
+} from '../../shared/blob-types.cjs'
 import { encodeBlobKey } from '../../shared/blobkey.js'
 import type {
   CachedFetchValueForMultipleVersions,
@@ -412,8 +416,10 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
               body: body.toString('base64'),
             }
           }
-          group.tags =
-            group.variants[entry.pathname]?.headers['x-next-cache-tags']?.split(',') ?? []
+          group.tags = getPrerenderGroupTags(
+            entry.pathname,
+            group.variants[entry.pathname]?.headers['x-next-cache-tags'],
+          )
 
           await writeFile(
             join(ctx.blobDir, await encodeBlobKey(getPrerenderGroupBlobKey(entry.pathname))),
