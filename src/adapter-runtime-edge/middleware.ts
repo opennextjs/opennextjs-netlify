@@ -21,6 +21,7 @@ import {
 import {
   applyResolutionToResponse,
   getInvocationUrl,
+  isUnmatchedNextDataRequest,
   resolveRoutes,
   responseToMiddlewareResult,
   stripInternalRequestHeaders,
@@ -316,6 +317,38 @@ export async function runNextRouting(
     }
   }
 
+  // Next applies the middleware response headers to the final response, and they win over what the
+  // origin sent: `applyResolutionToResponse` keeps an origin cache-control (a CDN-served static
+  // file carries the one we configured for it at build time), middleware asking for another one is
+  // the whole point of `NextResponse.next({ headers: { 'cache-control': … } })`.
+  const withMiddlewareResponseHeaders = (response: Response) => {
+    if (!middlewareResponseHeaders) {
+      return response
+    }
+    const headers = new Headers(response.headers)
+    for (const [key, value] of middlewareResponseHeaders.entries()) {
+      if (key.toLowerCase().startsWith('x-middleware-')) {
+        continue
+      }
+      headers.set(key, value)
+    }
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
+  }
+
+  if (
+    isUnmatchedNextDataRequest(url, resolution, {
+      basePath: routingConfig.basePath,
+      buildId: routingConfig.buildId,
+      middlewareMatchers: routingConfig.routes.middlewareMatchers,
+    })
+  ) {
+    return withMiddlewareResponseHeaders(applyResolutionToThisResponse(Response.json({})))
+  }
+
   // Matched a pathname — forward to server handler or CDN with the routing result
   const serialized = serializeResolution(resolution)
 
@@ -353,25 +386,7 @@ export async function runNextRouting(
     duplex: 'half',
   })
   // context.next() forwards to the origin (server handler or CDN)
-  const originResponse = applyResolutionToThisResponse(await context.next(forwardRequest))
-
-  // Next applies the middleware response headers to the final response, and they win over what the
-  // origin sent: `applyResolutionToResponse` keeps an origin cache-control (a CDN-served static
-  // file carries the one we configured for it at build time), middleware asking for another one is
-  // the whole point of `NextResponse.next({ headers: { 'cache-control': … } })`.
-  if (!middlewareResponseHeaders) {
-    return originResponse
-  }
-  const headers = new Headers(originResponse.headers)
-  for (const [key, value] of middlewareResponseHeaders.entries()) {
-    if (key.toLowerCase().startsWith('x-middleware-')) {
-      continue
-    }
-    headers.set(key, value)
-  }
-  return new Response(originResponse.body, {
-    status: originResponse.status,
-    statusText: originResponse.statusText,
-    headers,
-  })
+  return withMiddlewareResponseHeaders(
+    applyResolutionToThisResponse(await context.next(forwardRequest)),
+  )
 }

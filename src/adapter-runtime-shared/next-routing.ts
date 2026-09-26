@@ -48,6 +48,30 @@ export function getInvocationUrl(request: Request, resolution: ResolveRoutesResu
   return url
 }
 
+/**
+ * Like Vercel's `__next_data_catchall`: with middleware, a data request no output matched gets an
+ * empty JSON instead of a 404, so the client still gets middleware's effects (a rewrite to a page
+ * without a data route, say). `requestedUrl` is the URL as requested, not the rewrite target.
+ */
+export function isUnmatchedNextDataRequest(
+  requestedUrl: URL,
+  resolution: ResolveRoutesResult,
+  {
+    basePath,
+    buildId,
+    middlewareMatchers,
+  }: { basePath: string; buildId: string; middlewareMatchers?: unknown[] },
+): boolean {
+  return (
+    (middlewareMatchers?.length ?? 0) > 0 &&
+    !resolution.resolvedPathname &&
+    !resolution.redirect &&
+    !resolution.externalRewrite &&
+    !resolution.middlewareResponded &&
+    requestedUrl.pathname.startsWith(`${basePath}/_next/data/${buildId}/`)
+  )
+}
+
 export function applyResolutionToResponse(
   request: Request,
   resolution: ResolveRoutesResult,

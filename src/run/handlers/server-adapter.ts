@@ -12,6 +12,7 @@ import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js
 
 import {
   applyResolutionToResponse,
+  isUnmatchedNextDataRequest,
   resolveRoutes,
   stripInternalRequestHeaders,
 } from '../../adapter-runtime-shared/next-routing.js'
@@ -897,14 +898,15 @@ export default async function ServerHandler(request: Request, requestContext: Re
       return applyResolutionToThisResponse(handlerResponse, resolution.status)
     }
 
-    // like Next's router: with middleware, an unmatched data request gets an empty JSON 404 so the
-    // client falls back to a hard navigation instead of rendering the 404 page's data
+    // the edge function answers this itself; behind it `url` is the rewrite target
     if (
-      request.headers.has('x-nextjs-data') &&
-      (manifest.routing.middlewareMatchers?.length ?? 0) > 0 &&
-      url.pathname.startsWith(`${manifest.config.basePath}/_next/data/${manifest.buildId}/`)
+      isUnmatchedNextDataRequest(new URL(requestMeta?.publicUrl ?? request.url), resolution, {
+        basePath: manifest.config.basePath || '',
+        buildId: manifest.buildId,
+        middlewareMatchers: manifest.routing.middlewareMatchers,
+      })
     ) {
-      return Response.json({})
+      return applyResolutionToThisResponse(Response.json({}))
     }
 
     // No match found — 404
