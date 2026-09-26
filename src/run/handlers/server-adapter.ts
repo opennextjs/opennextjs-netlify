@@ -23,6 +23,7 @@ import type {
 } from '../../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../../adapter-runtime-shared/proxy-external-rewrite.js'
 import {
+  getPrerenderFallbackBlobKey,
   getPrerenderGroupBlobKey,
   getPrerenderGroupTags,
   HtmlBlob,
@@ -444,6 +445,27 @@ async function servePrerenderGroup(
     }
   }
 
+  if (!blob && !onDemand && variant === group.entry && group.entry.fallbackShell) {
+    // like a CDN serving the prerender's fallback: the client then asks for the path's data, which
+    // generates the group
+    const shell = await store.get<PrerenderGroupBlob>(
+      getPrerenderFallbackBlobKey(group.entry.pathname),
+      'prerenderFallback.get',
+    )
+    const shellVariant = shell?.variants[variant.pathname]
+    if (shellVariant) {
+      const response = new Response(
+        request.method === 'HEAD' ? null : Buffer.from(shellVariant.body, 'base64'),
+        { status: shellVariant.status, headers: shellVariant.headers },
+      )
+      response.headers.delete('x-next-cache-tags')
+      response.headers.set('cache-control', 'public, max-age=0, must-revalidate')
+      response.headers.set('netlify-cdn-cache-control', 'public, max-age=0, must-revalidate')
+      await applyCacheHeaders(response, request, requestContext)
+      return response
+    }
+  }
+
   if (!blob?.variants[variant.pathname]) {
     nextCache = 'MISS'
     blob = await regeneratePrerenderGroup(groupKey, group, params, args)
@@ -464,6 +486,8 @@ async function servePrerenderGroup(
   if (!stored.headers['x-next-cache-tags']) {
     requestContext.responseCacheTags ??= blob.tags
   }
+  // what the cache handler reported for Pages Router entries, the 404 caching heuristics read it
+  requestContext.pageHandlerRevalidate ??= blob.revalidate
   await applyCacheHeaders(response, request, requestContext)
   return response
 }
@@ -581,14 +605,22 @@ async function renderErrorPage(
     return new Response(status === 404 ? 'Not Found' : 'Internal Server Error', { status })
   }
 
-  const response = await handler({
+  const handlerArgs: CommonHandlerArg = {
     request: new Request(request.url, { headers: request.headers }),
     requestContext,
     resolution: {},
     tracer,
     span,
     invokeStatus: status,
-  })
+  }
+  // a prerendered error page (`getStaticProps` in `pages/404.js`) keeps its revalidate
+  const prerender = prerendersByPathname.get(pathname)
+  const group = prerender?.isGroupEntry ? prerenderGroups.get(prerender.groupId) : undefined
+  const response =
+    (prerender &&
+      group?.entry &&
+      (await servePrerenderGroup(prerender, group as Required<PrerenderGroup>, handlerArgs))) ||
+    (await handler(handlerArgs))
 
   // The error page keeps the cache headers of whatever rendered it. A static `404.html` is build
   // output that only a deploy can change, and a prerendered not-found carries its own revalidate,

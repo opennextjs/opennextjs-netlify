@@ -31,6 +31,10 @@ export type PrerenderGroupBlob = {
 export const getPrerenderGroupBlobKey = (entryPathname: string) =>
   `prerender-group:${entryPathname}`
 
+// the shell served for a path of the group's route not generated yet (`fallback: true`)
+export const getPrerenderFallbackBlobKey = (entryPathname: string) =>
+  `prerender-fallback:${entryPathname}`
+
 // Pages Router responses carry no `x-next-cache-tags`: tag them by path, as `revalidatePath` does
 export const getPrerenderGroupTags = (entryPathname: string, cacheTagsHeader?: string) =>
   cacheTagsHeader?.split(',') ?? [`_N_T_${entryPathname}`]

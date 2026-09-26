@@ -11,6 +11,7 @@ import { ADAPTER_MANIFEST_FILE } from '../../run/constants.js'
 import type { PluginContextAdapter } from '../plugin-context.js'
 
 import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
+import { isFallbackShell } from './prerendered.js'
 import { writeRunConfig } from './server.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
@@ -45,7 +46,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         appPages: ctx.adapterOutput.outputs.appPages.map(computeOutput),
         appRoutes: ctx.adapterOutput.outputs.appRoutes.map(computeOutput),
         prerenders: ctx.adapterOutput.outputs.prerenders.map(
-          ({ id, pathname, parentOutputId, route, groupId, config, routeType }) => ({
+          ({ id, pathname, parentOutputId, route, groupId, config, routeType, ...output }) => ({
             id,
             pathname,
             parentOutputId,
@@ -55,6 +56,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
             bypassFor: config.bypassFor,
             bypassToken: config.bypassToken,
             isGroupEntry: routeType !== undefined,
+            fallbackShell: isFallbackShell({ routeType, ...output }),
           }),
         ),
         staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) => ({

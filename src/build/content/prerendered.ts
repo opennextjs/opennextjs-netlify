@@ -11,6 +11,7 @@ import pLimit from 'p-limit'
 import { satisfies } from 'semver'
 
 import {
+  getPrerenderFallbackBlobKey,
   getPrerenderGroupBlobKey,
   getPrerenderGroupTags,
   type PrerenderGroupBlob,
@@ -373,6 +374,22 @@ export const copyFetchContent = async (ctx: PluginContext): Promise<void> => {
 }
 
 /**
+ * A route's fallback that is complete enough to serve as is while a path is generated: the Pages
+ * Router `fallback: true` shell. PPR shells (postponed state) need a resume and are not.
+ */
+export const isFallbackShell = (
+  output: Pick<
+    PluginContextAdapter['adapterOutput']['outputs']['prerenders'][number],
+    'routeType' | 'response' | 'compute' | 'fallback'
+  >,
+) =>
+  output.routeType === 'fallback' &&
+  output.response === 'initial' &&
+  output.compute === 'static' &&
+  Boolean(output.fallback?.filePath) &&
+  !output.fallback?.postponedState
+
+/**
  * Seed one blob per prerender group from the adapter output fallbacks (groups with params, like
  * `/posts/[id]`, have none and are filled at runtime).
  */
@@ -385,8 +402,9 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
     await Promise.all(
       prerenders
         .filter((entry) => entry.routeType !== undefined && entry.fallback?.filePath)
-        .filter((entry) => !entry.config.allowQuery?.length)
+        .filter((entry) => !entry.config.allowQuery?.length || isFallbackShell(entry))
         .map(async (entry) => {
+          const isShell = Boolean(entry.config.allowQuery?.length)
           const revalidate = entry.fallback?.initialRevalidate ?? false
           const expire = entry.fallback?.initialExpiration
           const cacheControl =
@@ -402,7 +420,11 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
             variants: {},
           }
           for (const member of prerenders) {
-            if (member.groupId !== entry.groupId || !member.fallback?.filePath) {
+            if (
+              member.groupId !== entry.groupId ||
+              !member.fallback?.filePath ||
+              (isShell && member !== entry)
+            ) {
               continue
             }
             const headers: Record<string, string> = { 'cache-control': cacheControl }
@@ -422,7 +444,12 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
           )
 
           await writeFile(
-            join(ctx.blobDir, await encodeBlobKey(getPrerenderGroupBlobKey(entry.pathname))),
+            join(
+              ctx.blobDir,
+              await encodeBlobKey(
+                (isShell ? getPrerenderFallbackBlobKey : getPrerenderGroupBlobKey)(entry.pathname),
+              ),
+            ),
             JSON.stringify(group),
             'utf-8',
           )

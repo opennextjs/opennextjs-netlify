@@ -45,6 +45,8 @@ export type AdapterManifest = Pick<
       Pick<AdapterOutput['PRERENDER']['config'], 'allowQuery' | 'bypassFor' | 'bypassToken'> & {
         // the group's HTML (or route handler) output, the one carrying `routeType`
         isGroupEntry: boolean
+        // a static shell to serve while the path is not generated (`fallback: true`)
+        fallbackShell: boolean
       })[]
     staticFiles: Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'>[]
   }
