@@ -44,6 +44,10 @@ export type PrerenderGroupBlob = {
 export const getPrerenderGroupBlobKey = (entryPathname: string) =>
   `prerender-group:${entryPathname}`
 
+// Pages Router responses carry no `x-next-cache-tags`: tag them by path, as `revalidatePath` does
+export const getPrerenderGroupTags = (entryPathname: string, cacheTagsHeader?: string) =>
+  cacheTagsHeader?.split(',') ?? [`_N_T_${entryPathname}`]
+
 export type BlobType =
   | NetlifyCacheHandlerValue
   | TagManifest
