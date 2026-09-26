@@ -373,19 +373,36 @@ export const copyFetchContent = async (ctx: PluginContext): Promise<void> => {
   }
 }
 
+type PrerenderOutput = PluginContextAdapter['adapterOutput']['outputs']['prerenders'][number]
+
+/**
+ * The group's page (or route handler) output, not one of its `.rsc`, segment or `_next/data`
+ * variants. Next classifies it (`routeType`), except for the per-locale copies of an i18n build.
+ */
+export const isGroupEntry = (output: PrerenderOutput, ctx: PluginContextAdapter) => {
+  if (output.routeType !== undefined) {
+    return true
+  }
+  const { rsc } = ctx.adapterOutput.routing
+  return (
+    !output.pathname.includes('/_next/data/') &&
+    !(
+      rsc &&
+      (output.pathname.endsWith(rsc.suffix) || output.pathname.endsWith(rsc.prefetchSegmentSuffix))
+    )
+  )
+}
+
 /**
  * A route's fallback that is complete enough to serve as is while a path is generated: the Pages
  * Router `fallback: true` shell. PPR shells (postponed state) need a resume and are not.
  */
-export const isFallbackShell = (
-  output: Pick<
-    PluginContextAdapter['adapterOutput']['outputs']['prerenders'][number],
-    'routeType' | 'response' | 'compute' | 'fallback'
-  >,
-) =>
-  output.routeType === 'fallback' &&
-  output.response === 'initial' &&
-  output.compute === 'static' &&
+export const isFallbackShell = (output: PrerenderOutput, ctx: PluginContextAdapter) =>
+  (output.routeType === undefined
+    ? isGroupEntry(output, ctx) && Boolean(output.config.allowQuery?.length)
+    : output.routeType === 'fallback' &&
+      output.response === 'initial' &&
+      output.compute === 'static') &&
   Boolean(output.fallback?.filePath) &&
   !output.fallback?.postponedState
 
@@ -401,8 +418,8 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
 
     await Promise.all(
       prerenders
-        .filter((entry) => entry.routeType !== undefined && entry.fallback?.filePath)
-        .filter((entry) => !entry.config.allowQuery?.length || isFallbackShell(entry))
+        .filter((entry) => isGroupEntry(entry, ctx) && entry.fallback?.filePath)
+        .filter((entry) => !entry.config.allowQuery?.length || isFallbackShell(entry, ctx))
         .map(async (entry) => {
           const isShell = Boolean(entry.config.allowQuery?.length)
           const revalidate = entry.fallback?.initialRevalidate ?? false

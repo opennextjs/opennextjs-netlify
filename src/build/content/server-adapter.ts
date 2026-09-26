@@ -11,7 +11,7 @@ import { ADAPTER_MANIFEST_FILE } from '../../run/constants.js'
 import type { PluginContextAdapter } from '../plugin-context.js'
 
 import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
-import { isFallbackShell } from './prerendered.js'
+import { isFallbackShell, isGroupEntry } from './prerendered.js'
 import { writeRunConfig } from './server.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
@@ -57,31 +57,19 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         pagesApi: ctx.adapterOutput.outputs.pagesApi.map(computeOutput),
         appPages: ctx.adapterOutput.outputs.appPages.map(computeOutput),
         appRoutes: ctx.adapterOutput.outputs.appRoutes.map(computeOutput),
-        prerenders: ctx.adapterOutput.outputs.prerenders.map(
-          ({
-            id,
-            pathname,
-            parentOutputId,
-            route,
-            groupId,
-            config,
-            routeType,
-            pprChain,
-            ...output
-          }) => ({
-            id,
-            pathname,
-            parentOutputId,
-            route,
-            groupId,
-            allowQuery: config.allowQuery,
-            bypassFor: config.bypassFor,
-            bypassToken: config.bypassToken,
-            isGroupEntry: routeType !== undefined,
-            fallbackShell: isFallbackShell({ routeType, ...output }),
-            resumeHeaders: pprChain?.headers,
-          }),
-        ),
+        prerenders: ctx.adapterOutput.outputs.prerenders.map((output) => ({
+          id: output.id,
+          pathname: output.pathname,
+          parentOutputId: output.parentOutputId,
+          route: output.route,
+          groupId: output.groupId,
+          allowQuery: output.config.allowQuery,
+          bypassFor: output.config.bypassFor,
+          bypassToken: output.config.bypassToken,
+          isGroupEntry: isGroupEntry(output, ctx),
+          fallbackShell: isFallbackShell(output, ctx),
+          resumeHeaders: output.pprChain?.headers,
+        })),
         staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) => ({
           pathname,
           filePath,
