@@ -120,7 +120,9 @@ export const decodePageBlobKey = (key: string, encodedLength?: number) => {
   return encodedLength ? decodeBlobKey(encodeBlobKey(decoded).substring(0, encodedLength)) : decoded
 }
 
-const isAdapterMode = Boolean(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER)
+// adapter mode runs Next in minimal mode and stores pages as prerender groups: the App Router
+// not-found page, for one, is only seeded when it is a prerender output (with cacheComponents)
+export const isAdapterMode = Boolean(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER)
 
 // a group is keyed by its page, and the root page is `/` rather than `/index`
 function toStandalonePageKey(key: string) {
@@ -142,13 +144,6 @@ export const getPageHtml = (blob: any, pathname: string): string =>
   isAdapterMode
     ? Buffer.from(blob.variants[pathname].body, 'base64').toString('utf-8')
     : blob.value.html
-
-/**
- * Keys standalone mode stores that adapter mode doesn't: the App Router not-found page is only
- * seeded when it is a prerender output
- */
-export const withoutStandaloneOnlyKeys = (keys: string[]) =>
-  isAdapterMode ? keys.filter((key) => key !== '/_not-found') : keys
 
 /**
  * Fake build utils that are passed to a build plugin execution

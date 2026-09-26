@@ -37,7 +37,7 @@ import {
   getBlobEntries,
   pageBlobKey,
   startMockBlobStore,
-  withoutStandaloneOnlyKeys,
+  isAdapterMode,
 } from '../utils/helpers.js'
 import {
   hasDefaultTurbopackBuilds,
@@ -111,31 +111,31 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
   // check if the blob entries where successful set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
   expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
-    withoutStandaloneOnlyKeys(
-      [
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-        '/api/cached-permanent',
-        '/api/cached-revalidate',
-        '/app-redirect/dest',
-        '/app-redirect/prerendered',
-        '/config-redirect',
-        '/config-redirect/dest',
-        '/config-rewrite',
-        '/config-rewrite/dest',
-        '/image/local',
-        '/image/migration-from-v4-runtime',
-        '/image/remote-domain',
-        '/image/remote-pattern-1',
-        '/image/remote-pattern-2',
-        '/index',
-        '/other',
-        '/route-resolves-to-not-found',
-        '404.html',
-        '500.html',
-        'fully-static.html',
-      ].filter(Boolean) as string[],
-    ),
+    [
+      shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+      shouldHaveAppRouterNotFoundInPrerenderManifest() && !isAdapterMode
+        ? '/_not-found'
+        : undefined,
+      '/api/cached-permanent',
+      '/api/cached-revalidate',
+      '/app-redirect/dest',
+      '/app-redirect/prerendered',
+      '/config-redirect',
+      '/config-redirect/dest',
+      '/config-rewrite',
+      '/config-rewrite/dest',
+      '/image/local',
+      '/image/migration-from-v4-runtime',
+      '/image/remote-domain',
+      '/image/remote-pattern-1',
+      '/image/remote-pattern-2',
+      '/index',
+      '/other',
+      '/route-resolves-to-not-found',
+      '404.html',
+      '500.html',
+      'fully-static.html',
+    ].filter(Boolean),
   )
 
   // test the function call
@@ -473,25 +473,22 @@ test.skipIf(
 
   // check if the blob entries were successfully set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  // whether adapter mode seeds `/_not-found` depends on the Next version making it a prerender
-  expect(
-    withoutStandaloneOnlyKeys(blobEntries.map(({ key }) => decodePageBlobKey(key))).sort(),
-  ).toEqual(
-    withoutStandaloneOnlyKeys(
-      [
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-        isExperimentalPPRHardDeprecated() ? undefined : '/static-params/[id]',
-        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-        '/dynamic-params/[id]',
-        '/index',
-        '/static-params/1',
-        '/static-params/2',
-        '/static-params/[id]',
-        '404.html',
-        '500.html',
-      ].filter(Boolean) as string[],
-    ),
+  expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
+    [
+      shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+      isExperimentalPPRHardDeprecated() ? undefined : '/static-params/[id]',
+      shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
+      shouldHaveAppRouterNotFoundInPrerenderManifest() && !isAdapterMode
+        ? '/_not-found'
+        : undefined,
+      '/dynamic-params/[id]',
+      '/index',
+      '/static-params/1',
+      '/static-params/2',
+      '/static-params/[id]',
+      '404.html',
+      '500.html',
+    ].filter(Boolean),
   )
 
   // test the function call

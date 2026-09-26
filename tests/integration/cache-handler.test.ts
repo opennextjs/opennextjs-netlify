@@ -16,7 +16,7 @@ import {
   getBlobEntries,
   pageBlobKey,
   startMockBlobStore,
-  withoutStandaloneOnlyKeys,
+  isAdapterMode,
 } from '../utils/helpers.js'
 import {
   nextVersionSatisfies,
@@ -249,18 +249,18 @@ describe('app router', () => {
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
     expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
-      withoutStandaloneOnlyKeys(
-        [
-          shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-          shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-          shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-          '/index',
-          '/posts/1',
-          '/posts/2',
-          '404.html',
-          '500.html',
-        ].filter(Boolean) as string[],
-      ),
+      [
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
+        shouldHaveAppRouterNotFoundInPrerenderManifest() && !isAdapterMode
+          ? '/_not-found'
+          : undefined,
+        '/index',
+        '/posts/1',
+        '/posts/2',
+        '404.html',
+        '500.html',
+      ].filter(Boolean),
     )
 
     // test the function call
@@ -405,27 +405,27 @@ describe('plugin', () => {
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
     expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
-      withoutStandaloneOnlyKeys(
-        [
-          shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-          shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-          shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-          '/api/revalidate-handler',
-          '/api/static/first',
-          '/api/static/second',
-          '/api/zero-length-response',
-          '/index',
-          '/product/事前レンダリング,test',
-          '/revalidate-fetch',
-          '/static-fetch-1',
-          '/static-fetch-2',
-          '/static-fetch-3',
-          '/static-fetch/1',
-          '/static-fetch/2',
-          '404.html',
-          '500.html',
-        ].filter(Boolean) as string[],
-      ),
+      [
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
+        shouldHaveAppRouterNotFoundInPrerenderManifest() && !isAdapterMode
+          ? '/_not-found'
+          : undefined,
+        '/api/revalidate-handler',
+        '/api/static/first',
+        '/api/static/second',
+        '/api/zero-length-response',
+        '/index',
+        '/product/事前レンダリング,test',
+        '/revalidate-fetch',
+        '/static-fetch-1',
+        '/static-fetch-2',
+        '/static-fetch-3',
+        '/static-fetch/1',
+        '/static-fetch/2',
+        '404.html',
+        '500.html',
+      ].filter(Boolean),
     )
   })
 })
