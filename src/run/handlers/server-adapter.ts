@@ -541,11 +541,12 @@ async function resumePrerender(
   if (!handler || isPrefetch || (variant !== entry && !isRSCRequest)) {
     return
   }
-  const resumed = await handler({ ...args, resume: { postponed, headers: entry.resumeHeaders } })
+  const resume = { postponed, headers: entry.resumeHeaders }
   if (isRSCRequest) {
-    return resumed
+    return handler({ ...args, resume })
   }
 
+  // the shell goes out right away, the resumed part streams after it once Next produces it
   const shell = Buffer.from(stored.body, 'base64')
   const body =
     request.method === 'HEAD'
@@ -553,15 +554,21 @@ async function resumePrerender(
       : new ReadableStream<Uint8Array>({
           async start(controller) {
             controller.enqueue(shell)
-            if (resumed.body) {
-              const reader = resumed.body.getReader()
-              for (;;) {
-                const { done, value } = await reader.read()
-                if (done) {
-                  break
+            try {
+              const resumed = await handler({ ...args, resume })
+              if (resumed.body) {
+                const reader = resumed.body.getReader()
+                for (;;) {
+                  const { done, value } = await reader.read()
+                  if (done) {
+                    break
+                  }
+                  controller.enqueue(value)
                 }
-                controller.enqueue(value)
               }
+            } catch (error) {
+              // the shell is already out, so the page can only end short
+              getLogger().withError(error).error('PPR resume error')
             }
             controller.close()
           },
