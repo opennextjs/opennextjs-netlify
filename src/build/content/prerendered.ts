@@ -432,6 +432,10 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
               headers[key] = Array.isArray(value) ? value.join(', ') : value
             }
             const body = await readFile(member.fallback.filePath)
+            if (headers['content-type']?.startsWith('text/html')) {
+              // Netlify Forms are not supported and require a workaround
+              verifyNetlifyForms(ctx, body.toString('utf-8'))
+            }
             group.variants[member.pathname] = {
               status: member.fallback.initialStatus ?? 200,
               headers,
