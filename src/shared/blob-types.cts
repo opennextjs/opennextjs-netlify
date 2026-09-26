@@ -29,7 +29,27 @@ export type UseCacheBlob = {
   revalidate: number
 }
 
-export type BlobType = NetlifyCacheHandlerValue | TagManifest | HtmlBlob | UseCacheBlob
+/**
+ * All variants of one prerender group (adapter output `groupId`: HTML, `.rsc`, segments,
+ * `_next/data`), keyed by output pathname, regenerated and stored together.
+ */
+export type PrerenderGroupBlob = {
+  lastModified: number
+  revalidate: number | false
+  expire: number | undefined
+  tags: string[]
+  variants: Record<string, { status: number; headers: Record<string, string>; body: string }>
+}
+
+export const getPrerenderGroupBlobKey = (entryPathname: string) =>
+  `prerender-group:${entryPathname}`
+
+export type BlobType =
+  | NetlifyCacheHandlerValue
+  | TagManifest
+  | HtmlBlob
+  | UseCacheBlob
+  | PrerenderGroupBlob
 
 export const isTagManifest = (value: BlobType): value is TagManifest => {
   return (
