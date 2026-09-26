@@ -50,9 +50,16 @@ export const getPrerenderGroupBlobKey = (entryPathname: string) =>
 export const getPrerenderFallbackBlobKey = (entryPathname: string) =>
   `prerender-fallback:${entryPathname}`
 
-// Pages Router responses carry no `x-next-cache-tags`: tag them by path, as `revalidatePath` does
-export const getPrerenderGroupTags = (entryPathname: string, cacheTagsHeader?: string) =>
-  cacheTagsHeader?.split(',') ?? [`_N_T_${entryPathname}`]
+// Pages Router responses carry no `x-next-cache-tags`: tag them by path without the basePath, as
+// `revalidatePath` does
+export const getPrerenderGroupTags = (
+  entryPathname: string,
+  cacheTagsHeader: string | undefined,
+  basePath: string,
+) =>
+  cacheTagsHeader?.split(',') ?? [
+    `_N_T_${(basePath && entryPathname.startsWith(basePath) ? entryPathname.slice(basePath.length) : entryPathname) || '/'}`,
+  ]
 
 export type BlobType =
   | NetlifyCacheHandlerValue

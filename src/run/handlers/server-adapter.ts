@@ -50,7 +50,7 @@ import {
 import { invokeEdgeRuntimeOutput } from './edge-runtime-sandbox.js'
 import { getRequestContext, type RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
-import { isAnyTagStaleOrExpired, purgeEdgeCache } from './tags-handler.cjs'
+import { encodeCacheTag, isAnyTagStaleOrExpired, purgeEdgeCache } from './tags-handler.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
@@ -401,6 +401,7 @@ async function regeneratePrerenderGroup(
     tags: getPrerenderGroupTags(
       interpolatePrerenderPathname(group.entry.pathname, params),
       entryHeaders['x-next-cache-tags'],
+      basePath,
     ),
     variants,
     postponed,
@@ -443,7 +444,7 @@ async function servePrerenderGroup(
       ...args,
       onDemandToken: group.entry.bypassToken,
     })
-    requestContext.trackBackgroundWork(purgeEdgeCache(blob.tags))
+    requestContext.trackBackgroundWork(purgeEdgeCache(blob.tags.map(encodeCacheTag)))
     nextCache = 'MISS'
   } else if (blob) {
     const age = (Date.now() - blob.lastModified) / 1000
@@ -520,7 +521,7 @@ async function servePrerenderGroup(
     requestContext.responseCacheGetLastModified = blob.lastModified
   }
   if (!stored.headers['x-next-cache-tags']) {
-    requestContext.responseCacheTags ??= blob.tags
+    requestContext.responseCacheTags ??= blob.tags.map(encodeCacheTag)
   }
   // what the cache handler reported for Pages Router entries, the 404 caching heuristics read it
   requestContext.pageHandlerRevalidate ??= blob.revalidate
@@ -605,7 +606,7 @@ async function applyCacheHeaders(
   // in minimal mode Next leaves the tags on the response instead of going through the cache handler
   const nextCacheTags = response.headers.get('x-next-cache-tags')
   if (nextCacheTags) {
-    requestContext.responseCacheTags ??= nextCacheTags.split(',')
+    requestContext.responseCacheTags ??= nextCacheTags.split(',').map(encodeCacheTag)
     response.headers.delete('x-next-cache-tags')
   }
 

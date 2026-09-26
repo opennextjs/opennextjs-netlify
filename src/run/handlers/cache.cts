@@ -27,6 +27,7 @@ import {
 
 import { getLogger, getRequestContext } from './request-context.cjs'
 import {
+  encodeCacheTag,
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
   purgeEdgeCache,
@@ -36,20 +37,6 @@ import {
 import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
 
 const NEXT_CACHE_TAGS_HEADER = 'x-next-cache-tags'
-
-/**
- * Same rule as Next's `encodeHeaderSafe` (`server/lib/encode-header-safe.ts`): percent-encode only
- * what an HTTP header cannot carry, and leave everything printable-ASCII alone. Crucially it is
- * idempotent on `%xx`, which `encodeURI` is not - a key that already contains `%2F` (a dynamic
- * param holding a path, say) came out as `%252F`, so the tag we attached never matched the one
- * `revalidatePath`/`revalidateTag` purges, and the CDN entry was never invalidated.
- */
-const OUT_OF_CLASS_CHAR = /[^\t\u0020-\u007E]/
-const OUT_OF_CLASS_RUN = /[^\t\u0020-\u007E]+/g
-const encodeCacheTag = (value: string): string =>
-  OUT_OF_CLASS_CHAR.test(value)
-    ? value.replace(OUT_OF_CLASS_RUN, (run) => encodeURIComponent(run))
-    : value
 
 let memoizedPrerenderManifest: PrerenderManifest
 

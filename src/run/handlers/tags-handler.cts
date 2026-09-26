@@ -150,6 +150,20 @@ function getCacheTagsFromTagOrTags(tagOrTags: string | string[]): string[] {
     .filter(Boolean)
 }
 
+/**
+ * Same rule as Next's `encodeHeaderSafe` (`server/lib/encode-header-safe.ts`): percent-encode only
+ * what an HTTP header cannot carry, and leave everything printable-ASCII alone. Crucially it is
+ * idempotent on `%xx`, which `encodeURI` is not - a key that already contains `%2F` (a dynamic
+ * param holding a path, say) came out as `%252F`, so the tag we attached never matched the one
+ * `revalidatePath`/`revalidateTag` purges, and the CDN entry was never invalidated.
+ */
+const OUT_OF_CLASS_CHAR = /[^\t\u0020-\u007E]/
+const OUT_OF_CLASS_RUN = /[^\t\u0020-\u007E]+/g
+export const encodeCacheTag = (value: string): string =>
+  OUT_OF_CLASS_CHAR.test(value)
+    ? value.replace(OUT_OF_CLASS_RUN, (run) => encodeURIComponent(run))
+    : value
+
 export function purgeEdgeCache(tagOrTags: string | string[]): Promise<void> {
   const tags = getCacheTagsFromTagOrTags(tagOrTags)
 

@@ -446,6 +446,7 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
           group.tags = getPrerenderGroupTags(
             entry.pathname,
             group.variants[entry.pathname]?.headers['x-next-cache-tags'],
+            ctx.adapterOutput.config.basePath ?? '',
           )
 
           await writeFile(
