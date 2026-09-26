@@ -8,6 +8,7 @@ import {
   encodeBlobKey,
   generateRandomObjectID,
   getBlobServerGets,
+  pageBlobKey,
   startMockBlobStore,
 } from '../utils/helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
@@ -55,7 +56,7 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
   await createFixture('server-components', ctx)
   await runPlugin(ctx)
 
-  expect(await ctx.blobStore.get(encodeBlobKey('/static-fetch/1'))).not.toBeNull()
+  expect(await ctx.blobStore.get(pageBlobKey('/static-fetch/1'))).not.toBeNull()
   expect(await ctx.blobStore.get(encodeBlobKey('_N_T_/static-fetch/[id]/page'))).toBeNull()
 
   ctx.blobServerOnRequestSpy.mockClear()

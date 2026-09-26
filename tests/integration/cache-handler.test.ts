@@ -11,11 +11,12 @@ import {
 } from '../utils/fixture.js'
 import {
   countOfBlobServerGetsForKey,
-  decodeBlobKey,
-  encodeBlobKey,
+  decodePageBlobKey,
   generateRandomObjectID,
   getBlobEntries,
+  pageBlobKey,
   startMockBlobStore,
+  withoutStandaloneOnlyKeys,
 } from '../utils/helpers.js'
 import {
   nextVersionSatisfies,
@@ -63,7 +64,7 @@ describe('page router', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 11_000))
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key.substring(0, 50))).sort()).toEqual([
+    expect(blobEntries.map(({ key }) => decodePageBlobKey(key, 50)).sort()).toEqual([
       '/fallback-true/[slug]',
       '/fallback-true/prerendered',
       // the real key is much longer and ends in a hash, but we only assert on the first 50 chars to make it easier
@@ -247,17 +248,19 @@ describe('app router', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 6_000))
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
-      [
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-        '/index',
-        '/posts/1',
-        '/posts/2',
-        '404.html',
-        '500.html',
-      ].filter(Boolean),
+    expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
+      withoutStandaloneOnlyKeys(
+        [
+          shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+          shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
+          shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+          '/index',
+          '/posts/1',
+          '/posts/2',
+          '404.html',
+          '500.html',
+        ].filter(Boolean) as string[],
+      ),
     )
 
     // test the function call
@@ -296,7 +299,7 @@ describe('app router', () => {
     ).toBe(1)
     ctx.blobServerOnRequestSpy.mockClear()
 
-    expect(await ctx.blobStore.get(encodeBlobKey('/posts/3'))).toBeNull()
+    expect(await ctx.blobStore.get(pageBlobKey('/posts/3', '/posts/[id]?nxtPid=3'))).toBeNull()
     // this page is not pre-rendered and should result in a cache miss
     const post3 = await invokeFunction(ctx, { url: 'posts/3' })
     expect(post3.statusCode).toBe(200)
@@ -310,7 +313,7 @@ describe('app router', () => {
     // wait to have a stale page
     await new Promise<void>((resolve) => setTimeout(resolve, 6_000))
     // after the dynamic call of `posts/3` it should be in cache, note this is after the timeout as the cache set happens async
-    expect(await ctx.blobStore.get(encodeBlobKey('/posts/3'))).not.toBeNull()
+    expect(await ctx.blobStore.get(pageBlobKey('/posts/3', '/posts/[id]?nxtPid=3'))).not.toBeNull()
 
     const stale = await invokeFunction(ctx, { url: 'posts/1' })
     const staleDate = load(stale.body)('[data-testid="date-now"]').text()
@@ -360,7 +363,7 @@ describe('app router', () => {
 
     const blobEntries = await getBlobEntries(ctx)
     // dynamic route that is not pre-rendered should NOT be in the blob store (this is to ensure that test setup is correct)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key))).not.toContain('/static-fetch/3')
+    expect(blobEntries.map(({ key }) => decodePageBlobKey(key))).not.toContain('/static-fetch/3')
 
     // there is no pre-rendered page for this route, so it should result in a cache miss and blocking render
     const call1 = await invokeSandboxedFunction(ctx, { url: '/static-fetch/3' })
@@ -401,26 +404,28 @@ describe('plugin', () => {
     await runPlugin(ctx)
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
-      [
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-        shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-        '/api/revalidate-handler',
-        '/api/static/first',
-        '/api/static/second',
-        '/api/zero-length-response',
-        '/index',
-        '/product/事前レンダリング,test',
-        '/revalidate-fetch',
-        '/static-fetch-1',
-        '/static-fetch-2',
-        '/static-fetch-3',
-        '/static-fetch/1',
-        '/static-fetch/2',
-        '404.html',
-        '500.html',
-      ].filter(Boolean),
+    expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
+      withoutStandaloneOnlyKeys(
+        [
+          shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+          shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
+          shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+          '/api/revalidate-handler',
+          '/api/static/first',
+          '/api/static/second',
+          '/api/zero-length-response',
+          '/index',
+          '/product/事前レンダリング,test',
+          '/revalidate-fetch',
+          '/static-fetch-1',
+          '/static-fetch-2',
+          '/static-fetch-3',
+          '/static-fetch/1',
+          '/static-fetch/2',
+          '404.html',
+          '500.html',
+        ].filter(Boolean) as string[],
+      ),
     )
   })
 })
@@ -447,7 +452,7 @@ describe('route', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 8_000))
 
     // check if the route got prerendered
-    const blobEntry = await ctx.blobStore.get(encodeBlobKey('/api/revalidate-handler'), {
+    const blobEntry = await ctx.blobStore.get(pageBlobKey('/api/revalidate-handler'), {
       type: 'json',
     })
     expect(blobEntry).not.toBeNull()

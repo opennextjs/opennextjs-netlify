@@ -8,7 +8,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin, runPluginStep } from '../utils/fixture.js'
 import {
-  decodeBlobKey,
+  decodePageBlobKey,
   generateRandomObjectID,
   getBlobEntries,
   startMockBlobStore,
@@ -34,7 +34,7 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
   await runPlugin(ctx)
 
   const entries = await getBlobEntries(ctx)
-  expect(entries.map(({ key }) => decodeBlobKey(key.substring(0, 50))).sort()).toEqual([
+  expect(entries.map(({ key }) => decodePageBlobKey(key, 50)).sort()).toEqual([
     '/fallback-true/[slug]',
     '/fallback-true/prerendered',
     '/products/an-incredibly-long-product-',

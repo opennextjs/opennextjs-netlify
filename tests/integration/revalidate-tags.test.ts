@@ -5,9 +5,9 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
 import {
-  encodeBlobKey,
   generateRandomObjectID,
   getBlobServerGets,
+  pageBlobKey,
   startMockBlobStore,
 } from '../utils/helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
@@ -55,7 +55,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
   await createFixture('server-components', ctx)
   await runPlugin(ctx)
 
-  expect(await ctx.blobStore.get(encodeBlobKey('/static-fetch-1'))).not.toBeNull()
+  expect(await ctx.blobStore.get(pageBlobKey('/static-fetch-1'))).not.toBeNull()
 
   ctx.blobServerOnRequestSpy.mockClear()
 
