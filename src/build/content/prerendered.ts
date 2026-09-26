@@ -394,17 +394,18 @@ export const isGroupEntry = (output: PrerenderOutput, ctx: PluginContextAdapter)
 }
 
 /**
- * A route's fallback that is complete enough to serve as is while a path is generated: the Pages
- * Router `fallback: true` shell. PPR shells (postponed state) need a resume and are not.
+ * A route's fallback served while a path is generated: the Pages Router `fallback: true` shell, or
+ * a PPR partial fallback shell (resumed per request and upgraded to the path in the background).
  */
 export const isFallbackShell = (output: PrerenderOutput, ctx: PluginContextAdapter) =>
-  (output.routeType === undefined
-    ? isGroupEntry(output, ctx) && Boolean(output.config.allowQuery?.length)
-    : output.routeType === 'fallback' &&
-      output.response === 'initial' &&
-      output.compute === 'static') &&
   Boolean(output.fallback?.filePath) &&
-  !output.fallback?.postponedState
+  (output.fallback?.postponedState
+    ? Boolean(output.config.partialFallback)
+    : output.routeType === undefined
+      ? isGroupEntry(output, ctx) && Boolean(output.config.allowQuery?.length)
+      : output.routeType === 'fallback' &&
+        output.response === 'initial' &&
+        output.compute === 'static')
 
 /**
  * Seed one blob per prerender group from the adapter output fallbacks (groups with params, like

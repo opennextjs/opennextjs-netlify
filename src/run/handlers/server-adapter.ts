@@ -485,6 +485,21 @@ async function servePrerenderGroup(
       'prerenderFallback.get',
     )
     const shellVariant = shell?.variants[variant.pathname]
+    if (shellVariant && shell?.postponed !== undefined && group.entry.resumeHeaders) {
+      // PPR partial fallback: resume the shell for this request, and upgrade it to the path's own
+      // group in the background
+      requestContext.trackBackgroundWork(
+        regeneratePrerenderGroup(groupKey, group, params, args).then(
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
+          () => {},
+          (error) => getLogger().withError(error).error('prerender group regeneration error'),
+        ),
+      )
+      return resumePrerender(
+        { variant, entry: group.entry, postponed: shell.postponed, stored: shellVariant },
+        args,
+      )
+    }
     if (shellVariant) {
       const response = new Response(
         request.method === 'HEAD' ? null : Buffer.from(shellVariant.body, 'base64'),
