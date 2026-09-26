@@ -606,7 +606,8 @@ async function applyCacheHeaders(
   // in minimal mode Next leaves the tags on the response instead of going through the cache handler
   const nextCacheTags = response.headers.get('x-next-cache-tags')
   if (nextCacheTags) {
-    requestContext.responseCacheTags ??= nextCacheTags.split(',').map(encodeCacheTag)
+    // split like the cache handler and the purge do, `%2c` included
+    requestContext.responseCacheTags ??= nextCacheTags.split(/,|%2c/gi).map(encodeCacheTag)
     response.headers.delete('x-next-cache-tags')
   }
 

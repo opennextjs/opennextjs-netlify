@@ -57,7 +57,7 @@ export const getPrerenderGroupTags = (
   cacheTagsHeader: string | undefined,
   basePath: string,
 ) =>
-  cacheTagsHeader?.split(',') ?? [
+  cacheTagsHeader?.split(/,|%2c/gi) ?? [
     `_N_T_${(basePath && entryPathname.startsWith(basePath) ? entryPathname.slice(basePath.length) : entryPathname) || '/'}`,
   ]
 
