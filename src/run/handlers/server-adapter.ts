@@ -236,11 +236,6 @@ function getPrerenderVariant(
   if (!rsc || headers.get(rsc.header) !== '1') {
     return output
   }
-  // runtime prefetches (`2`, and the App Shell `3`) render at request time, Next answers them
-  const prefetch = headers.get(rsc.prefetchHeader)
-  if (prefetch === '2' || prefetch === '3') {
-    return
-  }
   if (
     resolvedPathname.endsWith(rsc.suffix) ||
     resolvedPathname.endsWith(rsc.prefetchSegmentSuffix)
