@@ -104,6 +104,9 @@ type CommonHandlerArg = {
   invocationId?: string
   // Next's response as is, without our CDN headers (to store it)
   raw?: boolean
+  // PPR: resume a postponed render with this state and the output's `pprChain` headers
+  resume?: { postponed: string; headers?: Record<string, string> }
+  onCacheEntry?: (entry: { value?: { kind?: string; postponed?: string } | null }) => void
 }
 
 type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
@@ -355,6 +358,13 @@ async function regeneratePrerenderGroup(
 ): Promise<PrerenderGroupBlob> {
   const invocationId = randomUUID()
   const variants: PrerenderGroupBlob['variants'] = {}
+  let postponed: string | undefined
+  const capturePostponed: CommonHandlerArg['onCacheEntry'] = (entry) => {
+    if (entry.value?.kind === 'APP_PAGE') {
+      const { postponed: entryPostponed } = entry.value
+      postponed = entryPostponed
+    }
+  }
   // the entry first: its render fills Next's response cache for the other variants
   for (const member of [group.entry, ...group.members.filter((item) => item !== group.entry)]) {
     const handler = handlerDefsId.get(member.parentOutputId)
@@ -369,6 +379,7 @@ async function regeneratePrerenderGroup(
       resolution: {},
       invocationId,
       raw: true,
+      ...(member === group.entry && { onCacheEntry: capturePostponed }),
     })
     variants[member.pathname] = {
       status: response.status,
@@ -388,6 +399,7 @@ async function regeneratePrerenderGroup(
       entryHeaders['x-next-cache-tags'],
     ),
     variants,
+    postponed,
   }
   if (cacheControl) {
     const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
@@ -475,6 +487,16 @@ async function servePrerenderGroup(
     return
   }
 
+  if (blob.postponed !== undefined && group.entry.resumeHeaders) {
+    const resumed = await resumePrerender(
+      { variant, entry: group.entry, postponed: blob.postponed, stored },
+      args,
+    )
+    if (resumed) {
+      return resumed
+    }
+  }
+
   const response = new Response(
     request.method === 'HEAD' ? null : Buffer.from(stored.body, 'base64'),
     { status: stored.status, headers: stored.headers },
@@ -488,6 +510,67 @@ async function servePrerenderGroup(
   }
   // what the cache handler reported for Pages Router entries, the 404 caching heuristics read it
   requestContext.pageHandlerRevalidate ??= blob.revalidate
+  await applyCacheHeaders(response, request, requestContext)
+  return response
+}
+
+/**
+ * PPR: the stored shell is only the start of the page, the rest comes from resuming its postponed
+ * render, streamed after it as one response (and a dynamic RSC request is a resume on its own). The
+ * result is per request, so it isn't cached.
+ */
+async function resumePrerender(
+  {
+    variant,
+    entry,
+    postponed,
+    stored,
+  }: {
+    variant: PrerenderOutput
+    entry: PrerenderOutput
+    postponed: string
+    stored: PrerenderGroupBlob['variants'][string]
+  },
+  args: CommonHandlerArg,
+): Promise<Response | undefined> {
+  const { request, requestContext } = args
+  const { rsc } = manifest.routing
+  const isRSCRequest = Boolean(rsc) && request.headers.get(rsc.header) === '1'
+  const isPrefetch = isRSCRequest && request.headers.get(rsc.prefetchHeader) === '1'
+  const handler = handlerDefsId.get(variant.parentOutputId)
+  if (!handler || isPrefetch || (variant !== entry && !isRSCRequest)) {
+    return
+  }
+  const resumed = await handler({ ...args, resume: { postponed, headers: entry.resumeHeaders } })
+  if (isRSCRequest) {
+    return resumed
+  }
+
+  const shell = Buffer.from(stored.body, 'base64')
+  const body =
+    request.method === 'HEAD'
+      ? null
+      : new ReadableStream<Uint8Array>({
+          async start(controller) {
+            controller.enqueue(shell)
+            if (resumed.body) {
+              const reader = resumed.body.getReader()
+              for (;;) {
+                const { done, value } = await reader.read()
+                if (done) {
+                  break
+                }
+                controller.enqueue(value)
+              }
+            }
+            controller.close()
+          },
+        })
+  const response = new Response(body, { status: stored.status, headers: stored.headers })
+  response.headers.delete('x-next-cache-tags')
+  const noStore = 'private, no-cache, no-store, max-age=0, must-revalidate'
+  response.headers.set('cache-control', noStore)
+  response.headers.set('netlify-cdn-cache-control', noStore)
   await applyCacheHeaders(response, request, requestContext)
   return response
 }
@@ -865,6 +948,8 @@ async function invokeHandler(
     invokeStatus,
     invocationId,
     raw,
+    resume,
+    onCacheEntry,
   }: CommonHandlerArg,
 ) {
   span?.setAttribute('matched.sourcePage', sourcePage)
@@ -899,6 +984,9 @@ async function invokeHandler(
         : request
       // without one Next's minimal-mode response cache reuses renders across requests for 10s
       handlerRequest.headers.set('x-invocation-id', invocationId ?? randomUUID())
+      for (const [key, value] of Object.entries(resume?.headers ?? {})) {
+        handlerRequest.headers.set(key, value)
+      }
 
       // Convert Web Request to Node.js IncomingMessage/ServerResponse
       const { req, res } = toReqRes(handlerRequest)
@@ -916,6 +1004,13 @@ async function invokeHandler(
           render404,
           revalidate,
           minimalMode: true,
+          ...(resume && { postponed: resume.postponed }),
+          ...(onCacheEntry && {
+            onCacheEntryV2: async (entry: Parameters<typeof onCacheEntry>[0]) => {
+              onCacheEntry(entry)
+              return false
+            },
+          }),
         },
       })
 
