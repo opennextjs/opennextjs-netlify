@@ -7,7 +7,12 @@ import { v4 } from 'uuid'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
-import { encodeBlobKey, generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
+import {
+  generateRandomObjectID,
+  getPageHtml,
+  pageBlobKey,
+  startMockBlobStore,
+} from '../utils/helpers.js'
 
 // Disable the verbose logging of the lambda-local runtime
 getLogger().level = 'alert'
@@ -67,21 +72,25 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
 
   expect(staticPageInitial.statusCode).toBe(200)
   expect(staticPageInitial.headers?.['cache-status']).toMatch(/"Next.js"; hit/)
-  const blobDataInitial = await ctx.blobStore.get(encodeBlobKey('/static/revalidate-manual'), {
+  const blobDataInitial = await ctx.blobStore.get(pageBlobKey('/static/revalidate-manual'), {
     type: 'json',
   })
-  const blobDateInitial = load(blobDataInitial.value.html).html('[data-testid="date-now"]')
+  const blobDateInitial = load(getPageHtml(blobDataInitial, '/static/revalidate-manual')).html(
+    '[data-testid="date-now"]',
+  )
 
   const revalidate = await invokeFunction(ctx, { url: '/api/revalidate' })
   expect(revalidate.statusCode).toBe(200)
 
   await new Promise<void>((resolve) => setTimeout(resolve, 100))
 
-  const blobDataRevalidated = await ctx.blobStore.get(encodeBlobKey('/static/revalidate-manual'), {
+  const blobDataRevalidated = await ctx.blobStore.get(pageBlobKey('/static/revalidate-manual'), {
     type: 'json',
   })
 
-  const blobDateRevalidated = load(blobDataRevalidated.value.html).html('[data-testid="date-now"]')
+  const blobDateRevalidated = load(
+    getPageHtml(blobDataRevalidated, '/static/revalidate-manual'),
+  ).html('[data-testid="date-now"]')
 
   // TODO: Blob data is updated on revalidate but page still producing previous data
   expect(blobDateInitial).not.toBe(blobDateRevalidated)

@@ -32,10 +32,12 @@ import {
   runPlugin,
 } from '../utils/fixture.js'
 import {
-  decodeBlobKey,
+  decodePageBlobKey,
   generateRandomObjectID,
   getBlobEntries,
+  pageBlobKey,
   startMockBlobStore,
+  withoutStandaloneOnlyKeys,
 } from '../utils/helpers.js'
 import {
   hasDefaultTurbopackBuilds,
@@ -108,30 +110,32 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
   await runPlugin(ctx)
   // check if the blob entries where successful set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
-    [
-      shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-      shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
-      '/api/cached-permanent',
-      '/api/cached-revalidate',
-      '/app-redirect/dest',
-      '/app-redirect/prerendered',
-      '/config-redirect',
-      '/config-redirect/dest',
-      '/config-rewrite',
-      '/config-rewrite/dest',
-      '/image/local',
-      '/image/migration-from-v4-runtime',
-      '/image/remote-domain',
-      '/image/remote-pattern-1',
-      '/image/remote-pattern-2',
-      '/index',
-      '/other',
-      '/route-resolves-to-not-found',
-      '404.html',
-      '500.html',
-      'fully-static.html',
-    ].filter(Boolean),
+  expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
+    withoutStandaloneOnlyKeys(
+      [
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
+        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+        '/api/cached-permanent',
+        '/api/cached-revalidate',
+        '/app-redirect/dest',
+        '/app-redirect/prerendered',
+        '/config-redirect',
+        '/config-redirect/dest',
+        '/config-rewrite',
+        '/config-rewrite/dest',
+        '/image/local',
+        '/image/migration-from-v4-runtime',
+        '/image/remote-domain',
+        '/image/remote-pattern-1',
+        '/image/remote-pattern-2',
+        '/index',
+        '/other',
+        '/route-resolves-to-not-found',
+        '404.html',
+        '500.html',
+        'fully-static.html',
+      ].filter(Boolean) as string[],
+    ),
   )
 
   // test the function call
@@ -372,7 +376,10 @@ test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=f
 
   const permanentlyCachedResponse = await invokeFunction(ctx, { url: '/api/cached-permanent' })
   expect(permanentlyCachedResponse.headers['netlify-cdn-cache-control']).toBe(
-    's-maxage=31536000, stale-while-revalidate=31536000, durable',
+    // adapter mode passes on Next's own cache-control, like for pages
+    process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+      ? 's-maxage=31536000, durable'
+      : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
   )
 })
 
@@ -417,12 +424,12 @@ test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=1
   // already cacheable with the route's revalidate
   const firstTimeCachedResponse = await invokeFunction(ctx, { url: '/api/cached-revalidate' })
   expect(firstTimeCachedResponse.headers['netlify-cdn-cache-control']).toMatch(
-    /(max-age|s-maxage)=15, stale-while-revalidate=31536000, durable/,
+    /(max-age|s-maxage)=15, stale-while-revalidate=\d+, durable/,
   )
 
   const secondTimeCachedResponse = await invokeFunction(ctx, { url: '/api/cached-revalidate' })
   expect(secondTimeCachedResponse.headers['netlify-cdn-cache-control']).toMatch(
-    /(max-age|s-maxage)=15, stale-while-revalidate=31536000, durable/,
+    /(max-age|s-maxage)=15, stale-while-revalidate=\d+, durable/,
   )
 })
 
@@ -466,7 +473,7 @@ test.skipIf(
 
   // check if the blob entries were successfully set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
+  expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
     [
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
       isExperimentalPPRHardDeprecated() ? undefined : '/static-params/[id]',
