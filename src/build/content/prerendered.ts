@@ -10,6 +10,7 @@ import type { RouteMetadata } from 'next-with-cache-handler-v2/dist/export/route
 import pLimit from 'p-limit'
 import { satisfies } from 'semver'
 
+import { getPrerenderGroupBlobKey, type PrerenderGroupBlob } from '../../shared/blob-types.cjs'
 import { encodeBlobKey } from '../../shared/blobkey.js'
 import type {
   CachedFetchValueForMultipleVersions,
@@ -19,7 +20,7 @@ import type {
   NetlifyCacheHandlerValue,
   NetlifyIncrementalCacheValue,
 } from '../../shared/cache-types.cjs'
-import type { PluginContext } from '../plugin-context.js'
+import type { PluginContext, PluginContextAdapter } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
@@ -365,4 +366,61 @@ export const copyFetchContent = async (ctx: PluginContext): Promise<void> => {
   } catch (error) {
     ctx.failBuild('Failed assembling fetch content for upload', error)
   }
+}
+
+/**
+ * Seed one blob per prerender group from the adapter output fallbacks (groups with params, like
+ * `/posts/[id]`, have none and are filled at runtime).
+ */
+export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<void> => {
+  return tracer.withActiveSpan('copyPrerenderGroups', async () => {
+    await mkdir(ctx.blobDir, { recursive: true })
+    const { prerenders } = ctx.adapterOutput.outputs
+    const lastModified = Date.now()
+
+    await Promise.all(
+      prerenders
+        .filter((entry) => entry.routeType !== undefined && entry.fallback?.filePath)
+        .filter((entry) => !entry.config.allowQuery?.length)
+        .map(async (entry) => {
+          const revalidate = entry.fallback?.initialRevalidate ?? false
+          const expire = entry.fallback?.initialExpiration
+          const cacheControl =
+            revalidate === false
+              ? 's-maxage=31536000'
+              : `s-maxage=${revalidate}, stale-while-revalidate=${(expire ?? 31536000) - revalidate}`
+
+          const group: PrerenderGroupBlob = {
+            lastModified,
+            revalidate,
+            expire,
+            tags: [],
+            variants: {},
+          }
+          for (const member of prerenders) {
+            if (member.groupId !== entry.groupId || !member.fallback?.filePath) {
+              continue
+            }
+            const headers: Record<string, string> = { 'cache-control': cacheControl }
+            for (const [key, value] of Object.entries(member.fallback.initialHeaders ?? {})) {
+              headers[key] = Array.isArray(value) ? value.join(', ') : value
+            }
+            const body = await readFile(member.fallback.filePath)
+            group.variants[member.pathname] = {
+              status: member.fallback.initialStatus ?? 200,
+              headers,
+              body: body.toString('base64'),
+            }
+          }
+          group.tags =
+            group.variants[entry.pathname]?.headers['x-next-cache-tags']?.split(',') ?? []
+
+          await writeFile(
+            join(ctx.blobDir, await encodeBlobKey(getPrerenderGroupBlobKey(entry.pathname))),
+            JSON.stringify(group),
+            'utf-8',
+          )
+        }),
+    )
+  })
 }

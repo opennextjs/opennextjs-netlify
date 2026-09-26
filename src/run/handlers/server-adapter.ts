@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Buffer } from 'node:buffer'
+import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -21,7 +22,11 @@ import type {
   ResolveRoutesResult,
 } from '../../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../../adapter-runtime-shared/proxy-external-rewrite.js'
-import { HtmlBlob } from '../../shared/blob-types.cjs'
+import {
+  getPrerenderGroupBlobKey,
+  HtmlBlob,
+  type PrerenderGroupBlob,
+} from '../../shared/blob-types.cjs'
 import type { AdapterManifestComputeOutput } from '../config.js'
 import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
@@ -42,6 +47,7 @@ import {
 import { invokeEdgeRuntimeOutput } from './edge-runtime-sandbox.js'
 import { getRequestContext, type RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
+import { isAnyTagStaleOrExpired } from './tags-handler.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
@@ -92,6 +98,10 @@ type CommonHandlerArg = {
   span?: Span
   // set when rendering the error page for this status (like Next's router does with res.statusCode)
   invokeStatus?: number
+  // shared by the invocations regenerating one prerender group, so Next renders it once
+  invocationId?: string
+  // Next's response as is, without our CDN headers (to store it)
+  raw?: boolean
 }
 
 type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
@@ -182,6 +192,273 @@ for (const output of manifest.outputs.prerenders) {
     readOnlyPathnames.add(output.pathname)
   }
   ssgPathnames.add(output.pathname)
+}
+
+// Prerender groups (adapter output `groupId`): one blob holds every variant of a prerendered path,
+// they are regenerated and stored together (see copyPrerenderGroups)
+type PrerenderOutput = (typeof manifest.outputs.prerenders)[number]
+type PrerenderGroup = { entry?: PrerenderOutput; members: PrerenderOutput[] }
+const prerendersByPathname = new Map<string, PrerenderOutput>()
+const prerenderGroups = new Map<number, PrerenderGroup>()
+for (const output of manifest.outputs.prerenders) {
+  prerendersByPathname.set(output.pathname, output)
+  const group = prerenderGroups.get(output.groupId) ?? { members: [] }
+  group.members.push(output)
+  if (output.isGroupEntry) {
+    group.entry = output
+  }
+  prerenderGroups.set(output.groupId, group)
+}
+
+// Routing resolves to the group's page output; which variant is asked for comes from the
+// `routing.rsc` headers (a data request is resolved by routing itself)
+function getPrerenderVariant(
+  resolvedPathname: string,
+  headers: Headers,
+  isDataRequest: boolean,
+): PrerenderOutput | undefined {
+  const output = prerendersByPathname.get(resolvedPathname)
+  if (!output) {
+    return
+  }
+  if (isDataRequest) {
+    return prerenderGroups
+      .get(output.groupId)
+      ?.members.find((member) => member.pathname.startsWith(`${basePath}/_next/data/`))
+  }
+  const { rsc } = manifest.routing
+  if (!rsc || headers.get(rsc.header) !== '1') {
+    return output
+  }
+  if (
+    resolvedPathname.endsWith(rsc.suffix) ||
+    resolvedPathname.endsWith(rsc.prefetchSegmentSuffix)
+  ) {
+    return output
+  }
+  const base = resolvedPathname === (basePath || '/') ? `${basePath}/index` : resolvedPathname
+  const segment =
+    headers.get(rsc.prefetchHeader) === '1' ? headers.get(rsc.prefetchSegmentHeader) : null
+  if (segment) {
+    const segmentOutput = prerendersByPathname.get(
+      `${base}${rsc.prefetchSegmentDirSuffix}${segment}${rsc.prefetchSegmentSuffix}`,
+    )
+    if (segmentOutput) {
+      return segmentOutput
+    }
+  }
+  // like Vercel: a segment prefetch without a segment output gets the full RSC payload
+  return prerendersByPathname.get(`${base}${rsc.suffix}`)
+}
+
+function matchesHas(
+  has: NonNullable<PrerenderOutput['bypassFor']>[number],
+  request: Request,
+  url: URL,
+): boolean {
+  let value: string | null | undefined
+  switch (has.type) {
+    case 'header':
+      value = request.headers.get(has.key)
+      break
+    case 'query':
+      value = url.searchParams.get(has.key)
+      break
+    case 'host':
+      value = url.hostname
+      break
+    default:
+      value = getCookie(request, has.key)
+  }
+  if (value === null || value === undefined) {
+    return false
+  }
+  return has.value === undefined || new RegExp(`^${has.value}$`).test(value)
+}
+
+function getCookie(request: Request, name: string): string | undefined {
+  for (const cookie of (request.headers.get('cookie') ?? '').split(';')) {
+    const [key, ...value] = cookie.trim().split('=')
+    if (key === name) {
+      return value.join('=')
+    }
+  }
+}
+
+function shouldBypassPrerender(output: PrerenderOutput, request: Request, url: URL): boolean {
+  if (!['GET', 'HEAD'].includes(request.method)) {
+    return true
+  }
+  // TODO(adapter): the adapter output has the token, the cookie name is Next's
+  if (output.bypassToken && getCookie(request, '__prerender_bypass') === output.bypassToken) {
+    return true
+  }
+  return (output.bypassFor ?? []).some((has) => matchesHas(has, request, url))
+}
+
+function getPrerenderGroupQuery(
+  entry: PrerenderOutput,
+  query: ResolveRoutesResult['resolvedQuery'],
+): URLSearchParams {
+  const params = new URLSearchParams()
+  for (const key of entry.allowQuery ?? []) {
+    const value = query?.[key]
+    for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
+      params.append(key, item)
+    }
+  }
+  return params
+}
+
+// Next's `s-maxage=R, stale-while-revalidate=E-R`; without s-maxage the response isn't cacheable
+function parseNextCacheControl(
+  cacheControl: string | undefined,
+): Pick<PrerenderGroupBlob, 'revalidate' | 'expire'> | undefined {
+  const directives = new Map(
+    (cacheControl ?? '').split(',').map((directive) => {
+      const [key, value] = directive.trim().split('=')
+      return [key.toLowerCase(), value] as const
+    }),
+  )
+  const sMaxAge = Number(directives.get('s-maxage'))
+  if (!Number.isFinite(sMaxAge) || sMaxAge <= 0) {
+    return
+  }
+  if (sMaxAge >= 31536000) {
+    return { revalidate: false, expire: undefined }
+  }
+  const staleWhileRevalidate = Number(directives.get('stale-while-revalidate'))
+  return {
+    revalidate: sMaxAge,
+    expire: Number.isFinite(staleWhileRevalidate) ? sMaxAge + staleWhileRevalidate : undefined,
+  }
+}
+
+async function regeneratePrerenderGroup(
+  groupKey: string,
+  group: Required<PrerenderGroup>,
+  params: URLSearchParams,
+  args: CommonHandlerArg,
+): Promise<PrerenderGroupBlob> {
+  const invocationId = randomUUID()
+  const variants: PrerenderGroupBlob['variants'] = {}
+  // the entry first: its render fills Next's response cache for the other variants
+  for (const member of [group.entry, ...group.members.filter((item) => item !== group.entry)]) {
+    const handler = handlerDefsId.get(member.parentOutputId)
+    if (!handler) {
+      continue
+    }
+    const url = new URL(member.pathname, args.request.url)
+    url.search = params.toString()
+    const response = await handler({
+      ...args,
+      request: new Request(url),
+      resolution: {},
+      invocationId,
+      raw: true,
+    })
+    variants[member.pathname] = {
+      status: response.status,
+      headers: Object.fromEntries(response.headers),
+      body: Buffer.from(await response.arrayBuffer()).toString('base64'),
+    }
+  }
+
+  const entryHeaders = variants[group.entry.pathname]?.headers ?? {}
+  const cacheControl = parseNextCacheControl(entryHeaders['cache-control'])
+  const blob: PrerenderGroupBlob = {
+    lastModified: Date.now(),
+    revalidate: cacheControl?.revalidate ?? false,
+    expire: cacheControl?.expire,
+    tags: entryHeaders['x-next-cache-tags']?.split(',') ?? [],
+    variants,
+  }
+  if (cacheControl) {
+    const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+    await store.set(groupKey, blob, 'prerenderGroup.set')
+  }
+  return blob
+}
+
+async function servePrerenderGroup(
+  variant: PrerenderOutput,
+  group: Required<PrerenderGroup>,
+  args: CommonHandlerArg,
+): Promise<Response | undefined> {
+  const { request, requestContext, resolution } = args
+  const params = getPrerenderGroupQuery(
+    group.entry,
+    resolution.resolvedQuery ?? resolution.invocation?.requestMeta.query,
+  )
+  const paramsString = params.toString()
+  const groupKey = getPrerenderGroupBlobKey(
+    paramsString ? `${group.entry.pathname}?${paramsString}` : group.entry.pathname,
+  )
+  const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+  let blob = await store.get<PrerenderGroupBlob>(groupKey, 'prerenderGroup.get')
+  let nextCache: 'HIT' | 'STALE' | 'MISS' = 'HIT'
+
+  if (blob) {
+    const age = (Date.now() - blob.lastModified) / 1000
+    const tags = await isAnyTagStaleOrExpired(blob.tags, blob.lastModified)
+    const expired = tags.expired || (blob.expire !== undefined && age > blob.expire)
+    const stale = tags.stale || (blob.revalidate !== false && age > blob.revalidate)
+    if (expired || (stale && requestContext.isBackgroundRevalidation)) {
+      blob = null
+    } else if (stale) {
+      nextCache = 'STALE'
+      requestContext.trackBackgroundWork(
+        regeneratePrerenderGroup(groupKey, group, params, args).then(
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
+          () => {},
+          (error) => getLogger().withError(error).error('prerender group regeneration error'),
+        ),
+      )
+    }
+  }
+
+  if (!blob?.variants[variant.pathname]) {
+    nextCache = 'MISS'
+    blob = await regeneratePrerenderGroup(groupKey, group, params, args)
+  }
+  const stored = blob.variants[variant.pathname]
+  if (!stored) {
+    return
+  }
+
+  const response = new Response(
+    request.method === 'HEAD' ? null : Buffer.from(stored.body, 'base64'),
+    { status: stored.status, headers: stored.headers },
+  )
+  response.headers.set('x-nextjs-cache', nextCache)
+  if (nextCache !== 'MISS') {
+    requestContext.responseCacheGetLastModified = blob.lastModified
+  }
+  await applyCacheHeaders(response, request, requestContext)
+  return response
+}
+
+async function applyCacheHeaders(
+  response: Response,
+  request: Request,
+  requestContext: RequestContext,
+  span?: Parameters<typeof adjustDateHeader>[0]['span'],
+) {
+  // in minimal mode Next leaves the tags on the response instead of going through the cache handler
+  const nextCacheTags = response.headers.get('x-next-cache-tags')
+  if (nextCacheTags) {
+    requestContext.responseCacheTags ??= nextCacheTags.split(',')
+    response.headers.delete('x-next-cache-tags')
+  }
+
+  const nextCache = response.headers.get('x-nextjs-cache')
+  if (nextCache === 'HIT' || nextCache === 'STALE') {
+    await adjustDateHeader({ headers: response.headers, request, span, requestContext })
+  }
+  setCacheControlHeaders(response, request, requestContext)
+  setCacheTagsHeaders(response.headers, requestContext)
+  setVaryHeaders(response.headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
+  setCacheStatusHeader(response.headers, nextCache)
 }
 
 // serve static files
@@ -517,7 +794,16 @@ function isPlainNotFoundRequest(url: URL): boolean {
 
 async function invokeHandler(
   { id, entrypoint, runtime, sourcePage }: InvokeHandlerArg,
-  { tracer, request, requestContext, resolution, span, invokeStatus }: CommonHandlerArg,
+  {
+    tracer,
+    request,
+    requestContext,
+    resolution,
+    span,
+    invokeStatus,
+    invocationId,
+    raw,
+  }: CommonHandlerArg,
 ) {
   span?.setAttribute('matched.sourcePage', sourcePage)
   span?.setAttribute('matched.runtime', runtime)
@@ -549,6 +835,8 @@ async function invokeHandler(
       const handlerRequest = invocation
         ? new Request(new URL(invocation.url, request.url), request)
         : request
+      // without one Next's minimal-mode response cache reuses renders across requests for 10s
+      handlerRequest.headers.set('x-invocation-id', invocationId ?? randomUUID())
 
       // Convert Web Request to Node.js IncomingMessage/ServerResponse
       const { req, res } = toReqRes(handlerRequest)
@@ -565,6 +853,7 @@ async function invokeHandler(
           ...(invocation?.requestMeta ?? { initURL: request.url }),
           render404,
           revalidate,
+          minimalMode: true,
         },
       })
 
@@ -594,25 +883,20 @@ async function invokeHandler(
 
       invokeSpan?.setAttribute('http.status_code', response.status)
 
-      const nextCache = response.headers.get('x-nextjs-cache')
-      const isServedFromNextCache = nextCache === 'HIT' || nextCache === 'STALE'
-
-      if (isServedFromNextCache) {
-        await adjustDateHeader({
-          headers: response.headers,
-          request,
-          span: invokeSpan,
-          requestContext,
+      if (raw) {
+        // not the background work: a regeneration running as background work reads this body
+        const untilRendered = new TransformStream({
+          async flush() {
+            await nextHandlerPromise.catch(() => {
+              // reported where the handler promise is created
+            })
+            res.emit('close')
+          },
         })
+        return new Response(response.body?.pipeThrough(untilRendered), response)
       }
-      setCacheControlHeaders(response, request, requestContext)
-      setCacheTagsHeaders(response.headers, requestContext)
-      setVaryHeaders(
-        response.headers,
-        request,
-        manifest.config as Parameters<typeof setVaryHeaders>[2],
-      )
-      setCacheStatusHeader(response.headers, nextCache)
+
+      await applyCacheHeaders(response, request, requestContext, invokeSpan)
 
       // eslint-disable-next-line no-inner-declarations
       async function waitForBackgroundWork() {
@@ -879,7 +1163,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
         handlerHeaders.delete('x-nextjs-data')
       }
 
-      const handlerResponse = await matchedHandler({
+      const handlerArgs: CommonHandlerArg = {
         request: new Request(publicUrl, {
           method: request.method,
           headers: handlerHeaders,
@@ -891,7 +1175,27 @@ export default async function ServerHandler(request: Request, requestContext: Re
         resolution,
         tracer,
         span,
-      })
+      }
+
+      let handlerResponse: Response | undefined
+      const prerenderVariant = getPrerenderVariant(
+        resolution.resolvedPathname,
+        requestHeaders,
+        Boolean(resolution.invocation?.headers['x-nextjs-data']),
+      )
+      const prerenderGroup = prerenderVariant && prerenderGroups.get(prerenderVariant.groupId)
+      if (
+        prerenderVariant &&
+        prerenderGroup?.entry &&
+        !shouldBypassPrerender(prerenderVariant, request, url)
+      ) {
+        handlerResponse = await servePrerenderGroup(
+          prerenderVariant,
+          prerenderGroup as Required<PrerenderGroup>,
+          handlerArgs,
+        )
+      }
+      handlerResponse ??= await matchedHandler(handlerArgs)
 
       if (isNotFoundPageRequest(request, resolution.resolvedPathname)) {
         // Next's server responds 404 here, and CACHE_404_PAGE cache-control handling keys off that

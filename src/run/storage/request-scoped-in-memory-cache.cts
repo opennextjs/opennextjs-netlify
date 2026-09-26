@@ -75,6 +75,10 @@ const estimateBlobKnownTypeSize = (
     return baseSize + data.html.length
   }
 
+  if ('variants' in data) {
+    return baseSize + Object.values(data.variants).reduce((size, { body }) => size + body.length, 0)
+  }
+
   if (data.value?.kind === 'FETCH') {
     return baseSize + data.value.data.body.length
   }

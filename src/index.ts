@@ -6,7 +6,7 @@ import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 
 import { restoreBuildCache, saveBuildCache } from './build/cache.js'
-import { copyPrerenderedContent } from './build/content/prerendered.js'
+import { copyPrerenderedContent, copyPrerenderGroups } from './build/content/prerendered.js'
 import {
   copyStaticAssets,
   copyStaticContent,
@@ -103,6 +103,7 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
       copyStaticAssets(ctx),
       copyStaticContent(ctx),
       copyPrerenderedContent(ctx),
+      ctx.hasAdapter() ? copyPrerenderGroups(ctx) : undefined,
       createServerHandler(ctx),
       ctx.hasAdapter() ? createEdgeHandlersFromAdapter(ctx) : createEdgeHandlers(ctx),
       setHeadersConfig(ctx),
