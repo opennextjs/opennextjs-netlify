@@ -102,8 +102,8 @@ export const onBuild = async (options: NetlifyPluginOptions) => {
     await Promise.all([
       copyStaticAssets(ctx),
       copyStaticContent(ctx),
-      copyPrerenderedContent(ctx),
-      ctx.hasAdapter() ? copyPrerenderGroups(ctx) : undefined,
+      // adapter mode runs Next in minimal mode, which never reads Next-format page entries
+      ctx.hasAdapter() ? copyPrerenderGroups(ctx) : copyPrerenderedContent(ctx),
       createServerHandler(ctx),
       ctx.hasAdapter() ? createEdgeHandlersFromAdapter(ctx) : createEdgeHandlers(ctx),
       setHeadersConfig(ctx),
