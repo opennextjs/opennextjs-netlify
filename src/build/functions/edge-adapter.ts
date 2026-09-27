@@ -154,10 +154,24 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
     `export default (await _ENTRIES[${JSON.stringify(entryKey)}])[${JSON.stringify(handlerExport)}];`,
   )
 
+  // `new URL('./font.ttf', import.meta.url)` compiles to `blob:<asset name>`, which Next's sandbox
+  // answers from the output's assets (`fetchInlineAsset`). Deno can't fetch that, and the throw
+  // takes the whole edge function down, so inline the asset as a `data:` URL, which it can.
+  let bundle = parts.join('\n')
+  for (const [key, absPath] of Object.entries(assets)) {
+    if (!key.endsWith('.js') && bundle.includes(`blob:${key}`)) {
+      const data = await readFile(absPath)
+      bundle = bundle.replaceAll(
+        `blob:${key}`,
+        `data:application/octet-stream;base64,${data.toString('base64')}`,
+      )
+    }
+  }
+
   const name = 'middleware'
   const outputFile = join(handlerDirectory, `server/${name}.js`)
   await mkdir(dirname(outputFile), { recursive: true })
-  await writeFile(outputFile, parts.join('\n'))
+  await writeFile(outputFile, bundle)
 }
 
 /**
