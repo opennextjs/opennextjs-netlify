@@ -1,5 +1,5 @@
 import { cp, lstat, mkdir, readdir, readFile, readlink, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path/posix'
+import { dirname, join, relative } from 'node:path/posix'
 
 import type { Manifest } from '@netlify/edge-functions'
 import type { AdapterOutput } from 'next-with-adapters'
@@ -220,7 +220,13 @@ async function copyNodeMiddlewareDependenciesFromAdapter(
     await handleFileOrDirectory(relPath, absPath)
   }
 
-  parts.push(`registerCJSModules(import.meta.url, virtualModules, virtualSymlinks);
+  // Next's middleware wrapper requires the instrumentation hook from `process.cwd()` (the project
+  // dir under `next start`), so point it at the project dir among the virtual modules, which are
+  // registered relative to this file
+  const relativeProjectDir = relative(ctx.adapterOutput.repoRoot, ctx.adapterOutput.projectDir)
+  parts.push(
+    `process.cwd = () => decodeURIComponent(new URL(${JSON.stringify(relativeProjectDir ? `./${relativeProjectDir}/` : './')}, import.meta.url).pathname).replace(/\\/$/, '');`,
+    `registerCJSModules(import.meta.url, virtualModules, virtualSymlinks);
 
     const require = createRequire(import.meta.url);
     // middleware with top-level await compiles to a module whose require() returns a Promise
@@ -228,7 +234,8 @@ async function copyNodeMiddlewareDependenciesFromAdapter(
     const handler = handlerMod.default || handlerMod;
 
     export default handler
-    `)
+    `,
+  )
 
   const name = 'middleware'
   const outputFile = join(handlerDirectory, `server/${name}.js`)
