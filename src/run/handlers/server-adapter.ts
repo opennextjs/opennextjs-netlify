@@ -82,7 +82,11 @@ const { nextConfig: initialNextConfig, enableUseCacheHandler } = await getRunCon
 if (enableUseCacheHandler) {
   configureUseCacheHandlers()
 }
-const nextConfig = setRunConfig(initialNextConfig) as unknown as NextConfigRuntime
+// minimal mode only caches `FETCH` entries through the incremental cache
+const nextConfig = setRunConfig(
+  initialNextConfig,
+  'cache-adapter.cjs',
+) as unknown as NextConfigRuntime
 setupWaitUntil()
 
 // Next.js checks globalThis.AsyncLocalStorage to decide whether to use real

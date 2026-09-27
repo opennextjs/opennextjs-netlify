@@ -98,8 +98,11 @@ export type NextConfigForMultipleVersions = NextConfigComplete & {
 /**
  * Configure the custom cache handler at request time
  */
-export const setRunConfig = (config: NextConfigForMultipleVersions) => {
-  const cacheHandler = join(PLUGIN_DIR, '.netlify/dist/run/handlers/cache.cjs')
+export const setRunConfig = (
+  config: NextConfigForMultipleVersions,
+  cacheHandlerFile = 'cache.cjs',
+) => {
+  const cacheHandler = join(PLUGIN_DIR, '.netlify/dist/run/handlers', cacheHandlerFile)
   if (!existsSync(cacheHandler)) {
     throw new Error(`Cache handler not found at ${cacheHandler}`)
   }
