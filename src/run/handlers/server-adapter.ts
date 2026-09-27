@@ -781,14 +781,26 @@ async function renderErrorPage(
     return new Response(status === 404 ? 'Not Found' : 'Internal Server Error', { status })
   }
 
-  const response = await handler({
+  const errorArgs: CommonHandlerArg = {
     request: new Request(request.url, { headers: request.headers }),
     requestContext,
     resolution: {},
     tracer,
     span,
     invokeStatus: status,
-  })
+  }
+  // a prerendered error page is served like a request for it: in minimal mode Next only renders
+  // the static shell of a PPR page, the rest comes from resuming the group's postponed state
+  const prerenderVariant = getPrerenderVariant(pathname, request.headers, false)
+  const prerenderGroup = prerenderVariant && prerenderGroups.get(prerenderVariant.groupId)
+  const response =
+    prerenderVariant && prerenderGroup?.entry
+      ? ((await servePrerenderGroup(
+          prerenderVariant,
+          prerenderGroup as Required<PrerenderGroup>,
+          errorArgs,
+        )) ?? (await handler(errorArgs)))
+      : await handler(errorArgs)
 
   // The error page keeps the cache headers of whatever rendered it. A static `404.html` is build
   // output that only a deploy can change, and a prerendered not-found carries its own revalidate,
