@@ -12,7 +12,6 @@ import { pathToFileURL } from 'node:url'
 import type { MiddlewareManifest } from 'next-with-adapters/dist/build/webpack/plugins/middleware-plugin.js'
 
 import type { AdapterManifest } from '../config.js'
-import { getRunConfig } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
 
 import type { RequestContext } from './request-context.cjs'
@@ -59,7 +58,7 @@ async function getIncrementalCache(manifest: AdapterManifest, requestHeaders: He
   }
   incrementalCachePromise ??= (async () => {
     // both are CommonJS: the named exports only survive our bundle through `default`
-    const [incrementalCacheModule, nodeFsModule, { nextConfig }, prerenderManifest] =
+    const [incrementalCacheModule, nodeFsModule, { config: nextConfig }, prerenderManifest] =
       await Promise.all([
         import('next-with-adapters/dist/server/lib/incremental-cache/index.js') as Promise<
           IncrementalCacheModule & { default?: IncrementalCacheModule }
@@ -67,7 +66,11 @@ async function getIncrementalCache(manifest: AdapterManifest, requestHeaders: He
         import('next-with-adapters/dist/server/lib/node-fs-methods.js') as Promise<
           NodeFsModule & { default?: NodeFsModule }
         >,
-        getRunConfig(),
+        // what route modules read, with `cacheHandler` relative to the distDir
+        readFile(
+          join(PLUGIN_DIR, manifest.config.distDir, 'required-server-files.json'),
+          'utf-8',
+        ).then((contents) => JSON.parse(contents)),
         readFile(
           join(PLUGIN_DIR, manifest.config.distDir, 'prerender-manifest.json'),
           'utf-8',
@@ -79,7 +82,9 @@ async function getIncrementalCache(manifest: AdapterManifest, requestHeaders: He
     let CurCacheHandler
     if (cacheHandlerPath) {
       // eslint-disable-next-line import/no-dynamic-require
-      const cacheHandlerModule = await import(pathToFileURL(cacheHandlerPath).href)
+      const cacheHandlerModule = await import(
+        pathToFileURL(join(PLUGIN_DIR, manifest.config.distDir, cacheHandlerPath)).href
+      )
       CurCacheHandler = cacheHandlerModule.default ?? cacheHandlerModule
     }
 

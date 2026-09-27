@@ -27,7 +27,7 @@ import {
   type PrerenderGroupBlob,
 } from '../../shared/blob-types.cjs'
 import type { AdapterManifestComputeOutput } from '../config.js'
-import { getAdapterManifest, getRunConfig } from '../config.js'
+import { getAdapterManifest } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
@@ -52,7 +52,7 @@ import { encodeCacheTag, isAnyTagStaleOrExpired, purgeEdgeCache } from './tags-h
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureFetchCacheHandler, configureUseCacheHandlers } from './use-cache-handler.js'
 
-// Read the adapter manifest written at build time (same path resolution as getRunConfig)
+// Read the adapter manifest written at build time
 let manifest: Awaited<ReturnType<typeof getAdapterManifest>>
 try {
   manifest = await getAdapterManifest()
@@ -75,15 +75,13 @@ const nextEnv =
 setFetchBeforeNextPatchedIt(globalThis.fetch)
 // configure globals that Next.js make use of before we start importing any Next.js code
 // as some globals are consumed at import time
-const { nextConfig: initialNextConfig, enableUseCacheHandler } = await getRunConfig()
-if (enableUseCacheHandler) {
-  configureUseCacheHandlers()
-}
+// adapter mode needs a Next.js with CacheHandlerV2 (>=15.3.0-canary.13), see MIN_NEXT_VERSION
+configureUseCacheHandlers()
 // minimal mode only caches `FETCH` entries through the incremental cache. Same as Vercel: the
 // handler is the global `FetchCache` (see configureUseCacheHandlers for why not a config path), so
 // an app's own `cacheHandler` takes precedence.
 configureFetchCacheHandler(NetlifyAdapterCacheHandler)
-setInMemoryCacheMaxSizeFromNextConfig(initialNextConfig.cacheMaxMemorySize)
+setInMemoryCacheMaxSizeFromNextConfig(manifest.config.cacheMaxMemorySize)
 
 // Next.js checks globalThis.AsyncLocalStorage to decide whether to use real
 // or fake (throwing) AsyncLocalStorage. Must be set before any Next.js code loads

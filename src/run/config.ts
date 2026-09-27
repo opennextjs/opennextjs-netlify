@@ -12,7 +12,6 @@ import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
 
 export type RunConfig = {
   nextConfig: NextConfigComplete
-  nextVersion: string | null
   enableUseCacheHandler: boolean
 }
 
@@ -29,10 +28,20 @@ export type AdapterManifestComputeOutput = Pick<
 /**
  * Subset of the adapter output that is needed at runtime for route resolution
  */
-export type AdapterManifest = Pick<
-  AdapterBuildCompleteContext,
-  'routing' | 'buildId' | 'config'
-> & {
+export type AdapterManifest = Pick<AdapterBuildCompleteContext, 'routing' | 'buildId'> & {
+  // the config fields the runtime reads, route modules read the full config from required-server-files.json
+  config: Pick<
+    AdapterBuildCompleteContext['config'],
+    | 'basePath'
+    | 'i18n'
+    | 'trailingSlash'
+    | 'assetPrefix'
+    | 'distDir'
+    | 'htmlLimitedBots'
+    | 'cacheMaxMemorySize'
+  > & {
+    experimental: Pick<AdapterBuildCompleteContext['config']['experimental'], 'caseSensitiveRoutes'>
+  }
   outputs: {
     pages: AdapterManifestComputeOutput[]
     pagesApi: AdapterManifestComputeOutput[]

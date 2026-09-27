@@ -1,6 +1,6 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, isAbsolute, join, relative } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
 import { trace } from '@opentelemetry/api'
@@ -12,7 +12,6 @@ import type { PluginContextAdapter } from '../plugin-context.js'
 
 import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
 import { isFallbackShell, isGroupEntry } from './prerendered.js'
-import { writeRunConfig } from './server.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
@@ -31,24 +30,6 @@ const computeOutput = (output: AdapterManifestComputeOutput): AdapterManifestCom
 export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): Promise<void> => {
   await tracer.withActiveSpan('copyNextServerCodeFromAdapter', async () => {
     await mkdir(ctx.serverHandlerDir, { recursive: true })
-    // The adapter output has custom `cacheHandler`/`cacheHandlers` as absolute paths on the build
-    // machine. Make them relative to the distDir, as `required-server-files.json` has them, which
-    // route modules resolve inside the function.
-    const distDir = join(ctx.adapterOutput.projectDir, ctx.buildConfig.distDir)
-    const { cacheHandler, cacheHandlers } = ctx.buildConfig
-    await writeRunConfig(ctx, {
-      ...ctx.buildConfig,
-      cacheHandler:
-        typeof cacheHandler === 'string' && isAbsolute(cacheHandler)
-          ? relative(distDir, cacheHandler)
-          : cacheHandler,
-      cacheHandlers: Object.fromEntries(
-        Object.entries(cacheHandlers ?? {}).map(([kind, handler]) => [
-          kind,
-          typeof handler === 'string' && isAbsolute(handler) ? relative(distDir, handler) : handler,
-        ]),
-      ),
-    })
 
     // Write the adapter manifest (routing + output metadata) for runtime use.
     // filePaths are already relative (rewritten in the adapter's onBuildComplete).
@@ -81,7 +62,18 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         })),
       },
       buildId: ctx.adapterOutput.buildId,
-      config: ctx.adapterOutput.config,
+      config: {
+        basePath: ctx.adapterOutput.config.basePath,
+        i18n: ctx.adapterOutput.config.i18n,
+        trailingSlash: ctx.adapterOutput.config.trailingSlash,
+        assetPrefix: ctx.adapterOutput.config.assetPrefix,
+        distDir: ctx.adapterOutput.config.distDir,
+        htmlLimitedBots: ctx.adapterOutput.config.htmlLimitedBots,
+        cacheMaxMemorySize: ctx.adapterOutput.config.cacheMaxMemorySize,
+        experimental: {
+          caseSensitiveRoutes: ctx.adapterOutput.config.experimental.caseSensitiveRoutes,
+        },
+      },
       relativeAppDir: ctx.relativeAppDir,
       publicPathnames: await ctx.getPublicPathnames(),
     }
