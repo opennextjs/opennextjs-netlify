@@ -111,6 +111,8 @@ type CommonHandlerArg = {
   raw?: boolean
   // PPR: resume a postponed render with this state and the output's `pprChain` headers
   resume?: { postponed: string; headers?: Record<string, string> }
+  // PPR: a server action's re-render uses the resume data cache of the page's postponed state
+  postponed?: string
   onCacheEntry?: (entry: { value?: { kind?: string; postponed?: string } | null }) => void
 }
 
@@ -420,6 +422,32 @@ async function regeneratePrerenderGroup(
 // `x-prerender-revalidate: <bypassToken>` (Pages Router `res.revalidate()`): regenerate now, and
 // with `x-prerender-revalidate-if-generated` only a group generated before
 type OnDemandRevalidate = { onlyGenerated: boolean }
+
+async function getPrerenderGroupPostponed(
+  group: Required<PrerenderGroup>,
+  { resolution }: CommonHandlerArg,
+): Promise<string | undefined> {
+  const params = getPrerenderGroupQuery(
+    group.entry,
+    resolution.resolvedQuery ?? resolution.invocation?.requestMeta.query,
+  )
+  const paramsString = params.toString()
+  const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+  const blob = await store.get<PrerenderGroupBlob>(
+    getPrerenderGroupBlobKey(
+      paramsString ? `${group.entry.pathname}?${paramsString}` : group.entry.pathname,
+    ),
+    'prerenderGroup.get',
+  )
+  if (blob?.postponed !== undefined || !group.entry.fallbackShell) {
+    return blob?.postponed
+  }
+  const shell = await store.get<PrerenderGroupBlob>(
+    getPrerenderFallbackBlobKey(group.entry.pathname),
+    'prerenderFallback.get',
+  )
+  return shell?.postponed
+}
 
 async function servePrerenderGroup(
   variant: PrerenderOutput,
@@ -1002,6 +1030,7 @@ async function invokeHandler(
     invocationId,
     raw,
     resume,
+    postponed,
     onCacheEntry,
   }: CommonHandlerArg,
 ) {
@@ -1057,7 +1086,7 @@ async function invokeHandler(
           render404,
           revalidate,
           minimalMode: true,
-          ...(resume && { postponed: resume.postponed }),
+          ...((resume ?? postponed) && { postponed: resume?.postponed ?? postponed }),
           ...(onCacheEntry && {
             onCacheEntryV2: async (entry: Parameters<typeof onCacheEntry>[0]) => {
               onCacheEntry(entry)
@@ -1409,6 +1438,18 @@ export default async function ServerHandler(request: Request, requestContext: Re
           isOnDemandRevalidate
             ? { onlyGenerated: request.headers.has('x-prerender-revalidate-if-generated') }
             : undefined,
+        )
+      }
+      if (
+        prerenderVariant &&
+        prerenderGroup?.entry?.resumeHeaders &&
+        request.method === 'POST' &&
+        (prerenderVariant.bypassFor ?? []).some((has) => matchesHas(has, request, url))
+      ) {
+        // a server action (the output's `bypassFor`) on a PPR page, see the adapter docs
+        handlerArgs.postponed = await getPrerenderGroupPostponed(
+          prerenderGroup as Required<PrerenderGroup>,
+          handlerArgs,
         )
       }
       handlerResponse ??= await matchedHandler(handlerArgs)
