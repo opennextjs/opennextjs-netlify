@@ -108,6 +108,7 @@ export async function invokeEdgeRuntimeOutput({
   manifest,
   query,
   routeParams,
+  requestMeta,
 }: {
   outputId: string
   request: Request
@@ -115,6 +116,7 @@ export async function invokeEdgeRuntimeOutput({
   manifest: AdapterManifest
   query?: Record<string, string | string[]>
   routeParams?: Record<string, string | string[] | undefined>
+  requestMeta?: SandboxRunParams['request']['requestMeta']
 }): Promise<Response> {
   // PLUGIN_DIR is the app dir inside the handler, distDir is relative to it
   const distDir = join(PLUGIN_DIR, manifest.config.distDir)
@@ -188,6 +190,7 @@ export async function invokeEdgeRuntimeOutput({
         ...(routeParams && { params: routeParams }),
       },
       body,
+      requestMeta,
       signal: request.signal,
       waitUntil: requestContext.trackBackgroundWork,
     },

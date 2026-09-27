@@ -1067,6 +1067,7 @@ async function invokeHandler(
           manifest,
           query: resolution.resolvedQuery,
           routeParams: resolution.invocation?.requestMeta.params,
+          requestMeta: resolution.invocation?.requestMeta ?? { initURL: request.url },
         })
       } catch (error) {
         console.error('edge runtime output error', error)
