@@ -107,7 +107,13 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
     }
   }
 
-  const { wasmAssets, assets, filePath: middlewareFilePath, id: middlewareId } = middlewareOutput
+  const {
+    wasmAssets,
+    assets,
+    filePath: middlewareFilePath,
+    id: middlewareId,
+    edgeRuntime,
+  } = middlewareOutput
   if (wasmAssets) {
     for (const [name, filePath] of Object.entries(wasmAssets)) {
       const data = await readFile(filePath)
@@ -134,21 +140,18 @@ async function copyEdgeMiddlewareDependenciesFromAdapter(
     join(ctx.adapterOutput!.repoRoot, middlewareFilePath),
     'utf8',
   )
-  // Every edge entry is registered as `_ENTRIES['middleware_' + name]` (Next's entries.ts), the
-  // instrumentation hook included - a bundle with both holds `middleware_middleware` AND
-  // `middleware_instrumentation`. Picking the first key with that prefix therefore lands on
-  // instrumentation often enough, and its default is not a handler ("handler is not a function",
-  // killing the whole edge function). Address the middleware's own entry by name instead.
-  const middlewareEntryKey = `middleware_${middlewareId}`
+  // The adapter output names the entry and its handler (`edgeRuntime`): the bundle also registers
+  // the instrumentation hook in `_ENTRIES`, so the entry can't be guessed from the key prefix
+  const { entryKey, handlerExport } = edgeRuntime ?? {
+    entryKey: `middleware_${middlewareId}`,
+    handlerExport: 'handler',
+  }
   parts.push(
     `;// Middleware entry: ${middlewareFilePath} \n`,
     middlewareEntry,
-    `const middlewareEntryKey = ${JSON.stringify(middlewareEntryKey)} in _ENTRIES`,
-    `  ? ${JSON.stringify(middlewareEntryKey)}`,
-    `  : Object.keys(_ENTRIES).find(entryKey => entryKey.startsWith("middleware_") && entryKey !== "middleware_instrumentation");`,
     // turbopack entries are promises so we await here to get actual entry
     // non-turbopack entries are already resolved, so await does not change anything
-    `export default await _ENTRIES[middlewareEntryKey].default;`,
+    `export default (await _ENTRIES[${JSON.stringify(entryKey)}])[${JSON.stringify(handlerExport)}];`,
   )
 
   const name = 'middleware'
@@ -231,7 +234,7 @@ async function copyNodeMiddlewareDependenciesFromAdapter(
     const require = createRequire(import.meta.url);
     // middleware with top-level await compiles to a module whose require() returns a Promise
     const handlerMod = await require("./${middlewareOutput.filePath}");
-    const handler = handlerMod.default || handlerMod;
+    const handler = handlerMod.handler;
 
     export default handler
     `,

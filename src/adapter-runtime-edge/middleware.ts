@@ -8,9 +8,9 @@
  *    the request to the server handler (or CDN for static assets)
  *
  * Unlike edge-runtime/routing.ts, this module has NO dependency on the
- * standalone edge-runtime directory. Middleware invocation constructs
- * RequestData directly (no geo/ip, no URL normalization — matching the
- * AWS adapter pattern).
+ * standalone edge-runtime directory. Middleware is invoked through the entry's
+ * documented handler (no geo/ip, no URL normalization — matching the AWS
+ * adapter pattern).
  */
 import type { Context } from '@netlify/edge-functions'
 
@@ -90,7 +90,11 @@ interface RequestData {
   }
 }
 
-type NextHandler = (params: { request: RequestData }) => Promise<{ response: Response }>
+// an edge entry's `edgeRuntime.handlerExport` (Next's adapter docs, "Invoking entrypoints")
+type NextHandler = (
+  request: Request,
+  ctx: { waitUntil?: (promise: Promise<unknown>) => void; signal?: AbortSignal },
+) => Promise<Response>
 
 export interface MiddlewareConfig {
   enabled: boolean
@@ -204,9 +208,8 @@ export async function runNextRouting(
       // resolveRoutes already checked middlewareMatchers. `middlewareCtx.url` is the URL as
       // requested, as Next passes it: Next's middleware adapter normalizes data URLs and the
       // trailing slash itself (from `x-nextjs-data` and `nextConfig`).
-      // Load and invoke middleware directly — construct RequestData inline
-      // instead of going through handleMiddlewareRaw/buildNextRequest which
-      // would double-normalize URLs (routing library already normalizes).
+      // Invoke middleware directly instead of going through handleMiddlewareRaw/buildNextRequest,
+      // which would double-normalize URLs (routing library already normalizes).
       const handler = await middlewareConfig.load()
 
       const middlewareRequestUrl = middlewareCtx.url
@@ -220,22 +223,23 @@ export async function runNextRouting(
         middlewareBody = forMiddleware
         originBody = forOrigin
       }
-      const result = await handler({
-        request: {
-          headers: Object.fromEntries(new Headers(middlewareCtx.headers).entries()),
+      // the entry's documented handler: it passes background work to `waitUntil` itself
+      const rawResponse = await handler(
+        new Request(middlewareRequestUrl, {
+          headers: middlewareCtx.headers,
           method: request.method,
-          url: middlewareRequestUrl.href,
           body: middlewareBody,
-          nextConfig,
-        },
-      })
+          // @ts-expect-error duplex is needed for streaming bodies
+          duplex: 'half',
+        }),
+        { waitUntil: context.waitUntil?.bind(context), signal: request.signal },
+      )
       // middleware that never read its branch would otherwise make the tee buffer the whole body
       if (middlewareBody && !middlewareBody.locked) {
         middlewareBody.cancel().catch(() => {
           // nothing to release
         })
       }
-      const rawResponse = result.response
 
       // Convert the raw Next.js middleware response to a MiddlewareResult
       // that resolveRoutes understands
