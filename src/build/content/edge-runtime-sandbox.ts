@@ -25,9 +25,11 @@ export const copyEdgeRuntimeOutputs = async (ctx: PluginContextAdapter): Promise
   await cp(join(distDir, manifestRelPath), destPath, { force: true })
 
   // Route modules build absolute URLs (the `fetch` of a server action's redirect target, say) from
-  // `localhost` unless they trust the `host` header, which is the site's domain here. Next.js sets
-  // this only on Vercel, and edge outputs don't get the `initURL` request meta node outputs do
-  // (WebNextRequest drops it), so trust the header in the manifest the edge sandbox loads.
+  // `localhost` unless they trust the `host` header, which is the site's domain here. Same as
+  // Vercel: Next.js writes `trustHostHeader: true` into this manifest when building there
+  // (`ciEnvironment.hasNextSupport`, build/index.ts), and ignores the config value otherwise, so
+  // it's patched here. Edge outputs can't use the `initURL` request meta node outputs get instead
+  // (WebNextRequest drops it).
   const serverFilesPath = join(
     ctx.serverHandlerRootDir,
     relative(repoRoot, distDir),
