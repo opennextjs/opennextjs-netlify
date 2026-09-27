@@ -104,6 +104,20 @@ const fs = require('fs');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 pkg.dependencies = pkg.dependencies || {};
 pkg.dependencies['@netlify/plugin-nextjs'] = 'file:${ADAPTER_TARBALL}';
+// The harness resolves \`workspace:*\` dependencies (@next/mdx, @next/third-parties, ...) to
+// NEXT_TEST_VERSION, which is the packed next tarball here, not those packages. Use their
+// published version of the same release instead (packNextjs needs a published version anyway).
+const nextSpec = process.env.NEXT_TEST_VERSION || '';
+if (nextSpec.startsWith('file:')) {
+  const { version } = JSON.parse(
+    require('child_process').execFileSync('tar', ['-xOzf', nextSpec.slice(5), 'package/package.json'], { encoding: 'utf8' }),
+  );
+  for (const [name, spec] of Object.entries(pkg.dependencies)) {
+    if (name.startsWith('@next/') && spec === nextSpec) {
+      pkg.dependencies[name] = version;
+    }
+  }
+}
 const envTarball = process.env.NEXT_ENV_TARBALL;
 if (envTarball) {
   const spec = 'file:' + envTarball;
