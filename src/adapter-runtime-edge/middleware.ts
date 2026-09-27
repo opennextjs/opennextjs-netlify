@@ -334,7 +334,9 @@ export async function runNextRouting(
       if (key.toLowerCase().startsWith('x-middleware-')) {
         continue
       }
-      headers.set(key, value)
+      // the resolution has the middleware headers with later routes applied on top, like an
+      // interception rewrite replacing the middleware's `x-nextjs-rewritten-path`
+      headers.set(key, resolution.resolvedHeaders?.get(key) ?? value)
     }
     return new Response(response.body, {
       status: response.status,
