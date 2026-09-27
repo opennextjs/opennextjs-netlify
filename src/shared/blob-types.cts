@@ -16,7 +16,20 @@ export type HtmlBlob = {
   isFullyStaticPage: boolean
 }
 
-export type BlobType = NetlifyCacheHandlerValue | TagManifest | HtmlBlob
+/**
+ * A `'use cache: remote'` entry: the `CacheEntry` Next hands the cache handler, with its value
+ * stream collected
+ */
+export type UseCacheBlob = {
+  value: string // base64
+  tags: string[]
+  stale: number
+  timestamp: number
+  expire: number
+  revalidate: number
+}
+
+export type BlobType = NetlifyCacheHandlerValue | TagManifest | HtmlBlob | UseCacheBlob
 
 export const isTagManifest = (value: BlobType): value is TagManifest => {
   return (
@@ -39,5 +52,16 @@ export const isHtmlBlob = (value: BlobType): value is HtmlBlob => {
     typeof value.html === 'string' &&
     typeof value.isFullyStaticPage === 'boolean' &&
     Object.keys(value).length === 2
+  )
+}
+
+export const isUseCacheBlob = (value: BlobType): value is UseCacheBlob => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'value' in value &&
+    typeof value.value === 'string' &&
+    'timestamp' in value &&
+    typeof value.timestamp === 'number'
   )
 }
