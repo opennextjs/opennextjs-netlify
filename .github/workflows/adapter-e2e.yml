@@ -150,6 +150,18 @@ jobs:
         if: ${{ env.PACK_NEXTJS == 'true' }}
         working-directory: nextjs
         run: |
+          # The source package.json has no @next/swc-* optional dependencies, the release adds them
+          # (sharp is the only one here). Without the local native build, take the published ones.
+          if [ "$BUILD_NEXTJS" != true ]; then
+            VERSION="$(node -p "require('./packages/next/package.json').version")"
+            npm view "next@$VERSION" optionalDependencies --json > published-optional-deps.json
+            node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('packages/next/package.json', 'utf8'));
+            pkg.optionalDependencies = JSON.parse(fs.readFileSync('published-optional-deps.json', 'utf8'));
+            fs.writeFileSync('packages/next/package.json', JSON.stringify(pkg, null, 2));
+            "
+          fi
           TARBALL="$(cd packages/next && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
           mv "$TARBALL" next-packed.tgz
           # packNextjs alone needs a published version (for next-swc), so @next/env resolves from npm
