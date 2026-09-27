@@ -152,9 +152,12 @@ jobs:
         run: |
           TARBALL="$(cd packages/next && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
           mv "$TARBALL" next-packed.tgz
-          ENV_TARBALL="$(cd packages/next-env && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
-          mv "$ENV_TARBALL" next-env-packed.tgz
-          ls -la next-packed.tgz next-env-packed.tgz
+          # packNextjs alone needs a published version (for next-swc), so @next/env resolves from npm
+          if [ "$BUILD_NEXTJS" = true ]; then
+            ENV_TARBALL="$(cd packages/next-env && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
+            mv "$ENV_TARBALL" next-env-packed.tgz
+          fi
+          ls -la next-packed.tgz next-env-packed.tgz 2>/dev/null || true
 
       # Fail loudly rather than letting the shards quietly test published next —
       # the whole failure mode this input exists to fix is a silent one.
@@ -171,7 +174,7 @@ jobs:
             echo "::error::next-packed.tgz missing; shards would use the published next instead of this checkout's JS"
             ok=0
           fi
-          if [ ! -f next-env-packed.tgz ]; then
+          if [ "$BUILD_NEXTJS" = true ] && [ ! -f next-env-packed.tgz ]; then
             echo "::error::next-env-packed.tgz missing; next's @next/env dependency would resolve from npm instead of this checkout"
             ok=0
           fi
