@@ -210,11 +210,15 @@ case "${TEST_FILE_PATH:-}" in
     ;;
 esac
 
+# Fixtures with a distDir outside `.next` declare where it is for Vercel in vercel.json
+# (`outputDirectory`), which is the same thing as Netlify's publish directory.
+PUBLISH_DIR="$(node -p "try { require('./vercel.json').outputDirectory || '.next' } catch { '.next' }")"
+
 # Create netlify.toml pointing to the installed plugin
-cat > netlify.toml <<'EOF'
+cat > netlify.toml <<EOF
 [build]
   command = "npm run build"
-  publish = "./.next/"
+  publish = "./$PUBLISH_DIR/"
 
 [build.environment]
   NEXT_PRIVATE_TEST_MODE = "e2e"
