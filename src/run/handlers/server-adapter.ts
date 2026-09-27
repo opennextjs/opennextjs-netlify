@@ -1050,7 +1050,9 @@ async function invokeHandler(
           manifest,
           query: resolution.resolvedQuery,
           routeParams: resolution.invocation?.requestMeta.params,
-          requestMeta: resolution.invocation?.requestMeta ?? { initURL: request.url },
+          // only `initURL`: the rest of what node outputs get (`query`, `params`) is folded into the
+          // URL the sandbox invokes with, and as request meta it'd end up in `resolvedUrl` too
+          requestMeta: { initURL: resolution.invocation?.requestMeta.initURL ?? request.url },
         })
       } catch (error) {
         console.error('edge runtime output error', error)
