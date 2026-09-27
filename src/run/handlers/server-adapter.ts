@@ -107,7 +107,13 @@ type CommonHandlerArg = {
   resume?: { postponed: string; headers?: Record<string, string> }
   // PPR: a server action's re-render uses the resume data cache of the page's postponed state
   postponed?: string
-  onCacheEntry?: (entry: { value?: { kind?: string; postponed?: string } | null }) => void
+  onCacheEntry?: (entry: {
+    value?: {
+      kind?: string
+      postponed?: string
+      html?: { toUnchunkedString?: () => string } | null
+    } | null
+  }) => void
 }
 
 type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
@@ -383,10 +389,18 @@ async function regeneratePrerenderGroup(
   const invocationId = randomUUID()
   const variants: PrerenderGroupBlob['variants'] = {}
   let postponed: string | undefined
-  const capturePostponed: CommonHandlerArg['onCacheEntry'] = (entry) => {
+  let entryHtml: string | undefined
+  // a PPR shell is what Next caches, as the adapter PPR docs persist it: the response of a minimal
+  // mode render isn't only the shell (in test mode it starts with the PPR boundary sentinel)
+  const captureEntry: CommonHandlerArg['onCacheEntry'] = (entry) => {
     if (entry.value?.kind === 'APP_PAGE') {
-      const { postponed: entryPostponed } = entry.value
+      const { postponed: entryPostponed, html } = entry.value
       postponed = entryPostponed
+      try {
+        entryHtml = html?.toUnchunkedString?.()
+      } catch {
+        // a streamed (dynamic) render has no cached shell, the response has it all
+      }
     }
   }
   // the entry first: its render fills Next's response cache for the other variants
@@ -405,12 +419,16 @@ async function regeneratePrerenderGroup(
       resolution: {},
       invocationId,
       raw: true,
-      ...(member === group.entry && { onCacheEntry: capturePostponed }),
+      ...(member === group.entry && { onCacheEntry: captureEntry }),
     })
+    const body = Buffer.from(await response.arrayBuffer())
     variants[member.pathname] = {
       status: response.status,
       headers: Object.fromEntries(response.headers),
-      body: Buffer.from(await response.arrayBuffer()).toString('base64'),
+      body: (member === group.entry && postponed !== undefined && entryHtml !== undefined
+        ? Buffer.from(entryHtml)
+        : body
+      ).toString('base64'),
     }
   }
 
