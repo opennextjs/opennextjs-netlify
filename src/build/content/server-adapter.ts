@@ -31,14 +31,19 @@ const computeOutput = (output: AdapterManifestComputeOutput): AdapterManifestCom
 export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): Promise<void> => {
   await tracer.withActiveSpan('copyNextServerCodeFromAdapter', async () => {
     await mkdir(ctx.serverHandlerDir, { recursive: true })
-    // The adapter output has custom `cacheHandlers` as absolute paths on the build machine. Make
-    // them relative to the distDir, as `required-server-files.json` has them, which route modules
-    // resolve inside the function.
+    // The adapter output has custom `cacheHandler`/`cacheHandlers` as absolute paths on the build
+    // machine. Make them relative to the distDir, as `required-server-files.json` has them, which
+    // route modules resolve inside the function.
     const distDir = join(ctx.adapterOutput.projectDir, ctx.buildConfig.distDir)
+    const { cacheHandler, cacheHandlers } = ctx.buildConfig
     await writeRunConfig(ctx, {
       ...ctx.buildConfig,
+      cacheHandler:
+        typeof cacheHandler === 'string' && isAbsolute(cacheHandler)
+          ? relative(distDir, cacheHandler)
+          : cacheHandler,
       cacheHandlers: Object.fromEntries(
-        Object.entries(ctx.buildConfig.cacheHandlers ?? {}).map(([kind, handler]) => [
+        Object.entries(cacheHandlers ?? {}).map(([kind, handler]) => [
           kind,
           typeof handler === 'string' && isAbsolute(handler) ? relative(distDir, handler) : handler,
         ]),

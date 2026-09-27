@@ -45,12 +45,13 @@ import {
   setFetchBeforeNextPatchedIt,
 } from '../storage/storage.cjs'
 
+import { NetlifyAdapterCacheHandler } from './cache-adapter.cjs'
 import { invokeEdgeRuntimeOutput } from './edge-runtime-sandbox.js'
 import { getRequestContext, type RequestContext } from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
 import { encodeCacheTag, isAnyTagStaleOrExpired, purgeEdgeCache } from './tags-handler.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
-import { configureUseCacheHandlers } from './use-cache-handler.js'
+import { configureFetchCacheHandler, configureUseCacheHandlers } from './use-cache-handler.js'
 import { setupWaitUntil } from './wait-until.cjs'
 
 // Read the adapter manifest written at build time (same path resolution as getRunConfig)
@@ -80,11 +81,11 @@ const { nextConfig: initialNextConfig, enableUseCacheHandler } = await getRunCon
 if (enableUseCacheHandler) {
   configureUseCacheHandlers()
 }
-// minimal mode only caches `FETCH` entries through the incremental cache
-const nextConfig = setRunConfig(
-  initialNextConfig,
-  'cache-adapter.cjs',
-) as unknown as NextConfigRuntime
+// minimal mode only caches `FETCH` entries through the incremental cache. Same as Vercel: the
+// handler is the global `FetchCache` (see configureUseCacheHandlers for why not a config path), so
+// an app's own `cacheHandler` takes precedence.
+configureFetchCacheHandler(NetlifyAdapterCacheHandler)
+const nextConfig = setRunConfig(initialNextConfig, null) as unknown as NextConfigRuntime
 setupWaitUntil()
 
 // Next.js checks globalThis.AsyncLocalStorage to decide whether to use real

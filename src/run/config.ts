@@ -100,22 +100,25 @@ export type NextConfigForMultipleVersions = NextConfigComplete & {
  */
 export const setRunConfig = (
   config: NextConfigForMultipleVersions,
-  cacheHandlerFile = 'cache.cjs',
+  // `null` when the handler is registered as the global `FetchCache` instead (adapter mode)
+  cacheHandlerFile: string | null = 'cache.cjs',
 ) => {
-  const cacheHandler = join(PLUGIN_DIR, '.netlify/dist/run/handlers', cacheHandlerFile)
-  if (!existsSync(cacheHandler)) {
-    throw new Error(`Cache handler not found at ${cacheHandler}`)
-  }
+  if (cacheHandlerFile !== null) {
+    const cacheHandler = join(PLUGIN_DIR, '.netlify/dist/run/handlers', cacheHandlerFile)
+    if (!existsSync(cacheHandler)) {
+      throw new Error(`Cache handler not found at ${cacheHandler}`)
+    }
 
-  // set the path to the cache handler
-  config.experimental = {
-    ...config.experimental,
-    // Before Next.js 14.1.0 path to the cache handler was in experimental section, see NextConfigForMultipleVersions type
-    incrementalCacheHandlerPath: cacheHandler,
-  }
+    // set the path to the cache handler
+    config.experimental = {
+      ...config.experimental,
+      // Before Next.js 14.1.0 path to the cache handler was in experimental section, see NextConfigForMultipleVersions type
+      incrementalCacheHandlerPath: cacheHandler,
+    }
 
-  // Next.js 14.1.0 moved the cache handler from experimental to stable, see NextConfigForMultipleVersions type
-  config.cacheHandler = cacheHandler
+    // Next.js 14.1.0 moved the cache handler from experimental to stable, see NextConfigForMultipleVersions type
+    config.cacheHandler = cacheHandler
+  }
 
   // Next.js >=15.5.14 keeps an on-disk LRU cache for the image optimizer in
   // `<distDir>/cache/images`. `ImageOptimizerCache`'s constructor eagerly starts initializing it

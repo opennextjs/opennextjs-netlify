@@ -60,6 +60,7 @@ const extendedGlobalThis = globalThis as typeof globalThis & {
   [cacheHandlersSymbol]?: {
     RemoteCache?: MultiVersionCacheHandler
     DefaultCache?: MultiVersionCacheHandler
+    FetchCache?: unknown
   }
 }
 
@@ -474,9 +475,22 @@ export const NetlifyRemoteUseCacheHandler = {
   },
 } satisfies MultiVersionCacheHandler
 
+// Handlers are registered through the global Next.js reads them from, the same way Vercel's runtime
+// injects its handlers, rather than as `cacheHandler`/`cacheHandlers` paths in the config: those
+// are traced into the function at build, relative to the site's `outputFileTracingRoot`, and this
+// plugin is installed outside the site, so its files can't be traced from there.
 export function configureUseCacheHandlers() {
   extendedGlobalThis[cacheHandlersSymbol] = {
+    ...extendedGlobalThis[cacheHandlersSymbol],
     DefaultCache: NetlifyDefaultUseCacheHandler,
     RemoteCache: NetlifyRemoteUseCacheHandler,
+  }
+}
+
+// The incremental cache handler, used when the app doesn't configure its own `cacheHandler`
+export function configureFetchCacheHandler(FetchCache: unknown) {
+  extendedGlobalThis[cacheHandlersSymbol] = {
+    ...extendedGlobalThis[cacheHandlersSymbol],
+    FetchCache,
   }
 }
