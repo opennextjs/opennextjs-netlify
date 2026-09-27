@@ -9,10 +9,7 @@ export const ADAPTER_OUTPUT_FILE = 'netlify-adapter-output.json'
  */
 export type AdapterBuildCompleteContext = NonNullable<
   Parameters<NonNullable<NextAdapter['onBuildComplete']>>[0]
-> & {
-  // added by our adapter's onBuildComplete, see adapter.ts
-  relativeProjectDir: string
-}
+>
 
 export function normalizeAndFixAdapterOutput(
   onBuildCompleteAdapterCtx: AdapterBuildCompleteContext,

@@ -52,8 +52,6 @@ export type AdapterManifest = Pick<
       })[]
     staticFiles: Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'>[]
   }
-  // key Next.js uses for RouterServerContext lookups, see adapter.ts
-  relativeProjectDir: string
   // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)
   relativeAppDir: string
   // `public/` files: the CDN serves them, but routing needs to know they exist (see getPublicPathnames)
@@ -98,27 +96,21 @@ export type NextConfigForMultipleVersions = NextConfigComplete & {
 /**
  * Configure the custom cache handler at request time
  */
-export const setRunConfig = (
-  config: NextConfigForMultipleVersions,
-  // `null` when the handler is registered as the global `FetchCache` instead (adapter mode)
-  cacheHandlerFile: string | null = 'cache.cjs',
-) => {
-  if (cacheHandlerFile !== null) {
-    const cacheHandler = join(PLUGIN_DIR, '.netlify/dist/run/handlers', cacheHandlerFile)
-    if (!existsSync(cacheHandler)) {
-      throw new Error(`Cache handler not found at ${cacheHandler}`)
-    }
-
-    // set the path to the cache handler
-    config.experimental = {
-      ...config.experimental,
-      // Before Next.js 14.1.0 path to the cache handler was in experimental section, see NextConfigForMultipleVersions type
-      incrementalCacheHandlerPath: cacheHandler,
-    }
-
-    // Next.js 14.1.0 moved the cache handler from experimental to stable, see NextConfigForMultipleVersions type
-    config.cacheHandler = cacheHandler
+export const setRunConfig = (config: NextConfigForMultipleVersions) => {
+  const cacheHandler = join(PLUGIN_DIR, '.netlify/dist/run/handlers/cache.cjs')
+  if (!existsSync(cacheHandler)) {
+    throw new Error(`Cache handler not found at ${cacheHandler}`)
   }
+
+  // set the path to the cache handler
+  config.experimental = {
+    ...config.experimental,
+    // Before Next.js 14.1.0 path to the cache handler was in experimental section, see NextConfigForMultipleVersions type
+    incrementalCacheHandlerPath: cacheHandler,
+  }
+
+  // Next.js 14.1.0 moved the cache handler from experimental to stable, see NextConfigForMultipleVersions type
+  config.cacheHandler = cacheHandler
 
   // Next.js >=15.5.14 keeps an on-disk LRU cache for the image optimizer in
   // `<distDir>/cache/images`. `ImageOptimizerCache`'s constructor eagerly starts initializing it

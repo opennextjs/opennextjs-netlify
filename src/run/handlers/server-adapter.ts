@@ -6,8 +6,6 @@ import { resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import type { Span } from '@opentelemetry/api'
-import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
-import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
 import {
@@ -29,7 +27,7 @@ import {
   type PrerenderGroupBlob,
 } from '../../shared/blob-types.cjs'
 import type { AdapterManifestComputeOutput } from '../config.js'
-import { getAdapterManifest, getRunConfig, setRunConfig } from '../config.js'
+import { getAdapterManifest, getRunConfig } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
@@ -43,6 +41,7 @@ import {
 import {
   getMemoizedKeyValueStoreBackedByRegionalBlobStore,
   setFetchBeforeNextPatchedIt,
+  setInMemoryCacheMaxSizeFromNextConfig,
 } from '../storage/storage.cjs'
 
 import { NetlifyAdapterCacheHandler } from './cache-adapter.cjs'
@@ -52,7 +51,6 @@ import { getLogger } from './request-context.cjs'
 import { encodeCacheTag, isAnyTagStaleOrExpired, purgeEdgeCache } from './tags-handler.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureFetchCacheHandler, configureUseCacheHandlers } from './use-cache-handler.js'
-import { setupWaitUntil } from './wait-until.cjs'
 
 // Read the adapter manifest written at build time (same path resolution as getRunConfig)
 let manifest: Awaited<ReturnType<typeof getAdapterManifest>>
@@ -85,8 +83,7 @@ if (enableUseCacheHandler) {
 // handler is the global `FetchCache` (see configureUseCacheHandlers for why not a config path), so
 // an app's own `cacheHandler` takes precedence.
 configureFetchCacheHandler(NetlifyAdapterCacheHandler)
-const nextConfig = setRunConfig(initialNextConfig, null) as unknown as NextConfigRuntime
-setupWaitUntil()
+setInMemoryCacheMaxSizeFromNextConfig(initialNextConfig.cacheMaxMemorySize)
 
 // Next.js checks globalThis.AsyncLocalStorage to decide whether to use real
 // or fake (throwing) AsyncLocalStorage. Must be set before any Next.js code loads
@@ -742,10 +739,6 @@ type NodeHandlerFn = (
   ctx?: { waitUntil?: (prom: Promise<void>) => void; requestMeta?: RequestMeta },
 ) => Promise<void>
 
-// Next.js machinery, see next/dist/server/lib/router-utils/router-server-context.js
-// Route modules read their `nextConfig` from here (keyed by relativeProjectDir), same as next-server does.
-const RouterServerContextSymbol = Symbol.for('@next/router-server-methods')
-
 // Netlify Adapter machinery (just for integration tests resetting global state in-between tests)
 // TODO(adapter): figure out something better, we should not expose test-only globals in the actual adapter code
 const NetlifyAdapterTestReset = Symbol.for('@netlify/adapter-test-reset')
@@ -754,16 +747,8 @@ const NetlifyAdapterTestReset = Symbol.for('@netlify/adapter-test-reset')
 const nodeHandlerCache = new Map<string, NodeHandlerFn>()
 
 const extendedGlobalThis = globalThis as typeof globalThis & {
-  [RouterServerContextSymbol]?: RouterServerContext
-
   // just for reset in-between tests, see tests/utils/fixture.ts
   [NetlifyAdapterTestReset]: () => void
-}
-
-extendedGlobalThis[RouterServerContextSymbol] = {
-  [manifest.relativeProjectDir]: {
-    nextConfig,
-  },
 }
 
 /**

@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 
 import type { NextAdapter } from 'next-with-adapters'
 import { satisfies } from 'semver'
@@ -23,6 +23,11 @@ const adapter: NextAdapter = {
       // If not export, make sure to not build standalone output to avoid wasteful work
       // @ts-expect-error - types don't allow unsetting output, even if `undefined` is actually a default
       config.output = undefined
+      // the image optimizer's disk cache can't live in a function, see setRunConfig
+      config.images = {
+        ...config.images,
+        maximumDiskCacheSize: 0,
+      }
     }
 
     return config
@@ -36,12 +41,7 @@ const adapter: NextAdapter = {
 
     await writeFile(
       join(ctx.distDir, ADAPTER_OUTPUT_FILE),
-      JSON.stringify({
-        ...ctx,
-        // same expression Next.js bakes into route modules as __NEXT_RELATIVE_PROJECT_DIR
-        // (build/define-env), which they use as the RouterServerContext key at runtime
-        relativeProjectDir: relative(process.cwd(), ctx.projectDir),
-      }),
+      JSON.stringify(ctx),
       'utf-8',
     )
   },
