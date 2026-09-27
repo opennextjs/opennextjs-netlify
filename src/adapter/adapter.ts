@@ -39,11 +39,7 @@ const adapter: NextAdapter = {
       return
     }
 
-    await writeFile(
-      join(ctx.distDir, ADAPTER_OUTPUT_FILE),
-      JSON.stringify(ctx),
-      'utf-8',
-    )
+    await writeFile(join(ctx.distDir, ADAPTER_OUTPUT_FILE), JSON.stringify(ctx), 'utf-8')
   },
 }
 
