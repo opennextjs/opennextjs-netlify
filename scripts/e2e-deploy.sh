@@ -68,12 +68,13 @@ fi
 export PACKAGE_MANAGER
 PACKAGE_MANAGER="$(node -p "(require('./package.json').packageManager || 'pnpm').split('@')[0]")"
 # Vercel installs a fixture without a lockfile with npm, ignoring the pnpm pin, and
-# some tests rely on it: next-dist-client-esm-import swaps its `link:` dependency
-# for `file:` in deploy mode, which npm installs as a symlink but pnpm copies into
-# node_modules, where its JSX isn't compiled.
+# some tests rely on it: a local `link:` dependency becomes `file:` in deploy mode,
+# which npm installs as a symlink but pnpm copies into node_modules, where it's
+# treated as a prebuilt package (next-dist-client-esm-import: its JSX isn't compiled;
+# import-conditions: a Pages API route requires its untranspiled ESM at runtime).
 # TEST_FILE_PATH: see the native TS config case below.
 case "${TEST_FILE_PATH:-}" in
-  */next-dist-client-esm-import/*)
+  */next-dist-client-esm-import/* | */import-conditions/*)
     PACKAGE_MANAGER=npm
     ;;
 esac
