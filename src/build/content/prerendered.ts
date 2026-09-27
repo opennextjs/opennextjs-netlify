@@ -441,7 +441,8 @@ export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<vo
             if (
               member.groupId !== entry.groupId ||
               !member.fallback?.filePath ||
-              (isShell && member !== entry)
+              // a PPR partial fallback also serves its segment prefetches
+              (isShell && member !== entry && !entry.fallback?.postponedState)
             ) {
               continue
             }

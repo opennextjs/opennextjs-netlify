@@ -534,7 +534,6 @@ async function servePrerenderGroup(
   if (
     !blob &&
     !onDemand &&
-    variant === group.entry &&
     group.entry.fallbackShell &&
     // like Next, crawlers get the page rendered instead
     !isBot(request.headers.get('user-agent') ?? '')
@@ -546,9 +545,10 @@ async function servePrerenderGroup(
       'prerenderFallback.get',
     )
     const shellVariant = shell?.variants[variant.pathname]
-    if (shellVariant && shell?.postponed !== undefined && group.entry.resumeHeaders) {
-      // PPR partial fallback: resume the shell for this request, and upgrade it to the path's own
-      // group in the background
+    const isPartialFallback = shellVariant && shell?.postponed !== undefined
+    if (isPartialFallback) {
+      // PPR partial fallback: upgrade the shell to the path's own group in the background, a
+      // segment prefetch served the shell's segment included (the router retries it)
       requestContext.trackBackgroundWork(
         regeneratePrerenderGroup(groupKey, group, params, args).then(
           // eslint-disable-next-line @typescript-eslint/no-empty-function
@@ -556,8 +556,11 @@ async function servePrerenderGroup(
           (error) => getLogger().withError(error).error('prerender group regeneration error'),
         ),
       )
+    }
+    if (isPartialFallback && variant === group.entry && group.entry.resumeHeaders) {
+      // resume the shell for this request
       return resumePrerender(
-        { variant, entry: group.entry, postponed: shell.postponed, stored: shellVariant },
+        { variant, entry: group.entry, postponed: shell.postponed as string, stored: shellVariant },
         args,
       )
     }
