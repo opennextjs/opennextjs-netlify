@@ -19,6 +19,13 @@ on:
         description: "Build Next.js + next-swc from source (default: install published next from npm)"
         default: false
         type: boolean
+      # For a JS-only next.js change: packs this checkout's next (already built
+      # for the harness) and pairs it with the published @next/swc of the same
+      # version, which has to exist on npm (a released canary base does).
+      packNextjs:
+        description: "Test this checkout's Next.js JS with published next-swc (no Rust compile)"
+        default: false
+        type: boolean
       # Same switch run-tests.yml's matrix flips: NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true
       # makes onPreBuild hand next.js the adapter (src/index.ts) instead of the
       # standalone output path.
@@ -43,6 +50,7 @@ jobs:
       # Whether to test next.js from this checkout instead of the published npm
       # release — obeys the dispatch input's checkbox.
       BUILD_NEXTJS: ${{ inputs.buildNextjs }}
+      PACK_NEXTJS: ${{ inputs.buildNextjs || inputs.packNextjs }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -139,7 +147,7 @@ jobs:
       # redirecting the fixture's resolution to it (scripts/e2e-deploy.sh) is
       # what makes a from-source next-packed.tgz installable at all.
       - name: Pack Next.js
-        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        if: ${{ env.PACK_NEXTJS == 'true' }}
         working-directory: nextjs
         run: |
           TARBALL="$(cd packages/next && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
@@ -151,11 +159,11 @@ jobs:
       # Fail loudly rather than letting the shards quietly test published next —
       # the whole failure mode this input exists to fix is a silent one.
       - name: Verify Next.js was built from source
-        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        if: ${{ env.PACK_NEXTJS == 'true' }}
         working-directory: nextjs
         run: |
           ok=1
-          if ! ls packages/next-swc/native/*.node >/dev/null 2>&1; then
+          if [ "$BUILD_NEXTJS" = true ] && ! ls packages/next-swc/native/*.node >/dev/null 2>&1; then
             echo "::error::next-swc native binary missing; shards would use the published @next/swc instead of this checkout's Rust code"
             ok=0
           fi
@@ -168,7 +176,7 @@ jobs:
             ok=0
           fi
           [ "$ok" -eq 1 ] || exit 1
-          ls -la packages/next-swc/native/
+          [ "$BUILD_NEXTJS" != true ] || ls -la packages/next-swc/native/
 
       - name: Install Playwright
         working-directory: nextjs
@@ -211,6 +219,7 @@ jobs:
             "nextjsSha": "$NEXT_SHA",
             "nextjsVersion": "$NEXT_VERSION",
             "nextjsFromSource": $BUILD_NEXTJS,
+            "nextjsJsFromSource": $PACK_NEXTJS,
             "mode": "${{ inputs.adapterMode && 'adapter-minimal-mode' || 'standalone' }}"
           }
           JSON
