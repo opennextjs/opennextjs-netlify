@@ -121,6 +121,10 @@ export NEXT_TEST_DEPLOY_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-deploy.sh"
 export NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-logs.sh"
 export NEXT_TEST_CLEANUP_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-cleanup.sh"
 export IS_TURBOPACK_TEST=1
+# adapter-e2e.yml sets it in adapter mode: tests and gates then expect adapter behavior
+if [ -n "${NETLIFY_NEXT_EXPERIMENTAL_ADAPTER:-}" ]; then
+  export NEXT_ENABLE_ADAPTER=1
+fi
 export NEXT_E2E_TEST_TIMEOUT=240000
 export NEXT_TELEMETRY_DISABLED=1
 export NODE_OPTIONS="--import $ADAPTER_DIR/tools/fetch-retry.mjs"
