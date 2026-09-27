@@ -1,6 +1,6 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, join, relative } from 'node:path'
+import { dirname, isAbsolute, join, relative } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
 import { trace } from '@opentelemetry/api'
@@ -30,7 +30,19 @@ const computeOutput = (output: AdapterManifestComputeOutput): AdapterManifestCom
 export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): Promise<void> => {
   await tracer.withActiveSpan('copyNextServerCodeFromAdapter', async () => {
     await mkdir(ctx.serverHandlerDir, { recursive: true })
-    await writeRunConfig(ctx)
+    // The adapter output has custom `cacheHandlers` as absolute paths on the build machine. Make
+    // them relative to the distDir, as `required-server-files.json` has them, which route modules
+    // resolve inside the function.
+    const distDir = join(ctx.adapterOutput.projectDir, ctx.buildConfig.distDir)
+    await writeRunConfig(ctx, {
+      ...ctx.buildConfig,
+      cacheHandlers: Object.fromEntries(
+        Object.entries(ctx.buildConfig.cacheHandlers ?? {}).map(([kind, handler]) => [
+          kind,
+          typeof handler === 'string' && isAbsolute(handler) ? relative(distDir, handler) : handler,
+        ]),
+      ),
+    })
 
     // Write the adapter manifest (routing + output metadata) for runtime use.
     // filePaths are already relative (rewritten in the adapter's onBuildComplete).
