@@ -8,9 +8,7 @@ import { pathToFileURL } from 'node:url'
 import type { Span } from '@opentelemetry/api'
 import type { NextConfigRuntime } from 'next-with-adapters/dist/server/config-shared.js'
 import type { RouterServerContext } from 'next-with-adapters/dist/server/lib/router-utils/router-server-context.js'
-import { getIsPossibleServerAction } from 'next-with-adapters/dist/server/lib/server-action-request-meta.js'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
-import { isBot } from 'next-with-adapters/dist/shared/lib/router/utils/is-bot.js'
 
 import {
   applyResolutionToResponse,
@@ -295,6 +293,28 @@ function getCookie(request: Request, name: string): string | undefined {
       return value.join('=')
     }
   }
+}
+
+// like Next's getIsPossibleServerAction (server/lib/server-action-request-meta.ts)
+function isPossibleServerAction(request: Request): boolean {
+  const contentType = request.headers.get('content-type')
+  return (
+    request.method === 'POST' &&
+    (request.headers.has('next-action') ||
+      contentType === 'application/x-www-form-urlencoded' ||
+      Boolean(contentType?.startsWith('multipart/form-data')))
+  )
+}
+
+// like Next's isBot (shared/lib/router/utils/is-bot.ts): the app's `htmlLimitedBots`, which the
+// config carries as a regex source, and Googlebot, which renders JavaScript
+const htmlLimitedBotsRegex = manifest.config.htmlLimitedBots
+  ? new RegExp(String(manifest.config.htmlLimitedBots), 'i')
+  : undefined
+function isBot(userAgent: string): boolean {
+  return (
+    /googlebot(?!-)|googlebot$/i.test(userAgent) || Boolean(htmlLimitedBotsRegex?.test(userAgent))
+  )
 }
 
 function shouldBypassPrerender(output: PrerenderOutput, request: Request, url: URL): boolean {
@@ -1350,14 +1370,11 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // same for an SSG page. Route modules carry neither check, so it lands on the host (adapter-k8s
       // gates its static serves the same way). Server actions and postponed resumes legitimately
       // POST to a page URL — and a form-submitted action carries no `next-action` header, only a
-      // form content-type, so ask Next the same way base-server does.
+      // form content-type, so check it the same way base-server does.
       if (
         !['GET', 'HEAD'].includes(request.method) &&
         readOnlyPathnames.has(resolution.resolvedPathname) &&
-        !getIsPossibleServerAction({
-          method: request.method,
-          headers: request.headers,
-        } as Parameters<typeof getIsPossibleServerAction>[0]) &&
+        !isPossibleServerAction(request) &&
         !request.headers.has('next-resume')
       ) {
         return applyResolutionToThisResponse(
