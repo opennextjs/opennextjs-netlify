@@ -30,6 +30,8 @@ import type { ResolveRoutesResult } from '../adapter-runtime-shared/next-routing
 import { proxyExternalRewrite } from '../adapter-runtime-shared/proxy-external-rewrite.js'
 // import { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
+const REWRITE_HEADERS = new Set(['x-nextjs-rewritten-path', 'x-nextjs-rewritten-query'])
+
 interface Route {
   source?: string
   sourceRegex: string
@@ -334,9 +336,12 @@ export async function runNextRouting(
       if (key.toLowerCase().startsWith('x-middleware-')) {
         continue
       }
-      // the resolution has the middleware headers with later routes applied on top, like an
-      // interception rewrite replacing the middleware's `x-nextjs-rewritten-path`
-      headers.set(key, resolution.resolvedHeaders?.get(key) ?? value)
+      // a later rewrite (an interception route, say) replaces the middleware's rewrite headers, as
+      // Next's router does
+      const resolvedValue = REWRITE_HEADERS.has(key.toLowerCase())
+        ? resolution.resolvedHeaders?.get(key)
+        : undefined
+      headers.set(key, resolvedValue ?? value)
     }
     return new Response(response.body, {
       status: response.status,
