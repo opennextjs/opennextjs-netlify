@@ -210,6 +210,19 @@ case "${TEST_FILE_PATH:-}" in
     ;;
 esac
 
+# The fixture's own requests to its /test-data route need the deployment's origin, which its
+# origin.ts only knows as Vercel's VERCEL_URL (or next start's PORT). Functions don't get the
+# deploy's URL in their env, so it comes from the request's Netlify context.
+case "${TEST_FILE_PATH:-}" in
+  */on-demand-prerender-error-boundary/*)
+    cat > origin.ts <<'ORIGIN'
+export function getOrigin() {
+  return (globalThis as any).Netlify.context.url.origin
+}
+ORIGIN
+    ;;
+esac
+
 # Fixtures with a distDir outside `.next` declare where it is for Vercel in vercel.json
 # (`outputDirectory`), which is the same thing as Netlify's publish directory.
 PUBLISH_DIR="$(node -p "try { require('./vercel.json').outputDirectory || '.next' } catch { '.next' }")"
