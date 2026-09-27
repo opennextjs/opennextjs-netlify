@@ -44,20 +44,29 @@ describe('page router', () => {
   test<FixtureTestContext>('page router with static revalidate', async (ctx) => {
     await createFixture('page-router', ctx)
     console.time('runPlugin')
+    // before the build writes the entries, so less than 5s since then means they're still fresh
+    const buildStart = Date.now()
     await runPlugin(ctx)
     console.timeEnd('runPlugin')
     // Build output is fresh as of the build (see prerendered.ts): the first request is a hit, not a
     // regeneration.
     const fresh = await invokeFunction(ctx, { url: 'static/revalidate-automatic' })
     expect(fresh.statusCode).toBe(200)
-    expect(fresh.headers, 'prerendered page served fresh from the build').toEqual(
-      expect.objectContaining({
-        'cache-status': '"Next.js"; hit',
-        'netlify-cdn-cache-control': expect.stringMatching(
-          /(max-age|s-maxage)=5, stale-while-revalidate=/,
-        ),
-      }),
-    )
+    // the page revalidates after 5s, which a cold function start can take on its own in CI
+    if (Date.now() - buildStart < 5_000) {
+      expect(fresh.headers, 'prerendered page served fresh from the build').toEqual(
+        expect.objectContaining({
+          'cache-status': '"Next.js"; hit',
+          'netlify-cdn-cache-control': expect.stringMatching(
+            /(max-age|s-maxage)=5, stale-while-revalidate=/,
+          ),
+        }),
+      )
+    } else {
+      expect(fresh.headers['cache-status'], 'prerendered page served from the build').toMatch(
+        /^"Next\.js"; hit/,
+      )
+    }
     ctx.blobServerOnRequestSpy.mockClear()
 
     // let the build entries go stale (revalidate-slow has a 10s TTL): the flow below is stale → swr
