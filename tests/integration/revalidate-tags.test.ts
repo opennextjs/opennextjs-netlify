@@ -55,7 +55,9 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
   await createFixture('server-components', ctx)
   await runPlugin(ctx)
 
-  expect(await ctx.blobStore.get(encodeBlobKeyForRoute({ route: '/static-fetch-1', kind: 'APP_PAGE' }))).not.toBeNull()
+  expect(
+    await ctx.blobStore.get(encodeBlobKeyForRoute({ route: '/static-fetch-1', kind: 'APP_PAGE' })),
+  ).not.toBeNull()
 
   ctx.blobServerOnRequestSpy.mockClear()
 

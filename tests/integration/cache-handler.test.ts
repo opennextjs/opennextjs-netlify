@@ -268,7 +268,11 @@ describe('app router', () => {
     ).toBe(1)
     ctx.blobServerOnRequestSpy.mockClear()
 
-    expect(await ctx.blobStore.get(encodeBlobKeyForRoute({ route: '/posts/3', kind: 'APP_PAGE', sourceRoute: '/posts/[id]' }))).toBeNull()
+    expect(
+      await ctx.blobStore.get(
+        encodeBlobKeyForRoute({ route: '/posts/3', kind: 'APP_PAGE', sourceRoute: '/posts/[id]' }),
+      ),
+    ).toBeNull()
     // this page is not pre-rendered and should result in a cache miss
     const post3 = await invokeFunction(ctx, { url: 'posts/3' })
     expect(post3.statusCode).toBe(200)
@@ -282,7 +286,11 @@ describe('app router', () => {
     // wait to have a stale page
     await new Promise<void>((resolve) => setTimeout(resolve, 6_000))
     // after the dynamic call of `posts/3` it should be in cache, note this is after the timeout as the cache set happens async
-    expect(await ctx.blobStore.get(encodeBlobKeyForRoute({ route: '/posts/3', kind: 'APP_PAGE', sourceRoute: '/posts/[id]' }))).not.toBeNull()
+    expect(
+      await ctx.blobStore.get(
+        encodeBlobKeyForRoute({ route: '/posts/3', kind: 'APP_PAGE', sourceRoute: '/posts/[id]' }),
+      ),
+    ).not.toBeNull()
 
     const stale = await invokeFunction(ctx, { url: 'posts/1' })
     const staleDate = load(stale.body)('[data-testid="date-now"]').text()
@@ -403,9 +411,12 @@ describe('route', () => {
     await runPlugin(ctx)
 
     // check if the route got prerendered
-    const blobEntry = await ctx.blobStore.get(encodeBlobKeyForRoute({ route: '/api/revalidate-handler', kind: 'APP_ROUTE' }), {
-      type: 'json',
-    })
+    const blobEntry = await ctx.blobStore.get(
+      encodeBlobKeyForRoute({ route: '/api/revalidate-handler', kind: 'APP_ROUTE' }),
+      {
+        type: 'json',
+      },
+    )
     expect(blobEntry).not.toBeNull()
 
     ctx.blobServerOnRequestSpy.mockClear()

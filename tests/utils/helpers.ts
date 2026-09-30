@@ -171,7 +171,8 @@ export const decodeBlobKey = (key: string) => Buffer.from(key, 'base64url').toSt
  * reduced to its pathname (keeping `/index`); any other key (a plain route, a static `*.html` file, a
  * fetch entry, a tag) passes through unchanged.
  */
-export const decodeBlobKeyToRoute = (key: string): string => stripRouteCacheScope(decodeBlobKey(key))
+export const decodeBlobKeyToRoute = (key: string): string =>
+  stripRouteCacheScope(decodeBlobKey(key))
 
 /**
  * Fake build utils that are passed to a build plugin execution
