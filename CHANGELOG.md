@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.16.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.0...v5.16.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* adjust cache handler keys for next@16.3.8 ([#3576](https://github.com/opennextjs/opennextjs-netlify/issues/3576)) ([10bface](https://github.com/opennextjs/opennextjs-netlify/commit/10bface7f5600088b68cd6c60683cf929be7e83d))
+
 ## [5.16.0](https://github.com/opennextjs/opennextjs-netlify/compare/v5.15.13...v5.16.0) (2026-09-17)
 
 
