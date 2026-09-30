@@ -8,7 +8,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin, runPluginStep } from '../utils/fixture.js'
 import {
-  decodeBlobKey,
+  decodeBlobKeyToRoute,
   generateRandomObjectID,
   getBlobEntries,
   startMockBlobStore,
@@ -33,13 +33,17 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
   await createFixture('page-router', ctx)
   await runPlugin(ctx)
 
-  const entries = await getBlobEntries(ctx)
-  expect(entries.map(({ key }) => decodeBlobKey(key.substring(0, 50))).sort()).toEqual([
+  // `decodeBlobKeyToRoute` maps a (possibly route-scoped) key back to its route. The long product
+  // route's on-disk key is truncated and ends in a hash, so only its prefix survives — we match it
+  // separately and assert the rest exactly.
+  const routes = (await getBlobEntries(ctx)).map(({ key }) => decodeBlobKeyToRoute(key))
+  const longProductRoute = routes.find((route) => route.startsWith('/products/an-incr'))
+  expect(longProductRoute).toBeDefined()
+  expect(routes.filter((route) => route !== longProductRoute).sort()).toEqual([
     '/fallback-true/[slug]',
     '/fallback-true/prerendered',
-    '/products/an-incredibly-long-product-',
     '/products/prerendered',
-    '/products/事前レンダリング,te',
+    '/products/事前レンダリング,test',
     '/static/revalidate-automatic',
     '/static/revalidate-manual',
     '/static/revalidate-slow',
@@ -48,7 +52,6 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
     '500.html',
     'fallback-true/[slug].html',
     'static/fully-static.html',
-    // the real key is much longer and ends in a hash, but we only assert on the first 50 chars to make it easier
   ])
 
   // test that it should request the 404.html file

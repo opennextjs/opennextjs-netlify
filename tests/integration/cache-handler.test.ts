@@ -11,8 +11,8 @@ import {
 } from '../utils/fixture.js'
 import {
   countOfBlobServerGetsForKey,
-  decodeBlobKey,
-  encodeBlobKey,
+  decodeBlobKeyToRoute,
+  encodeBlobKeyForRoute,
   generateRandomObjectID,
   getBlobEntries,
   startMockBlobStore,
@@ -46,14 +46,17 @@ describe('page router', () => {
     await runPlugin(ctx)
     console.timeEnd('runPlugin')
     // check if the blob entries where successful set on the build plugin
-    const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key.substring(0, 50))).sort()).toEqual([
+    // `decodeBlobKeyToRoute` maps a (possibly route-scoped) key back to its route. The long product
+    // route's on-disk key is truncated and ends in a hash, so only its prefix survives — we match it
+    // separately and assert the rest exactly.
+    const routes = (await getBlobEntries(ctx)).map(({ key }) => decodeBlobKeyToRoute(key))
+    const longProductRoute = routes.find((route) => route.startsWith('/products/an-incr'))
+    expect(longProductRoute).toBeDefined()
+    expect(routes.filter((route) => route !== longProductRoute).sort()).toEqual([
       '/fallback-true/[slug]',
       '/fallback-true/prerendered',
-      // the real key is much longer and ends in a hash, but we only assert on the first 50 chars to make it easier
-      '/products/an-incredibly-long-product-',
       '/products/prerendered',
-      '/products/事前レンダリング,te',
+      '/products/事前レンダリング,test',
       '/static/revalidate-automatic',
       '/static/revalidate-manual',
       '/static/revalidate-slow',
@@ -216,7 +219,7 @@ describe('app router', () => {
     console.timeEnd('runPlugin')
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
+    expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key)).sort()).toEqual(
       [
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
@@ -265,7 +268,11 @@ describe('app router', () => {
     ).toBe(1)
     ctx.blobServerOnRequestSpy.mockClear()
 
-    expect(await ctx.blobStore.get(encodeBlobKey('/posts/3'))).toBeNull()
+    expect(
+      await ctx.blobStore.get(
+        encodeBlobKeyForRoute({ route: '/posts/3', kind: 'APP_PAGE', sourceRoute: '/posts/[id]' }),
+      ),
+    ).toBeNull()
     // this page is not pre-rendered and should result in a cache miss
     const post3 = await invokeFunction(ctx, { url: 'posts/3' })
     expect(post3.statusCode).toBe(200)
@@ -279,7 +286,11 @@ describe('app router', () => {
     // wait to have a stale page
     await new Promise<void>((resolve) => setTimeout(resolve, 6_000))
     // after the dynamic call of `posts/3` it should be in cache, note this is after the timeout as the cache set happens async
-    expect(await ctx.blobStore.get(encodeBlobKey('/posts/3'))).not.toBeNull()
+    expect(
+      await ctx.blobStore.get(
+        encodeBlobKeyForRoute({ route: '/posts/3', kind: 'APP_PAGE', sourceRoute: '/posts/[id]' }),
+      ),
+    ).not.toBeNull()
 
     const stale = await invokeFunction(ctx, { url: 'posts/1' })
     const staleDate = load(stale.body)('[data-testid="date-now"]').text()
@@ -329,7 +340,7 @@ describe('app router', () => {
 
     const blobEntries = await getBlobEntries(ctx)
     // dynamic route that is not pre-rendered should NOT be in the blob store (this is to ensure that test setup is correct)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key))).not.toContain('/static-fetch/3')
+    expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key))).not.toContain('/static-fetch/3')
 
     // there is no pre-rendered page for this route, so it should result in a cache miss and blocking render
     const call1 = await invokeSandboxedFunction(ctx, { url: '/static-fetch/3' })
@@ -370,7 +381,7 @@ describe('plugin', () => {
     await runPlugin(ctx)
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
+    expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key)).sort()).toEqual(
       [
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
@@ -400,9 +411,12 @@ describe('route', () => {
     await runPlugin(ctx)
 
     // check if the route got prerendered
-    const blobEntry = await ctx.blobStore.get(encodeBlobKey('/api/revalidate-handler'), {
-      type: 'json',
-    })
+    const blobEntry = await ctx.blobStore.get(
+      encodeBlobKeyForRoute({ route: '/api/revalidate-handler', kind: 'APP_ROUTE' }),
+      {
+        type: 'json',
+      },
+    )
     expect(blobEntry).not.toBeNull()
 
     ctx.blobServerOnRequestSpy.mockClear()

@@ -10,8 +10,9 @@ import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
 import {
   countOfBlobServerGetsForKey,
-  encodeBlobKey,
+  encodeBlobKeyForRoute,
   generateRandomObjectID,
+  routeCacheKeyFor,
   startMockBlobStore,
 } from '../utils/helpers.js'
 
@@ -92,24 +93,37 @@ describe('request-context does NOT leak between concurrent requests', () => {
     const mockedDateForRevalidateAutomatic = 'Wed, 01 Jan 2020 00:00:00 GMT'
     const mockedDateForRevalidateSlow = 'Fri, 01 Jan 2021 00:00:00 GMT'
 
-    await ctx.blobStore.setJSON(encodeBlobKey('/static/revalidate-automatic'), {
-      ...(await ctx.blobStore.get(encodeBlobKey('/static/revalidate-automatic'), {
-        type: 'json',
-      })),
-      lastModified: new Date(mockedDateForRevalidateAutomatic).getTime(),
-    })
+    await ctx.blobStore.setJSON(
+      encodeBlobKeyForRoute({ route: '/static/revalidate-automatic', kind: 'PAGES' }),
+      {
+        ...(await ctx.blobStore.get(
+          encodeBlobKeyForRoute({ route: '/static/revalidate-automatic', kind: 'PAGES' }),
+          {
+            type: 'json',
+          },
+        )),
+        lastModified: new Date(mockedDateForRevalidateAutomatic).getTime(),
+      },
+    )
 
-    await ctx.blobStore.setJSON(encodeBlobKey('/static/revalidate-slow'), {
-      ...(await ctx.blobStore.get(encodeBlobKey('/static/revalidate-slow'), {
-        type: 'json',
-      })),
-      lastModified: new Date(mockedDateForRevalidateSlow).getTime(),
-    })
+    await ctx.blobStore.setJSON(
+      encodeBlobKeyForRoute({ route: '/static/revalidate-slow', kind: 'PAGES' }),
+      {
+        ...(await ctx.blobStore.get(
+          encodeBlobKeyForRoute({ route: '/static/revalidate-slow', kind: 'PAGES' }),
+          {
+            type: 'json',
+          },
+        )),
+        lastModified: new Date(mockedDateForRevalidateSlow).getTime(),
+      },
+    )
 
     ctx.blobServerOnRequestSpy.mockClear()
 
-    const waitForCacheHandlerGetAndPausePromise =
-      waitForCacheHandlerGetAndPause('/static/revalidate-slow')
+    const waitForCacheHandlerGetAndPausePromise = waitForCacheHandlerGetAndPause(
+      routeCacheKeyFor({ route: '/static/revalidate-slow', kind: 'PAGES' }),
+    )
     const slowCallPromise = invokeFunction(ctx, {
       url: 'static/revalidate-slow',
     })
@@ -131,7 +145,10 @@ describe('request-context does NOT leak between concurrent requests', () => {
     expect(getRequestContextSpy).toHaveLastReturnedWith(
       expect.objectContaining({
         responseCacheGetLastModified: new Date(mockedDateForRevalidateAutomatic).getTime(),
-        responseCacheKey: '/static/revalidate-automatic',
+        responseCacheKey: routeCacheKeyFor({
+          route: '/static/revalidate-automatic',
+          kind: 'PAGES',
+        }),
       }),
     )
 
@@ -143,7 +160,7 @@ describe('request-context does NOT leak between concurrent requests', () => {
     expect(getRequestContextSpy).toHaveLastReturnedWith(
       expect.objectContaining({
         responseCacheGetLastModified: new Date(mockedDateForRevalidateSlow).getTime(),
-        responseCacheKey: '/static/revalidate-slow',
+        responseCacheKey: routeCacheKeyFor({ route: '/static/revalidate-slow', kind: 'PAGES' }),
       }),
     )
 
@@ -168,23 +185,57 @@ describe('request-context does NOT leak between concurrent requests', () => {
     const mockedDateForStaticFetch1 = 'Wed, 01 Jan 2020 00:00:00 GMT'
     const mockedDateForStaticFetch2 = 'Fri, 01 Jan 2021 00:00:00 GMT'
 
-    await ctx.blobStore.setJSON(encodeBlobKey('/static-fetch/1'), {
-      ...(await ctx.blobStore.get(encodeBlobKey('/static-fetch/1'), {
-        type: 'json',
-      })),
-      lastModified: new Date(mockedDateForStaticFetch1).getTime(),
-    })
+    await ctx.blobStore.setJSON(
+      encodeBlobKeyForRoute({
+        route: '/static-fetch/1',
+        kind: 'APP_PAGE',
+        sourceRoute: '/static-fetch/[id]',
+      }),
+      {
+        ...(await ctx.blobStore.get(
+          encodeBlobKeyForRoute({
+            route: '/static-fetch/1',
+            kind: 'APP_PAGE',
+            sourceRoute: '/static-fetch/[id]',
+          }),
+          {
+            type: 'json',
+          },
+        )),
+        lastModified: new Date(mockedDateForStaticFetch1).getTime(),
+      },
+    )
 
-    await ctx.blobStore.setJSON(encodeBlobKey('/static-fetch/2'), {
-      ...(await ctx.blobStore.get(encodeBlobKey('/static-fetch/2'), {
-        type: 'json',
-      })),
-      lastModified: new Date(mockedDateForStaticFetch2).getTime(),
-    })
+    await ctx.blobStore.setJSON(
+      encodeBlobKeyForRoute({
+        route: '/static-fetch/2',
+        kind: 'APP_PAGE',
+        sourceRoute: '/static-fetch/[id]',
+      }),
+      {
+        ...(await ctx.blobStore.get(
+          encodeBlobKeyForRoute({
+            route: '/static-fetch/2',
+            kind: 'APP_PAGE',
+            sourceRoute: '/static-fetch/[id]',
+          }),
+          {
+            type: 'json',
+          },
+        )),
+        lastModified: new Date(mockedDateForStaticFetch2).getTime(),
+      },
+    )
 
     ctx.blobServerOnRequestSpy.mockClear()
 
-    const waitForCacheHandlerGetAndPausePromise = waitForCacheHandlerGetAndPause('/static-fetch/2')
+    const waitForCacheHandlerGetAndPausePromise = waitForCacheHandlerGetAndPause(
+      routeCacheKeyFor({
+        route: '/static-fetch/2',
+        kind: 'APP_PAGE',
+        sourceRoute: '/static-fetch/[id]',
+      }),
+    )
     const slowCallPromise = invokeFunction(ctx, {
       url: 'static-fetch/2',
     })
@@ -206,7 +257,11 @@ describe('request-context does NOT leak between concurrent requests', () => {
     expect(getRequestContextSpy).toHaveLastReturnedWith(
       expect.objectContaining({
         responseCacheGetLastModified: new Date(mockedDateForStaticFetch1).getTime(),
-        responseCacheKey: '/static-fetch/1',
+        responseCacheKey: routeCacheKeyFor({
+          route: '/static-fetch/1',
+          kind: 'APP_PAGE',
+          sourceRoute: '/static-fetch/[id]',
+        }),
       }),
     )
 
@@ -218,7 +273,11 @@ describe('request-context does NOT leak between concurrent requests', () => {
     expect(getRequestContextSpy).toHaveLastReturnedWith(
       expect.objectContaining({
         responseCacheGetLastModified: new Date(mockedDateForStaticFetch2).getTime(),
-        responseCacheKey: '/static-fetch/2',
+        responseCacheKey: routeCacheKeyFor({
+          route: '/static-fetch/2',
+          kind: 'APP_PAGE',
+          sourceRoute: '/static-fetch/[id]',
+        }),
       }),
     )
 

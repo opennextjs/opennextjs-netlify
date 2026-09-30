@@ -32,7 +32,7 @@ import {
   runPlugin,
 } from '../utils/fixture.js'
 import {
-  decodeBlobKey,
+  decodeBlobKeyToRoute,
   generateRandomObjectID,
   getBlobEntries,
   startMockBlobStore,
@@ -108,7 +108,7 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
   await runPlugin(ctx)
   // check if the blob entries where successful set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
+  expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key)).sort()).toEqual(
     [
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
@@ -466,7 +466,7 @@ test.skipIf(
 
   // check if the blob entries were successfully set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  expect(blobEntries.map(({ key }) => decodeBlobKey(key)).sort()).toEqual(
+  expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key)).sort()).toEqual(
     [
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
       isExperimentalPPRHardDeprecated() ? undefined : '/static-params/[id]',
