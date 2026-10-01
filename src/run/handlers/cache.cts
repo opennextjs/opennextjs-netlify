@@ -321,6 +321,26 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         return null
       }
 
+      if (getRequestContext()?.isBackgroundRevalidation && staleByTags) {
+        // Tag invalidation is independent of the numeric TTL checked above. Background
+        // revalidation must regenerate the entry instead of serving the tag-stale payload.
+        // Foreground requests still fall through and signal SWR via markCacheEntryStaleByTags.
+        // Return before capturing response metadata or mutating the entry.
+        span?.addEvent('Discarding tag-stale entry due to SWR background revalidation request', {
+          key,
+          ttl,
+        })
+        getLogger()
+          .withFields({
+            ttl,
+            key,
+          })
+          .debug(
+            `[NetlifyCacheHandler.get] Discarding tag-stale entry due to SWR background revalidation request: ${key}`,
+          )
+        return null
+      }
+
       this.captureResponseCacheLastModified(blob, key, span)
 
       if (staleByTags) {
