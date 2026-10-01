@@ -265,18 +265,17 @@ async function doRevalidateTagAndPurgeEdgeCache(
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
 
-  // index first: a reader that finds the tag before its manifest exists reads "not revalidated", never a stale manifest
-  await addTagsToIndex(tags, cacheStore)
-
-  await Promise.all(
-    tags.map(async (tag) => {
+  // until both the index entry and the manifest exist a reader sees the pre-revalidation state, so these can race
+  await Promise.all([
+    addTagsToIndex(tags, cacheStore),
+    ...tags.map(async (tag) => {
       try {
         await cacheStore.set(tag, tagManifest, 'tagManifest.set')
       } catch (error) {
         getLogger().withError(error).log(`[NextRuntime] Failed to update tag manifest for ${tag}`)
       }
     }),
-  )
+  ])
 
   await purgeEdgeCache(tags)
 }

@@ -106,12 +106,11 @@ describe('tag manifest index', () => {
     expect(readKeys()).toEqual([TAG_MANIFEST_INDEX_KEY])
   })
 
-  it('writes the index before the manifests when a tag is revalidated', async () => {
+  it('writes the index and the manifests when a tag is revalidated', async () => {
     await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products', 'promo']))
 
     const written = mockedStore.setJSON.mock.calls.map(([blobKey]) => decodeBlobKey(blobKey))
-    expect(written[0]).toBe(TAG_MANIFEST_INDEX_KEY)
-    expect(written.slice(1).sort()).toEqual(['products', 'promo'])
+    expect(written.sort()).toEqual([TAG_MANIFEST_INDEX_KEY, 'products', 'promo'])
     expect(blobs[TAG_MANIFEST_INDEX_KEY].data).toEqual({ tags: { products: 1, promo: 1 } })
   })
 
