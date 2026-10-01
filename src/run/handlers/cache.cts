@@ -29,6 +29,7 @@ import { getLogger, getRequestContext } from './request-context.cjs'
 import {
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
+  prefetchTagManifestIndex,
   purgeEdgeCache,
   type RevalidateTagDurations,
   type TagStaleOrExpiredStatus,
@@ -282,6 +283,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       span?.setAttributes({ key })
 
+      prefetchTagManifestIndex()
       const blob = await this.cacheStore.get<NetlifyCacheHandlerValue>(key, 'blobStore.get')
 
       // if blob is null then we don't have a cache entry

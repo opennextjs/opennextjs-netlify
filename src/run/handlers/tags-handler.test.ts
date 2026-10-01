@@ -10,6 +10,7 @@ import {
   getMostRecentTagExpirationTimestamp,
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
+  prefetchTagManifestIndex,
   TAG_MANIFEST_INDEX_KEY,
 } from './tags-handler.cts'
 
@@ -184,6 +185,16 @@ describe('tag manifest index', () => {
     // one `onlyIfNew` create, then one unconditional write: no retries
     expect(indexWrites).toHaveLength(2)
     expect(indexWrites[1][2]).toEqual({ span: undefined })
+  })
+
+  it('shares the index read between the prefetch and the tag check', async () => {
+    await inRequest(async () => {
+      prefetchTagManifestIndex()
+      await isAnyTagStaleOrExpired(['products'], Date.now())
+      await getMostRecentTagExpirationTimestamp(['products'])
+    })
+
+    expect(readKeys()).toEqual([TAG_MANIFEST_INDEX_KEY])
   })
 
   it('sees an index written by another instance through the conditional read', async () => {

@@ -31,6 +31,14 @@ async function getRevalidatedTags(
   return tags.filter((tag) => hasOwn(index.tags, tag))
 }
 
+// start the index read early so it overlaps the entry read instead of following it; memoized per request
+export function prefetchTagManifestIndex(): void {
+  const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+  cacheStore.get<TagManifestIndex>(TAG_MANIFEST_INDEX_KEY, 'tagManifestIndex.get').catch(() => {
+    // the real read reports failures
+  })
+}
+
 async function addTagsToIndex(
   tags: string[],
   cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore,
