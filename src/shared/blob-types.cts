@@ -11,12 +11,17 @@ export type TagManifest = {
   expireAt: number
 }
 
+// tags that have a manifest in this deploy, kept in one blob so a request reads it once
+export type TagManifestIndex = {
+  tags: Record<string, 1>
+}
+
 export type HtmlBlob = {
   html: string
   isFullyStaticPage: boolean
 }
 
-export type BlobType = NetlifyCacheHandlerValue | TagManifest | HtmlBlob
+export type BlobType = NetlifyCacheHandlerValue | TagManifest | TagManifestIndex | HtmlBlob
 
 export const isTagManifest = (value: BlobType): value is TagManifest => {
   return (
@@ -24,9 +29,20 @@ export const isTagManifest = (value: BlobType): value is TagManifest => {
     value !== null &&
     'staleAt' in value &&
     typeof value.staleAt === 'number' &&
-    'expiredAt' in value &&
-    typeof value.expiredAt === 'number' &&
+    'expireAt' in value &&
+    typeof value.expireAt === 'number' &&
     Object.keys(value).length === 2
+  )
+}
+
+export const isTagManifestIndex = (value: BlobType): value is TagManifestIndex => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'tags' in value &&
+    typeof value.tags === 'object' &&
+    value.tags !== null &&
+    Object.keys(value).length === 1
   )
 }
 

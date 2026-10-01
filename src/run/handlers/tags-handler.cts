@@ -1,7 +1,7 @@
 import { purgeCache } from '@netlify/functions'
 
 import { name as nextRuntimePkgName, version as nextRuntimePkgVersion } from '../../../package.json'
-import { TagManifest } from '../../shared/blob-types.cjs'
+import { TagManifest, TagManifestIndex } from '../../shared/blob-types.cjs'
 import {
   getMemoizedKeyValueStoreBackedByRegionalBlobStore,
   MemoizedKeyValueStoreBackedByRegionalBlobStore,
@@ -10,6 +10,56 @@ import {
 import { getLogger, getRequestContext } from './request-context.cjs'
 
 const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
+
+// lists every tag revalidated in this deploy; keys are encoded, so this cannot collide with Next.js cache keys
+export const TAG_MANIFEST_INDEX_KEY = 'netlify:tag-manifest-index'
+
+const hasOwn = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
+
+// only tags that were revalidated at least once can have a manifest, so one index read replaces one read per tag
+async function getRevalidatedTags(
+  tags: string[],
+  cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore,
+): Promise<string[]> {
+  const index = await cacheStore.get<TagManifestIndex>(
+    TAG_MANIFEST_INDEX_KEY,
+    'tagManifestIndex.get',
+  )
+  if (!index?.tags) {
+    return []
+  }
+  return tags.filter((tag) => hasOwn(index.tags, tag))
+}
+
+async function addTagsToIndex(
+  tags: string[],
+  cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore,
+): Promise<boolean> {
+  try {
+    await cacheStore.update<TagManifestIndex>(
+      TAG_MANIFEST_INDEX_KEY,
+      'tagManifestIndex.update',
+      (current) => {
+        const known = current?.tags ?? {}
+        const missing = tags.filter((tag) => !hasOwn(known, tag))
+        if (missing.length === 0) {
+          return null
+        }
+        const updated: TagManifestIndex = { tags: { ...known } }
+        for (const tag of missing) {
+          updated.tags[tag] = 1
+        }
+        return updated
+      },
+    )
+    return true
+  } catch (error) {
+    getLogger()
+      .withError(error)
+      .log(`[NextRuntime] Failed to update tag manifest index for ${tags.join(', ')}`)
+    return false
+  }
+}
 
 async function getTagManifest(
   tag: string,
@@ -32,7 +82,14 @@ export async function getMostRecentTagExpirationTimestamp(tags: string[]) {
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
 
-  const manifestsOrNulls = await Promise.all(tags.map((tag) => getTagManifest(tag, cacheStore)))
+  const revalidatedTags = await getRevalidatedTags(tags, cacheStore)
+  if (revalidatedTags.length === 0) {
+    return 0
+  }
+
+  const manifestsOrNulls = await Promise.all(
+    revalidatedTags.map((tag) => getTagManifest(tag, cacheStore)),
+  )
 
   const expirationTimestamps = manifestsOrNulls
     .filter((manifest) => manifest !== null)
@@ -54,15 +111,20 @@ export type TagStaleOrExpiredStatus =
 /**
  * Check if any of the tags expired since the given timestamp
  */
-export function isAnyTagStaleOrExpired(
+export async function isAnyTagStaleOrExpired(
   tags: string[],
   timestamp: number,
 ): Promise<TagStaleOrExpiredStatus> {
   if (tags.length === 0 || !timestamp) {
-    return Promise.resolve({ stale: false, expired: false })
+    return { stale: false, expired: false }
   }
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+
+  const revalidatedTags = await getRevalidatedTags(tags, cacheStore)
+  if (revalidatedTags.length === 0) {
+    return { stale: false, expired: false }
+  }
 
   //    Full-route cache and fetch caches share a lot of tags
   //    but we will only do actual blob read once withing a single request due to cacheStore
@@ -75,7 +137,7 @@ export function isAnyTagStaleOrExpired(
   return new Promise<TagStaleOrExpiredStatus>((resolve, reject) => {
     const tagManifestPromises: Promise<TagStaleOrExpiredStatus>[] = []
 
-    for (const tag of tags) {
+    for (const tag of revalidatedTags) {
       const tagManifestPromise = getTagManifest(tag, cacheStore)
 
       tagManifestPromises.push(
@@ -194,6 +256,9 @@ async function doRevalidateTagAndPurgeEdgeCache(
   }
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+
+  // index first: a reader that finds the tag before its manifest exists reads "not revalidated", never a stale manifest
+  await addTagsToIndex(tags, cacheStore)
 
   await Promise.all(
     tags.map(async (tag) => {

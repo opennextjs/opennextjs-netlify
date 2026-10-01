@@ -2,7 +2,12 @@ import { isPromise } from 'node:util/types'
 
 import { LRUCache } from 'lru-cache'
 
-import { type BlobType, isHtmlBlob, isTagManifest } from '../../shared/blob-types.cjs'
+import {
+  type BlobType,
+  isHtmlBlob,
+  isTagManifest,
+  isTagManifestIndex,
+} from '../../shared/blob-types.cjs'
 import { getRequestContext } from '../handlers/request-context.cjs'
 import { recordWarning } from '../handlers/tracer.cjs'
 
@@ -69,6 +74,14 @@ const estimateBlobKnownTypeSize = (
 
   if (isTagManifest(data)) {
     return baseSize
+  }
+
+  if (isTagManifestIndex(data)) {
+    let size: number = baseSize
+    for (const tag in data.tags) {
+      size += tag.length + 4
+    }
+    return size
   }
 
   if (isHtmlBlob(data)) {
