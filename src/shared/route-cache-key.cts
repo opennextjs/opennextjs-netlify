@@ -6,18 +6,16 @@ import { createHash } from 'node:crypto'
 // prerendered content at build time. Keep this in sync with Next; `route-cache-key.test.ts` pins the
 // format against values captured from a real patched build.
 // https://github.com/vercel/next.js/commit/719e4c67d6e92df60246f95e1d96e2dd60789a52
+// https://github.com/vercel/next.js/pull/99482
 
 export const ROUTE_CACHE_DIRECTORY = 'route-cache'
 
 /**
  * Next versions whose incremental cache scopes response keys by route (i.e. where we must seed and
  * look up entries under `getRouteCacheKey`).
- *
- * TODO: revisit once the fix forward-ports to canary — those canaries would then need the scoped path
- * too. Keep in sync with the Next.js PR / commit sha that introduced route-scoped cache keys.
  */
 export const ROUTE_CACHE_KEY_NEXT_VERSION_RANGE =
-  '>=15.5.27 <15.6.0-0 || >=16.3.8 <16.4.0-0 || >=16.4.0-p'
+  '>=15.5.27 <15.6.0-0 || >=16.3.8 <16.4.0-0 || >=16.4.0-canary.54'
 
 // Next's `RouteKind` enum also has `PAGES_API` and `IMAGE`, but only these three can appear in a
 // route-cache key: `IMAGE` throws before key derivation ("Images must use the image optimizer
