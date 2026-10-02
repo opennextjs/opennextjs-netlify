@@ -283,7 +283,12 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       span?.setAttributes({ key })
 
-      prefetchTagRevalidationMarker()
+      // pages router entries never check tags; skip only on a positive hint (`kind` in Next 15+,
+      // `kindHint` in 14.0.2+), older versions pass no hint so we can't know what we will get back
+      const { kind, kindHint } = context as { kind?: string; kindHint?: string }
+      if (kind !== 'PAGES' && kindHint !== 'pages') {
+        prefetchTagRevalidationMarker()
+      }
       const blob = await this.cacheStore.get<NetlifyCacheHandlerValue>(key, 'blobStore.get')
 
       // if blob is null then we don't have a cache entry
