@@ -7,11 +7,18 @@ import { afterAll, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin, runPluginStep } from '../utils/fixture.js'
 import { generateRandomObjectID, getBlobServerGets, startMockBlobStore } from '../utils/helpers.js'
+import { TAG_REVALIDATION_MARKER_KEY } from '../../src/run/handlers/tags-handler.cjs'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 function isFetch(key: string) {
-  // exclude tag manifests (starting with `_N_T_`), pages (starting with `/`) and static html files (keys including `.html`)
-  return !key.startsWith('_N_T_') && !key.startsWith('/') && !key.includes('.html')
+  // exclude tag manifests (starting with `_N_T_`), the tag revalidation marker, pages (starting with `/`)
+  // and static html files (keys including `.html`)
+  return (
+    !key.startsWith('_N_T_') &&
+    key !== TAG_REVALIDATION_MARKER_KEY &&
+    !key.startsWith('/') &&
+    !key.includes('.html')
+  )
 }
 
 expect.extend({
