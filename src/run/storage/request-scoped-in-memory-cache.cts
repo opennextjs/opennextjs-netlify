@@ -6,7 +6,7 @@ import {
   type BlobType,
   isHtmlBlob,
   isTagManifest,
-  isTagManifestIndex,
+  isTagRevalidationMarker,
 } from '../../shared/blob-types.cjs'
 import { getRequestContext } from '../handlers/request-context.cjs'
 import { recordWarning } from '../handlers/tracer.cjs'
@@ -76,12 +76,8 @@ const estimateBlobKnownTypeSize = (
     return baseSize
   }
 
-  if (isTagManifestIndex(data)) {
-    let size: number = baseSize
-    for (const tag in data.tags) {
-      size += tag.length + 4
-    }
-    return size
+  if (isTagRevalidationMarker(data)) {
+    return baseSize
   }
 
   if (isHtmlBlob(data)) {

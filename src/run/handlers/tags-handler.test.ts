@@ -10,59 +10,34 @@ import {
   getMostRecentTagExpirationTimestamp,
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
-  prefetchTagManifestIndex,
-  TAG_MANIFEST_INDEX_KEY,
+  prefetchTagRevalidationMarker,
+  TAG_REVALIDATION_MARKER_KEY,
 } from './tags-handler.cts'
 
-type Record_ = { data: BlobType; etag: string }
+type StoredBlob = { data: BlobType; etag: string }
 
 const etagFor = (data: BlobType) =>
   `"${createHash('sha256').update(JSON.stringify(data)).digest('hex')}"`
 
-let blobs: Record<string, Record_> = {}
-// number of conditional writes to fail with `modified: false` before accepting
-let conflictsToInject = 0
-// when false the store behaves like a server that sends no etag on reads
-let etagsOnReads = true
+let blobs: Record<string, StoredBlob> = {}
 
 const mockedStore = {
   getWithMetadata: vi.fn((blobKey: string, options?: { etag?: string }) => {
     const key = decodeBlobKey(blobKey)
-    const record = blobs[key]
-    if (!record) {
+    const stored = blobs[key]
+    if (!stored) {
       return Promise.resolve(null)
     }
-    if (!etagsOnReads) {
-      return Promise.resolve({ data: record.data })
+    if (options?.etag && options.etag === stored.etag) {
+      return Promise.resolve({ data: null, etag: stored.etag })
     }
-    if (options?.etag && options.etag === record.etag) {
-      return Promise.resolve({ data: null, etag: record.etag })
-    }
-    return Promise.resolve({ data: record.data, etag: record.etag })
+    return Promise.resolve({ data: stored.data, etag: stored.etag })
   }),
-  setJSON: vi.fn(
-    async (
-      blobKey: string,
-      data: BlobType,
-      options?: { onlyIfMatch?: string; onlyIfNew?: boolean },
-    ) => {
-      const key = decodeBlobKey(blobKey)
-      const prev = blobs[key]
-      if (conflictsToInject > 0 && (options?.onlyIfMatch || options?.onlyIfNew)) {
-        conflictsToInject -= 1
-        return { etag: prev?.etag, modified: false }
-      }
-      if (options?.onlyIfNew && prev) {
-        return { etag: prev.etag, modified: false }
-      }
-      if (options?.onlyIfMatch && options.onlyIfMatch !== prev?.etag) {
-        return { etag: prev?.etag, modified: false }
-      }
-      const record = { data, etag: etagFor(data) }
-      blobs[key] = record
-      return { etag: record.etag, modified: true }
-    },
-  ),
+  setJSON: vi.fn(async (blobKey: string, data: BlobType) => {
+    const stored = { data, etag: etagFor(data) }
+    blobs[decodeBlobKey(blobKey)] = stored
+    return { etag: stored.etag, modified: true }
+  }),
 }
 
 vi.mock('@netlify/blobs', () => ({
@@ -75,6 +50,7 @@ vi.mock('@netlify/functions', () => ({
 
 const readKeys = () =>
   mockedStore.getWithMetadata.mock.calls.map(([blobKey]) => decodeBlobKey(blobKey))
+const writtenKeys = () => mockedStore.setJSON.mock.calls.map(([blobKey]) => decodeBlobKey(blobKey))
 
 const inRequest = <T>(fn: () => Promise<T>) => runWithRequestContext(createRequestContext(), fn)
 
@@ -82,61 +58,77 @@ beforeEach(() => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const untypedGlobalThis = globalThis as any
   untypedGlobalThis[Symbol.for('nf-in-memory-lru-cache')] = undefined
+  untypedGlobalThis[Symbol.for('nf-tag-revalidation-marker-seen')] = undefined
   blobs = {}
-  conflictsToInject = 0
-  etagsOnReads = true
   mockedStore.getWithMetadata.mockClear()
   mockedStore.setJSON.mockClear()
 })
 
-describe('tag manifest index', () => {
-  it('reads nothing but the index when no tag was ever revalidated', async () => {
-    const status = await inRequest(() =>
-      isAnyTagStaleOrExpired(['_N_T_/layout', '_N_T_/page', '_N_T_/', 'products'], Date.now()),
-    )
+describe('tag revalidation marker', () => {
+  it('reads nothing but the marker when no tag was ever revalidated', async () => {
+    const tags = ['_N_T_/layout', '_N_T_/page', '_N_T_/', 'products']
 
+    const status = await inRequest(() => isAnyTagStaleOrExpired(tags, Date.now()))
     expect(status).toEqual({ stale: false, expired: false })
-    expect(readKeys()).toEqual([TAG_MANIFEST_INDEX_KEY])
+    expect(readKeys()).toEqual([TAG_REVALIDATION_MARKER_KEY])
 
     mockedStore.getWithMetadata.mockClear()
-    const expiration = await inRequest(() =>
-      getMostRecentTagExpirationTimestamp(['_N_T_/layout', 'products']),
-    )
-    expect(expiration).toBe(0)
-    expect(readKeys()).toEqual([TAG_MANIFEST_INDEX_KEY])
+    expect(await inRequest(() => getMostRecentTagExpirationTimestamp(tags))).toBe(0)
+    expect(readKeys()).toEqual([TAG_REVALIDATION_MARKER_KEY])
   })
 
-  it('writes the index and the manifests when a tag is revalidated', async () => {
+  it('writes the marker with the manifests on the first revalidation only', async () => {
     await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products', 'promo']))
+    expect(writtenKeys().sort()).toEqual([TAG_REVALIDATION_MARKER_KEY, 'products', 'promo'])
+    expect(blobs[TAG_REVALIDATION_MARKER_KEY].data).toEqual({ revalidatedAt: expect.any(Number) })
 
-    const written = mockedStore.setJSON.mock.calls.map(([blobKey]) => decodeBlobKey(blobKey))
-    expect(written.sort()).toEqual([TAG_MANIFEST_INDEX_KEY, 'products', 'promo'])
-    expect(blobs[TAG_MANIFEST_INDEX_KEY].data).toEqual({ tags: { products: 1, promo: 1 } })
+    mockedStore.setJSON.mockClear()
+    await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products']))
+    expect(writtenKeys()).toEqual(['products'])
   })
 
-  it('reads manifests only for tags present in the index', async () => {
+  it('checks every tag once the marker exists', async () => {
     const entryTimestamp = Date.now() - 1000
     await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products']))
     mockedStore.getWithMetadata.mockClear()
 
     const status = await inRequest(() =>
-      isAnyTagStaleOrExpired(['_N_T_/layout', '_N_T_/page', 'products', 'promo'], entryTimestamp),
+      isAnyTagStaleOrExpired(['_N_T_/layout', 'products', 'promo'], entryTimestamp),
     )
 
     expect(status).toEqual({ stale: true, expired: true })
-    expect(readKeys().sort()).toEqual([TAG_MANIFEST_INDEX_KEY, 'products'])
+    expect(readKeys()).toContain('products')
+    expect(readKeys()).not.toContain(TAG_REVALIDATION_MARKER_KEY)
   })
 
-  it('stays fresh for tags that are indexed but revalidated before the entry', async () => {
-    await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products']))
-    const entryTimestamp = Date.now() + 1000
+  it('stops reading the marker once this process has seen it', async () => {
+    blobs[TAG_REVALIDATION_MARKER_KEY] = { data: { revalidatedAt: 1 }, etag: '"m"' }
 
-    const status = await inRequest(() => isAnyTagStaleOrExpired(['products'], entryTimestamp))
+    await inRequest(() => isAnyTagStaleOrExpired(['products'], Date.now()))
+    mockedStore.getWithMetadata.mockClear()
+    await inRequest(() => isAnyTagStaleOrExpired(['products'], Date.now()))
 
-    expect(status).toEqual({ stale: false, expired: false })
+    expect(readKeys()).toEqual(['products'])
   })
 
-  it('returns the expiration from indexed tags only', async () => {
+  it('keeps reading the marker while it is absent', async () => {
+    await inRequest(() => isAnyTagStaleOrExpired(['products'], Date.now()))
+    await inRequest(() => isAnyTagStaleOrExpired(['products'], Date.now()))
+
+    expect(readKeys()).toEqual([TAG_REVALIDATION_MARKER_KEY, TAG_REVALIDATION_MARKER_KEY])
+  })
+
+  it('sees a marker written by another instance', async () => {
+    await inRequest(() => isAnyTagStaleOrExpired(['products'], Date.now()))
+    blobs[TAG_REVALIDATION_MARKER_KEY] = { data: { revalidatedAt: Date.now() }, etag: '"m"' }
+    blobs.products = { data: { staleAt: Date.now() + 5, expireAt: Date.now() + 5 }, etag: '"p"' }
+
+    const status = await inRequest(() => isAnyTagStaleOrExpired(['products'], Date.now()))
+
+    expect(status.stale).toBe(true)
+  })
+
+  it('returns the expiration from manifests once the marker exists', async () => {
     const before = Date.now()
     await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products'], { expire: 60 }))
 
@@ -145,66 +137,15 @@ describe('tag manifest index', () => {
     )
 
     expect(expiration).toBeGreaterThanOrEqual(before + 60_000)
-    expect(readKeys()).not.toContain('never-revalidated')
   })
 
-  it('does not rewrite the index when every tag is already listed', async () => {
-    await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products']))
-    mockedStore.setJSON.mockClear()
-
-    await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products']))
-
-    const written = mockedStore.setJSON.mock.calls.map(([blobKey]) => decodeBlobKey(blobKey))
-    expect(written).toEqual(['products'])
-  })
-
-  it('retries the index write on a concurrent-write conflict and keeps every tag', async () => {
-    conflictsToInject = 2
-
-    await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['alpha']))
-    await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['beta']))
-
-    expect(blobs[TAG_MANIFEST_INDEX_KEY].data).toEqual({ tags: { alpha: 1, beta: 1 } })
-    const indexWrites = mockedStore.setJSON.mock.calls.filter(
-      ([blobKey]) => decodeBlobKey(blobKey) === TAG_MANIFEST_INDEX_KEY,
-    )
-    // two successful writes plus the two injected conflicts
-    expect(indexWrites).toHaveLength(4)
-  })
-
-  it('still indexes tags when the store reports no etag on reads', async () => {
-    etagsOnReads = false
-    await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['products']))
-    await inRequest(() => markTagsAsStaleAndPurgeEdgeCache(['promo']))
-
-    expect(blobs[TAG_MANIFEST_INDEX_KEY].data).toEqual({ tags: { products: 1, promo: 1 } })
-    const indexWrites = mockedStore.setJSON.mock.calls.filter(
-      ([blobKey]) => decodeBlobKey(blobKey) === TAG_MANIFEST_INDEX_KEY,
-    )
-    // one `onlyIfNew` create, then one unconditional write: no retries
-    expect(indexWrites).toHaveLength(2)
-    expect(indexWrites[1][2]).toEqual({ span: undefined })
-  })
-
-  it('shares the index read between the prefetch and the tag check', async () => {
+  it('shares the marker read between the prefetch and the tag check', async () => {
     await inRequest(async () => {
-      prefetchTagManifestIndex()
+      prefetchTagRevalidationMarker()
       await isAnyTagStaleOrExpired(['products'], Date.now())
       await getMostRecentTagExpirationTimestamp(['products'])
     })
 
-    expect(readKeys()).toEqual([TAG_MANIFEST_INDEX_KEY])
-  })
-
-  it('sees an index written by another instance through the conditional read', async () => {
-    // first request memoizes the (missing) index
-    await inRequest(() => isAnyTagStaleOrExpired(['products'], Date.now()))
-    // another instance revalidates: index and manifest appear in the store
-    blobs[TAG_MANIFEST_INDEX_KEY] = { data: { tags: { products: 1 } }, etag: '"idx"' }
-    blobs.products = { data: { staleAt: Date.now() + 5, expireAt: Date.now() + 5 }, etag: '"m"' }
-
-    const status = await inRequest(() => isAnyTagStaleOrExpired(['products'], Date.now()))
-
-    expect(status.stale).toBe(true)
+    expect(readKeys()).toEqual([TAG_REVALIDATION_MARKER_KEY])
   })
 })

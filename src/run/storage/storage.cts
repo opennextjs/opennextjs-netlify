@@ -85,67 +85,6 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
         return writeResult
       })
     },
-    /**
-     * Compare-and-swap read-modify-write of a JSON blob. `updater` gets the current
-     * value (null if missing) and returns the value to write, or null to leave it.
-     */
-    async update<T extends BlobType>(
-      key: string,
-      otelSpanTitle: string,
-      updater: (current: T | null) => T | null,
-      maxAttempts = 8,
-    ): Promise<{ modified: boolean; value: T | null }> {
-      const inMemoryCache = getRequestScopedInMemoryCache()
-      const blobKey = await encodeBlobKey(key)
-
-      return withActiveSpan(tracer, otelSpanTitle, async (span) => {
-        span?.setAttributes({ key })
-        for (let attempt = 1; ; attempt++) {
-          const result = await store.getWithMetadata(blobKey, { type: 'json', span })
-          const current = (result?.data ?? null) as T | null
-          const currentEtag = result?.etag
-
-          const next = updater(current)
-          if (next === null) {
-            if (current && currentEtag) {
-              inMemoryCache.set(key, { data: current, etag: currentEtag })
-            }
-            return { modified: false, value: current }
-          }
-
-          let writeResult: Awaited<ReturnType<typeof store.setJSON>>
-          if (currentEtag) {
-            writeResult = await store.setJSON(blobKey, next, { span, onlyIfMatch: currentEtag })
-          } else if (current) {
-            // no etag to condition on (not every store reports one), so last writer wins
-            writeResult = await store.setJSON(blobKey, next, { span })
-          } else {
-            writeResult = await store.setJSON(blobKey, next, { span, onlyIfNew: true })
-          }
-
-          if (writeResult?.modified !== false) {
-            if (writeResult?.etag) {
-              inMemoryCache.set(key, { data: next, etag: writeResult.etag })
-            } else {
-              inMemoryCache.set(key, next)
-            }
-            span?.setAttributes({ attempts: attempt })
-            return { modified: true, value: next }
-          }
-
-          if (attempt >= maxAttempts) {
-            throw new Error(
-              `Failed to update blob "${key}" after ${attempt} attempts because of concurrent writes`,
-            )
-          }
-
-          const delay = Math.min(1000, 25 * 2 ** attempt) * (0.5 + Math.random())
-          await new Promise<void>((resolve) => {
-            setTimeout(resolve, delay)
-          })
-        }
-      })
-    },
   }
 }
 

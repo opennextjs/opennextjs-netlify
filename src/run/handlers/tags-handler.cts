@@ -1,7 +1,7 @@
 import { purgeCache } from '@netlify/functions'
 
 import { name as nextRuntimePkgName, version as nextRuntimePkgVersion } from '../../../package.json'
-import { TagManifest, TagManifestIndex } from '../../shared/blob-types.cjs'
+import { TagManifest, TagRevalidationMarker } from '../../shared/blob-types.cjs'
 import {
   getMemoizedKeyValueStoreBackedByRegionalBlobStore,
   MemoizedKeyValueStoreBackedByRegionalBlobStore,
@@ -11,61 +11,57 @@ import { getLogger, getRequestContext } from './request-context.cjs'
 
 const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 
-// lists every tag revalidated in this deploy; keys are encoded, so this cannot collide with Next.js cache keys
-export const TAG_MANIFEST_INDEX_KEY = 'netlify:tag-manifest-index'
+// written on the first revalidation in a deploy; while it is absent no tag can have a manifest
+export const TAG_REVALIDATION_MARKER_KEY = 'netlify:tags-revalidated'
 
-const hasOwn = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
+const MARKER_SEEN = Symbol.for('nf-tag-revalidation-marker-seen')
+const extendedGlobalThis = globalThis as typeof globalThis & { [MARKER_SEEN]?: boolean }
 
-// only tags that were revalidated at least once can have a manifest, so one index read replaces one read per tag
-async function getRevalidatedTags(
-  tags: string[],
-  cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore,
-): Promise<string[]> {
-  const index = await cacheStore.get<TagManifestIndex>(
-    TAG_MANIFEST_INDEX_KEY,
-    'tagManifestIndex.get',
-  )
-  if (!index?.tags) {
-    return []
-  }
-  return tags.filter((tag) => hasOwn(index.tags, tag))
-}
-
-// start the index read early so it overlaps the entry read instead of following it; memoized per request
-export function prefetchTagManifestIndex(): void {
-  const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
-  cacheStore.get<TagManifestIndex>(TAG_MANIFEST_INDEX_KEY, 'tagManifestIndex.get').catch(() => {
-    // the real read reports failures
-  })
-}
-
-async function addTagsToIndex(
-  tags: string[],
+// the marker never goes away within a deploy, so once a process has seen it there is nothing left to read
+async function hasAnyTagBeenRevalidated(
   cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore,
 ): Promise<boolean> {
-  try {
-    await cacheStore.update<TagManifestIndex>(
-      TAG_MANIFEST_INDEX_KEY,
-      'tagManifestIndex.update',
-      (current) => {
-        const known = current?.tags ?? {}
-        const missing = tags.filter((tag) => !hasOwn(known, tag))
-        if (missing.length === 0) {
-          return null
-        }
-        const updated: TagManifestIndex = { tags: { ...known } }
-        for (const tag of missing) {
-          updated.tags[tag] = 1
-        }
-        return updated
-      },
-    )
+  if (extendedGlobalThis[MARKER_SEEN]) {
     return true
+  }
+  const marker = await cacheStore.get<TagRevalidationMarker>(
+    TAG_REVALIDATION_MARKER_KEY,
+    'tagRevalidationMarker.get',
+  )
+  if (marker) {
+    extendedGlobalThis[MARKER_SEEN] = true
+  }
+  return Boolean(marker)
+}
+
+// start the marker read early so it overlaps the entry read; memoized per request
+export function prefetchTagRevalidationMarker(): void {
+  if (extendedGlobalThis[MARKER_SEEN]) {
+    return
+  }
+  const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+  cacheStore
+    .get<TagRevalidationMarker>(TAG_REVALIDATION_MARKER_KEY, 'tagRevalidationMarker.get')
+    .catch(() => {
+      // the real read reports failures
+    })
+}
+
+async function writeTagRevalidationMarker(
+  cacheStore: MemoizedKeyValueStoreBackedByRegionalBlobStore,
+): Promise<void> {
+  if (extendedGlobalThis[MARKER_SEEN]) {
+    return
+  }
+  try {
+    await cacheStore.set(
+      TAG_REVALIDATION_MARKER_KEY,
+      { revalidatedAt: Date.now() },
+      'tagRevalidationMarker.set',
+    )
+    extendedGlobalThis[MARKER_SEEN] = true
   } catch (error) {
-    getLogger()
-      .withError(error)
-      .log(`[NextRuntime] Failed to update tag manifest index for ${tags.join(', ')}`)
-    return false
+    getLogger().withError(error).log('[NextRuntime] Failed to write tag revalidation marker')
   }
 }
 
@@ -90,14 +86,11 @@ export async function getMostRecentTagExpirationTimestamp(tags: string[]) {
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
 
-  const revalidatedTags = await getRevalidatedTags(tags, cacheStore)
-  if (revalidatedTags.length === 0) {
+  if (!(await hasAnyTagBeenRevalidated(cacheStore))) {
     return 0
   }
 
-  const manifestsOrNulls = await Promise.all(
-    revalidatedTags.map((tag) => getTagManifest(tag, cacheStore)),
-  )
+  const manifestsOrNulls = await Promise.all(tags.map((tag) => getTagManifest(tag, cacheStore)))
 
   const expirationTimestamps = manifestsOrNulls
     .filter((manifest) => manifest !== null)
@@ -129,8 +122,7 @@ export async function isAnyTagStaleOrExpired(
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
 
-  const revalidatedTags = await getRevalidatedTags(tags, cacheStore)
-  if (revalidatedTags.length === 0) {
+  if (!(await hasAnyTagBeenRevalidated(cacheStore))) {
     return { stale: false, expired: false }
   }
 
@@ -145,7 +137,7 @@ export async function isAnyTagStaleOrExpired(
   return new Promise<TagStaleOrExpiredStatus>((resolve, reject) => {
     const tagManifestPromises: Promise<TagStaleOrExpiredStatus>[] = []
 
-    for (const tag of revalidatedTags) {
+    for (const tag of tags) {
       const tagManifestPromise = getTagManifest(tag, cacheStore)
 
       tagManifestPromises.push(
@@ -265,9 +257,9 @@ async function doRevalidateTagAndPurgeEdgeCache(
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
 
-  // until both the index entry and the manifest exist a reader sees the pre-revalidation state, so these can race
+  // a reader that sees only one of the marker and the manifest still sees the pre-revalidation state, so these can race
   await Promise.all([
-    addTagsToIndex(tags, cacheStore),
+    writeTagRevalidationMarker(cacheStore),
     ...tags.map(async (tag) => {
       try {
         await cacheStore.set(tag, tagManifest, 'tagManifest.set')

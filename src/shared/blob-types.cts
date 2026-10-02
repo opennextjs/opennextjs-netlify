@@ -11,9 +11,9 @@ export type TagManifest = {
   expireAt: number
 }
 
-// tags that have a manifest in this deploy, kept in one blob so a request reads it once
-export type TagManifestIndex = {
-  tags: Record<string, 1>
+// written once per deploy by the first tag revalidation
+export type TagRevalidationMarker = {
+  revalidatedAt: number
 }
 
 export type HtmlBlob = {
@@ -21,7 +21,7 @@ export type HtmlBlob = {
   isFullyStaticPage: boolean
 }
 
-export type BlobType = NetlifyCacheHandlerValue | TagManifest | TagManifestIndex | HtmlBlob
+export type BlobType = NetlifyCacheHandlerValue | TagManifest | TagRevalidationMarker | HtmlBlob
 
 export const isTagManifest = (value: BlobType): value is TagManifest => {
   return (
@@ -35,13 +35,12 @@ export const isTagManifest = (value: BlobType): value is TagManifest => {
   )
 }
 
-export const isTagManifestIndex = (value: BlobType): value is TagManifestIndex => {
+export const isTagRevalidationMarker = (value: BlobType): value is TagRevalidationMarker => {
   return (
     typeof value === 'object' &&
     value !== null &&
-    'tags' in value &&
-    typeof value.tags === 'object' &&
-    value.tags !== null &&
+    'revalidatedAt' in value &&
+    typeof value.revalidatedAt === 'number' &&
     Object.keys(value).length === 1
   )
 }
