@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.16.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.1...v5.16.2) (2026-10-02)
+
+
+### Performance Improvements
+
+* index revalidated tags so requests stop reading one manifest per tag ([#3584](https://github.com/opennextjs/opennextjs-netlify/issues/3584)) ([995e55b](https://github.com/opennextjs/opennextjs-netlify/commit/995e55b9e14586e65c476c83fe3f4846870f3279))
+
 ## [5.16.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.0...v5.16.1) (2026-09-30)
 
 
