@@ -14,6 +14,7 @@ import {
   trackBlobServerGetsForKey,
 } from '../utils/helpers.js'
 import { TAG_REVALIDATION_MARKER_KEY } from '../../src/run/handlers/tags-handler.cjs'
+import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 // Disable the verbose logging of the lambda-local runtime
 getLogger().level = 'alert'
@@ -106,10 +107,14 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
 
   expect(dateCacheInitial).not.toBe(dateCacheRevalidated)
 
-  expect(
-    markerGets(),
-    'pages router entries never check tags, so the tag revalidation marker should never be read',
-  ).toBe(0)
+  // Next.js <14.0.2 passes no kind hint to the cache handler, so we have to prefetch the marker
+  // because we don't know what we will get back
+  if (nextVersionSatisfies('>=14.0.2')) {
+    expect(
+      markerGets(),
+      'pages router entries never check tags, so the tag revalidation marker should never be read',
+    ).toBe(0)
+  }
 })
 
 test.skipIf(platform === 'win32')<FixtureTestContext>(
