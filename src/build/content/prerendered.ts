@@ -104,6 +104,46 @@ const getSeedBlobKey = ({
   return getRouteCacheKey(route, { kind, sourceRoute: getOwnerSourceRoute(sourceRoute, kind) })
 }
 
+/**
+ * Map of App Router routes to their module page without the segment suffix, e.g. `/[locale]` ->
+ * `/(group)/[locale]`. Next scopes App Router cache keys by the module page, which keeps route groups
+ * and parallel slots that the prerender manifest's `srcRoute` drops. When several module pages share
+ * a route (parallel slots), we pick the one Next's `selectAppPageEntry` picks.
+ */
+const getAppModuleSourceRoutes = async (ctx: PluginContext): Promise<Map<string, string>> => {
+  const appModuleSourceRoutes = new Map<string, string>()
+  const appPathRoutesManifestPath = join(ctx.publishDir, 'app-path-routes-manifest.json')
+  if (!existsSync(appPathRoutesManifestPath)) {
+    return appModuleSourceRoutes
+  }
+  const appPathRoutes: Record<string, string> = JSON.parse(
+    await readFile(appPathRoutesManifestPath, 'utf-8'),
+  )
+  for (const [page, route] of Object.entries(appPathRoutes)) {
+    if (!/\/(page|route)$/.test(page)) {
+      continue
+    }
+    const current = appModuleSourceRoutes.get(route)
+    if (current === undefined || compareAppPaths(current, page) < 0) {
+      appModuleSourceRoutes.set(route, page)
+    }
+  }
+  for (const [route, page] of appModuleSourceRoutes) {
+    appModuleSourceRoutes.set(route, page.replace(/\/(page|route)$/, '') || '/')
+  }
+  return appModuleSourceRoutes
+}
+
+// Port of Next's `compareAppPaths` (`shared/lib/router/utils/app-paths`): prefers paths without
+// parallel slots, then the greatest by `localeCompare`.
+const compareAppPaths = (left: string, right: string): number => {
+  const leftHasSlot = left.includes('/@')
+  const rightHasSlot = right.includes('/@')
+  if (leftHasSlot && !rightHasSlot) return -1
+  if (!leftHasSlot && rightHasSlot) return 1
+  return left.localeCompare(right)
+}
+
 function prerenderManifestRouteToRevalidateAndCacheControlProperties(
   prerenderManifestRoute: PrerenderManifestRoute | undefined,
 ) {
@@ -295,6 +335,10 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
       // locale-stripped source route, so we strip the locale when deriving `sourceRoute`.
       const locales = ctx.buildConfig.i18n?.locales ?? []
 
+      const appModuleSourceRoutes = useRouteCacheKey
+        ? await getAppModuleSourceRoutes(ctx)
+        : new Map<string, string>()
+
       let appRouterNotFoundDefinedInPrerenderManifest = false
 
       await Promise.all([
@@ -358,7 +402,10 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
               const blobKey = getSeedBlobKey({
                 route,
                 kind: cacheKind,
-                sourceRoute: prerenderManifestRoute.srcRoute ?? stripLocalePrefix(route, locales),
+                sourceRoute:
+                  appModuleSourceRoutes.get(prerenderManifestRoute.srcRoute ?? route) ??
+                  prerenderManifestRoute.srcRoute ??
+                  stripLocalePrefix(route, locales),
                 useRouteCacheKey,
               })
 
@@ -401,7 +448,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
             const blobKey = getSeedBlobKey({
               route,
               kind: 'APP_PAGE',
-              sourceRoute: stripLocalePrefix(route, locales),
+              sourceRoute: appModuleSourceRoutes.get(route) ?? stripLocalePrefix(route, locales),
               useRouteCacheKey,
             })
 
