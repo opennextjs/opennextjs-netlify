@@ -120,6 +120,7 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
       '/config-redirect/dest',
       '/config-rewrite',
       '/config-rewrite/dest',
+      '/grouped/prerendered',
       '/image/local',
       '/image/migration-from-v4-runtime',
       '/image/remote-domain',
@@ -128,6 +129,7 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
       '/index',
       '/other',
       '/route-resolves-to-not-found',
+      '/slotted/prerendered',
       '404.html',
       '500.html',
       'fully-static.html',
@@ -533,6 +535,31 @@ test.skipIf(nextVersionSatisfies('<15.0.0'))<FixtureTestContext>(
     expect(response.headers['location']).toBe('/app-redirect/dest')
   },
 )
+
+test<FixtureTestContext>(`app router page in a route group with dynamicParams = false serves prerendered page`, async (ctx) => {
+  await createFixture('simple', ctx)
+  await runPlugin(ctx)
+
+  const prerendered = await invokeFunction(ctx, { url: `/grouped/prerendered` })
+  expect(prerendered.statusCode).toBe(200)
+  expect(load(prerendered.body)('h1').text()).toBe('Grouped prerendered')
+
+  const notPrerendered = await invokeFunction(ctx, { url: `/grouped/not-prerendered` })
+  expect(notPrerendered.statusCode).toBe(404)
+})
+
+test<FixtureTestContext>(`app router page in a route group with a parallel slot and dynamicParams = false serves prerendered page`, async (ctx) => {
+  await createFixture('simple', ctx)
+  await runPlugin(ctx)
+
+  const prerendered = await invokeFunction(ctx, { url: `/slotted/prerendered` })
+  expect(prerendered.statusCode).toBe(200)
+  expect(load(prerendered.body)('h1').text()).toBe('Slotted prerendered')
+  expect(load(prerendered.body)('p').text()).toBe('Extra slot')
+
+  const notPrerendered = await invokeFunction(ctx, { url: `/slotted/not-prerendered` })
+  expect(notPrerendered.statusCode).toBe(404)
+})
 
 test<FixtureTestContext>(`app router page that uses next/navigation#redirect works when page is NOT prerendered`, async (ctx) => {
   await createFixture('simple', ctx)
