@@ -74,7 +74,7 @@ jobs:
             } else if (versionsToTest === 'latest-and-canary') {
               core.setOutput('matrix', '["latest", "canary"]');
             } else {
-              core.setOutput('matrix', '["latest", "16.3.7"]');
+              core.setOutput('matrix', '["latest"]');
             }
 
             if ('${{ github.event_name }}' === 'workflow_dispatch' && "${{ github.event.inputs.runOnWindows }}" == "true") {
