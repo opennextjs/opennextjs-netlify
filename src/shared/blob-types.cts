@@ -21,7 +21,58 @@ export type HtmlBlob = {
   isFullyStaticPage: boolean
 }
 
-export type BlobType = NetlifyCacheHandlerValue | TagManifest | TagRevalidationMarker | HtmlBlob
+/**
+ * A `'use cache: remote'` entry: the `CacheEntry` Next hands the cache handler, with its value
+ * stream collected
+ */
+export type UseCacheBlob = {
+  value: string // base64
+  tags: string[]
+  stale: number
+  timestamp: number
+  expire: number
+  revalidate: number
+}
+
+/**
+ * All variants of one prerender group (adapter output `groupId`: HTML, `.rsc`, segments,
+ * `_next/data`), keyed by output pathname, regenerated and stored together.
+ */
+export type PrerenderGroupBlob = {
+  lastModified: number
+  revalidate: number | false
+  expire: number | undefined
+  tags: string[]
+  variants: Record<string, { status: number; headers: Record<string, string>; body: string }>
+  // PPR: the shell's postponed state, to resume the rest of the page with
+  postponed?: string
+}
+
+export const getPrerenderGroupBlobKey = (entryPathname: string) =>
+  `prerender-group:${entryPathname}`
+
+// the shell served for a path of the group's route not generated yet (`fallback: true`)
+export const getPrerenderFallbackBlobKey = (entryPathname: string) =>
+  `prerender-fallback:${entryPathname}`
+
+// Pages Router responses carry no `x-next-cache-tags`: tag them by path without the basePath, as
+// `revalidatePath` does
+export const getPrerenderGroupTags = (
+  entryPathname: string,
+  cacheTagsHeader: string | undefined,
+  basePath: string,
+) =>
+  cacheTagsHeader?.split(/,|%2c/gi) ?? [
+    `_N_T_${(basePath && entryPathname.startsWith(basePath) ? entryPathname.slice(basePath.length) : entryPathname) || '/'}`,
+  ]
+
+export type BlobType =
+  | NetlifyCacheHandlerValue
+  | TagManifest
+  | TagRevalidationMarker
+  | HtmlBlob
+  | UseCacheBlob
+  | PrerenderGroupBlob
 
 export const isTagManifest = (value: BlobType): value is TagManifest => {
   return (
@@ -54,5 +105,16 @@ export const isHtmlBlob = (value: BlobType): value is HtmlBlob => {
     typeof value.html === 'string' &&
     typeof value.isFullyStaticPage === 'boolean' &&
     Object.keys(value).length === 2
+  )
+}
+
+export const isUseCacheBlob = (value: BlobType): value is UseCacheBlob => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'value' in value &&
+    typeof value.value === 'string' &&
+    'timestamp' in value &&
+    typeof value.timestamp === 'number'
   )
 }

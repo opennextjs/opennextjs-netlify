@@ -8,9 +8,10 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin, runPluginStep } from '../utils/fixture.js'
 import {
-  decodeBlobKeyToRoute,
+  decodePageBlobKey,
   generateRandomObjectID,
   getBlobEntries,
+  isAdapterMode,
   startMockBlobStore,
 } from '../utils/helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
@@ -33,43 +34,57 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
   await createFixture('page-router', ctx)
   await runPlugin(ctx)
 
-  // `decodeBlobKeyToRoute` maps a (possibly route-scoped) key back to its route. The long product
-  // route's on-disk key is truncated and ends in a hash, so only its prefix survives — we match it
-  // separately and assert the rest exactly.
-  const routes = (await getBlobEntries(ctx)).map(({ key }) => decodeBlobKeyToRoute(key))
+  // `decodePageBlobKey` maps a (possibly route-scoped or prerender group) key back to its route. The
+  // long product route's on-disk key is truncated and ends in a hash, so only its prefix survives —
+  // we match it separately and assert the rest exactly.
+  const routes = (await getBlobEntries(ctx)).map(({ key }) => decodePageBlobKey(key))
   const longProductRoute = routes.find((route) => route.startsWith('/products/an-incr'))
   expect(longProductRoute).toBeDefined()
-  expect(routes.filter((route) => route !== longProductRoute).sort()).toEqual([
-    '/fallback-true/[slug]',
-    '/fallback-true/prerendered',
-    '/products/prerendered',
-    '/products/事前レンダリング,test',
-    '/static/revalidate-automatic',
-    '/static/revalidate-manual',
-    '/static/revalidate-slow',
-    '/static/revalidate-slow-data',
-    '404.html',
-    '500.html',
-    'fallback-true/[slug].html',
-    'static/fully-static.html',
-  ])
+  expect(routes.filter((route) => route !== longProductRoute).sort()).toEqual(
+    [
+      '/fallback-true/[slug]',
+      '/fallback-true/prerendered',
+      '/products/prerendered',
+      '/products/事前レンダリング,test',
+      // the adapter output has a prerender (404.html) for the `notFound: true` page
+      isAdapterMode ? '/static/not-found' : undefined,
+      '/static/revalidate-automatic',
+      '/static/revalidate-manual',
+      '/static/revalidate-slow',
+      '/static/revalidate-slow-data',
+      '404.html',
+      '500.html',
+      'fallback-true/[slug].html',
+      'static/fully-static.html',
+    ].filter(Boolean),
+  )
 
   // test that it should request the 404.html file
   const call1 = await invokeFunction(ctx, { url: 'static/revalidate-not-existing' })
   expect(call1.statusCode).toBe(404)
   expect(load(call1.body)('p').text()).toBe('Custom 404 page')
 
-  // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
-  // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that it
-  // would not
-  const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
-  expect(call1.headers, 'a cache hit on the first invocation of a prerendered page').toEqual(
-    expect.objectContaining({
-      'netlify-cdn-cache-control':
-        (shouldHavePrivateDirective ? 'private, ' : '') +
-        'no-cache, no-store, max-age=0, must-revalidate, durable',
-    }),
-  )
+  if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+    // The 404 page is build output that only a deploy can change, so it is served with the static
+    // file's cache headers rather than re-rendered per request (see `cache 404s`).
+    expect(call1.headers, 'a cache hit on the first invocation of a prerendered page').toEqual(
+      expect.objectContaining({
+        'netlify-cdn-cache-control': 'max-age=31536000, durable',
+      }),
+    )
+  } else {
+    // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
+    // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that it
+    // would not
+    const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
+    expect(call1.headers, 'a cache hit on the first invocation of a prerendered page').toEqual(
+      expect.objectContaining({
+        'netlify-cdn-cache-control':
+          (shouldHavePrivateDirective ? 'private, ' : '') +
+          'no-cache, no-store, max-age=0, must-revalidate, durable',
+      }),
+    )
+  }
 })
 
 test<FixtureTestContext>('linked static resources are placed in correct place in publish directory (no basePath)', async (ctx) => {

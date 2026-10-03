@@ -10,6 +10,12 @@ import type { RouteMetadata } from 'next-with-cache-handler-v2/dist/export/route
 import pLimit from 'p-limit'
 import { satisfies } from 'semver'
 
+import {
+  getPrerenderFallbackBlobKey,
+  getPrerenderGroupBlobKey,
+  getPrerenderGroupTags,
+  type PrerenderGroupBlob,
+} from '../../shared/blob-types.cjs'
 import { encodeBlobKey } from '../../shared/blobkey.js'
 import type {
   CachedFetchValueForMultipleVersions,
@@ -25,7 +31,7 @@ import {
   ROUTE_CACHE_KEY_NEXT_VERSION_RANGE,
   type RouteCacheKind,
 } from '../../shared/route-cache-key.cjs'
-import type { PluginContext } from '../plugin-context.js'
+import type { PluginContext, PluginContextAdapter } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
@@ -300,10 +306,15 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
       await Promise.all([
         ...Object.entries(manifest.routes).map(
           ([route, prerenderManifestRoute]): Promise<void> =>
-            limitConcurrentPrerenderContentHandling(async () => {
-              const lastModified = prerenderManifestRoute.initialRevalidateSeconds
-                ? Date.now() - prerenderManifestRoute.initialRevalidateSeconds * 1000
-                : Date.now()
+            limitConcurrentPrerenderContentHandling(async function writeRouteCacheEntry() {
+              // Build output is fresh as of the build, the same as `next start`'s file-system
+              // cache and as Vercel (`x-vercel-cache: PRERENDER` then `HIT` for the full
+              // `revalidate`, measured 2026-09-20). This used to be backdated by `revalidate` so
+              // every ISR route regenerated on its first request (#235, guarding against stale
+              // build-time fetch data); that guard is now the `fetch-cache` exclusion from the
+              // build cache, and the backdating cost a regeneration per route per deploy and threw
+              // away route-handler prerenders outright.
+              const lastModified = Date.now()
               // `key` is the on-disk file-path key for reading the build output (unchanged); the blob
               // is written under `blobKey`, which is route-scoped on patched Next (see getSeedBlobKey).
               const key = routeToFilePath(route)
@@ -366,7 +377,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
             }),
         ),
         ...ctx.getFallbacks(manifest).map((route) =>
-          limitConcurrentPrerenderContentHandling(async () => {
+          limitConcurrentPrerenderContentHandling(async function writeFallbackCacheEntry() {
             const key = routeToFilePath(route)
             const value = await buildPagesCacheValue(
               join(ctx.publishDir, 'server/pages', key),
@@ -387,7 +398,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
           }),
         ),
         ...ctx.getShells(manifest).map((route) =>
-          limitConcurrentPrerenderContentHandling(async () => {
+          limitConcurrentPrerenderContentHandling(async function writeShellCacheEntry() {
             const key = routeToFilePath(route)
             const value = await buildAppCacheValue(
               join(ctx.publishDir, 'server/app', key),
@@ -457,4 +468,114 @@ export const copyFetchContent = async (ctx: PluginContext): Promise<void> => {
   } catch (error) {
     ctx.failBuild('Failed assembling fetch content for upload', error)
   }
+}
+
+type PrerenderOutput = PluginContextAdapter['adapterOutput']['outputs']['prerenders'][number]
+
+/**
+ * The group's page (or route handler) output, not one of its `.rsc`, segment or `_next/data`
+ * variants. Next classifies it (`routeType`), except for the per-locale copies of an i18n build.
+ */
+export const isGroupEntry = (output: PrerenderOutput, ctx: PluginContextAdapter) => {
+  if (output.routeType !== undefined) {
+    return true
+  }
+  const { rsc } = ctx.adapterOutput.routing
+  return (
+    !output.pathname.includes('/_next/data/') &&
+    !(
+      rsc &&
+      (output.pathname.endsWith(rsc.suffix) || output.pathname.endsWith(rsc.prefetchSegmentSuffix))
+    )
+  )
+}
+
+/**
+ * A route's fallback served while a path is generated: the Pages Router `fallback: true` shell, or
+ * a PPR partial fallback shell (resumed per request and upgraded to the path in the background).
+ */
+export const isFallbackShell = (output: PrerenderOutput, ctx: PluginContextAdapter) =>
+  Boolean(output.fallback?.filePath) &&
+  (output.fallback?.postponedState
+    ? Boolean(output.config.partialFallback)
+    : output.routeType === undefined
+      ? isGroupEntry(output, ctx) && Boolean(output.config.allowQuery?.length)
+      : output.routeType === 'fallback' &&
+        output.response === 'initial' &&
+        output.compute === 'static')
+
+/**
+ * Seed one blob per prerender group from the adapter output fallbacks (groups with params, like
+ * `/posts/[id]`, have none and are filled at runtime).
+ */
+export const copyPrerenderGroups = async (ctx: PluginContextAdapter): Promise<void> => {
+  return tracer.withActiveSpan('copyPrerenderGroups', async () => {
+    await mkdir(ctx.blobDir, { recursive: true })
+    const { prerenders } = ctx.adapterOutput.outputs
+    const lastModified = Date.now()
+
+    await Promise.all(
+      prerenders
+        .filter((entry) => isGroupEntry(entry, ctx) && entry.fallback?.filePath)
+        .filter((entry) => !entry.config.allowQuery?.length || isFallbackShell(entry, ctx))
+        .map(async (entry) => {
+          const isShell = Boolean(entry.config.allowQuery?.length)
+          const revalidate = entry.fallback?.initialRevalidate ?? false
+          const expire = entry.fallback?.initialExpiration
+          const cacheControl =
+            revalidate === false
+              ? 's-maxage=31536000'
+              : `s-maxage=${revalidate}, stale-while-revalidate=${(expire ?? 31536000) - revalidate}`
+
+          const group: PrerenderGroupBlob = {
+            lastModified,
+            revalidate,
+            expire,
+            tags: [],
+            variants: {},
+          }
+          for (const member of prerenders) {
+            if (
+              member.groupId !== entry.groupId ||
+              !member.fallback?.filePath ||
+              // a PPR partial fallback also serves its segment prefetches
+              (isShell && member !== entry && !entry.fallback?.postponedState)
+            ) {
+              continue
+            }
+            const headers: Record<string, string> = { 'cache-control': cacheControl }
+            for (const [key, value] of Object.entries(member.fallback.initialHeaders ?? {})) {
+              headers[key] = Array.isArray(value) ? value.join(', ') : value
+            }
+            const body = await readFile(member.fallback.filePath)
+            if (headers['content-type']?.startsWith('text/html')) {
+              // Netlify Forms are not supported and require a workaround
+              verifyNetlifyForms(ctx, body.toString('utf-8'))
+            }
+            group.variants[member.pathname] = {
+              status: member.fallback.initialStatus ?? 200,
+              headers,
+              body: body.toString('base64'),
+            }
+          }
+          group.postponed = entry.fallback?.postponedState
+          group.tags = getPrerenderGroupTags(
+            entry.pathname,
+            group.variants[entry.pathname]?.headers['x-next-cache-tags'],
+            ctx.adapterOutput.config.basePath ?? '',
+          )
+
+          await writeFile(
+            join(
+              ctx.blobDir,
+              await encodeBlobKey(
+                (isShell ? getPrerenderFallbackBlobKey : getPrerenderGroupBlobKey)(entry.pathname),
+              ),
+            ),
+            JSON.stringify(group),
+            'utf-8',
+          )
+        }),
+    )
+  })
 }

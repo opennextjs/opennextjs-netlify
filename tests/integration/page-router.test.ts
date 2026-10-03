@@ -10,6 +10,9 @@ import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
 import {
   encodeBlobKeyForRoute,
   generateRandomObjectID,
+  getPageHtml,
+  isAdapterMode,
+  pageBlobKey,
   startMockBlobStore,
 } from '../utils/helpers.js'
 
@@ -72,12 +75,16 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
   expect(staticPageInitial.statusCode).toBe(200)
   expect(staticPageInitial.headers?.['cache-status']).toMatch(/"Next.js"; hit/)
   const blobDataInitial = await ctx.blobStore.get(
-    encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
+    isAdapterMode
+      ? pageBlobKey('/static/revalidate-manual')
+      : encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
     {
       type: 'json',
     },
   )
-  const blobDateInitial = load(blobDataInitial.value.html).html('[data-testid="date-now"]')
+  const blobDateInitial = load(getPageHtml(blobDataInitial, '/static/revalidate-manual')).html(
+    '[data-testid="date-now"]',
+  )
 
   const revalidate = await invokeFunction(ctx, { url: '/api/revalidate' })
   expect(revalidate.statusCode).toBe(200)
@@ -85,13 +92,17 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
   await new Promise<void>((resolve) => setTimeout(resolve, 100))
 
   const blobDataRevalidated = await ctx.blobStore.get(
-    encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
+    isAdapterMode
+      ? pageBlobKey('/static/revalidate-manual')
+      : encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
     {
       type: 'json',
     },
   )
 
-  const blobDateRevalidated = load(blobDataRevalidated.value.html).html('[data-testid="date-now"]')
+  const blobDateRevalidated = load(
+    getPageHtml(blobDataRevalidated, '/static/revalidate-manual'),
+  ).html('[data-testid="date-now"]')
 
   // TODO: Blob data is updated on revalidate but page still producing previous data
   expect(blobDateInitial).not.toBe(blobDateRevalidated)

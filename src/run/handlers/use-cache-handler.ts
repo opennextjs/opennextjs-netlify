@@ -9,6 +9,9 @@ import type {
 } from 'next-with-cache-handler-v2/dist/server/lib/cache-handlers/types.js'
 import type { CacheHandler as CacheHandlerWithUpdateTag } from 'next-with-cache-handler-v3/dist/server/lib/cache-handlers/types.js'
 
+import { type UseCacheBlob } from '../../shared/blob-types.cjs'
+import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from '../storage/storage.cjs'
+
 import { getLogger } from './request-context.cjs'
 import {
   getMostRecentTagExpirationTimestamp,
@@ -57,6 +60,7 @@ const extendedGlobalThis = globalThis as typeof globalThis & {
   [cacheHandlersSymbol]?: {
     RemoteCache?: MultiVersionCacheHandler
     DefaultCache?: MultiVersionCacheHandler
+    FetchCache?: unknown
   }
 }
 
@@ -302,8 +306,191 @@ export const NetlifyDefaultUseCacheHandler = {
   },
 } satisfies MultiVersionCacheHandler
 
+const getUseCacheBlobKey = (cacheKey: string) => `use-cache:${cacheKey}`
+
+/**
+ * `'use cache: remote'`: entries are persisted in blobs so every serverless instance shares them.
+ * Tags are handled the same way as for the default handler. Unlike in-memory entries, persisted
+ * ones are returned past `revalidate` too, and Next's `use cache` wrapper decides: it serves them
+ * stale and regenerates in the background, or regenerates in the foreground when past `expire`
+ * or when the result goes into a server cache (a prerender).
+ */
+export const NetlifyRemoteUseCacheHandler = {
+  ...NetlifyDefaultUseCacheHandler,
+  get(cacheKey: string): ReturnType<MultiVersionCacheHandler['get']> {
+    return withActiveSpan(
+      getTracer(),
+      'RemoteUseCacheHandler.get',
+      async (span): ReturnType<MultiVersionCacheHandler['get']> => {
+        getLogger().withFields({ cacheKey }).debug(`[NetlifyRemoteUseCacheHandler] get`)
+        span?.setAttributes({
+          cacheKey,
+        })
+
+        const pendingPromise = getPendingSets().get(cacheKey)
+        if (pendingPromise) {
+          await pendingPromise
+        }
+
+        let blob: UseCacheBlob | null
+        let tagState: Awaited<ReturnType<typeof isAnyTagStaleOrExpired>>
+        try {
+          const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+          blob = await store.get<UseCacheBlob>(
+            getUseCacheBlobKey(cacheKey),
+            'RemoteUseCacheHandler.get.blob',
+          )
+          tagState = blob
+            ? await isAnyTagStaleOrExpired(blob.tags, blob.timestamp)
+            : { stale: false, expired: false }
+        } catch (error) {
+          // a storage failure shouldn't fail the render: Next regenerates the entry instead
+          getLogger().withError(error).error('[NetlifyRemoteUseCacheHandler.get] error')
+          span?.setAttributes({
+            cacheStatus: 'error',
+          })
+          return undefined
+        }
+
+        if (!blob) {
+          getLogger()
+            .withFields({ cacheKey, status: 'MISS' })
+            .debug(`[NetlifyRemoteUseCacheHandler] get result`)
+          span?.setAttributes({
+            cacheStatus: 'miss',
+          })
+          return undefined
+        }
+
+        const { stale, expired } = tagState
+
+        if (expired) {
+          getLogger()
+            .withFields({ cacheKey, status: 'EXPIRED BY TAG' })
+            .debug(`[NetlifyRemoteUseCacheHandler] get result`)
+          span?.setAttributes({
+            cacheStatus: 'expired tag, discarded',
+          })
+          return undefined
+        }
+
+        getLogger()
+          .withFields({ cacheKey, status: stale ? 'STALE' : 'HIT' })
+          .debug(`[NetlifyRemoteUseCacheHandler] get result`)
+        span?.setAttributes({
+          cacheStatus: stale ? 'stale' : 'hit',
+        })
+
+        const value = Buffer.from(blob.value, 'base64')
+        return {
+          ...blob,
+          revalidate: stale ? -1 : blob.revalidate,
+          value: new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(value)
+              controller.close()
+            },
+          }),
+        }
+      },
+    )
+  },
+  set(
+    cacheKey: string,
+    pendingEntry: Promise<CacheEntry>,
+  ): ReturnType<MultiVersionCacheHandler['set']> {
+    return withActiveSpan(
+      getTracer(),
+      'RemoteUseCacheHandler.set',
+      async (span): ReturnType<MultiVersionCacheHandler['set']> => {
+        getLogger().withFields({ cacheKey }).debug(`[NetlifyRemoteUseCacheHandler]: set`)
+        span?.setAttributes({
+          cacheKey,
+        })
+
+        const pendingSets = getPendingSets()
+
+        // a concurrent render in this instance is already writing the same entry
+        const concurrentSet = pendingSets.get(cacheKey)
+        if (concurrentSet) {
+          span?.setAttributes({
+            deduped: true,
+          })
+          await concurrentSet
+          return
+        }
+
+        let resolvePending: () => void = tmpResolvePendingBeforeCreatingAPromise
+        const pendingPromise = new Promise<void>((resolve) => {
+          resolvePending = resolve
+        })
+
+        pendingSets.set(cacheKey, pendingPromise)
+
+        try {
+          const entry = await pendingEntry
+
+          // expired as soon as it's written, so not worth storing
+          if (entry.expire === 0) {
+            span?.setAttributes({
+              skipped: 'zero expire',
+            })
+            return
+          }
+
+          const chunks: Uint8Array[] = []
+          const reader = entry.value.getReader()
+          for (let chunk; !(chunk = await reader.read()).done; ) {
+            chunks.push(chunk.value)
+          }
+
+          span?.setAttributes({
+            tags: entry.tags,
+            timestamp: entry.timestamp,
+            revalidate: entry.revalidate,
+            expire: entry.expire,
+          })
+
+          const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+          await store.set(
+            getUseCacheBlobKey(cacheKey),
+            {
+              value: Buffer.concat(chunks).toString('base64'),
+              tags: entry.tags,
+              stale: entry.stale,
+              timestamp: entry.timestamp,
+              expire: entry.expire,
+              revalidate: entry.revalidate,
+            } satisfies UseCacheBlob,
+            'RemoteUseCacheHandler.set.blob',
+          )
+        } catch (error) {
+          getLogger().withError(error).error('[NetlifyRemoteUseCacheHandler.set] error')
+        } finally {
+          resolvePending()
+          pendingSets.delete(cacheKey)
+        }
+      },
+    )
+  },
+} satisfies MultiVersionCacheHandler
+
+// Handlers are registered through the global Next.js reads them from, the same way Vercel's runtime
+// injects its handlers, rather than as `cacheHandler`/`cacheHandlers` paths in the config: those
+// are traced into the function at build, relative to the site's `outputFileTracingRoot`, and this
+// plugin is installed outside the site, so its files can't be traced from there.
 export function configureUseCacheHandlers() {
   extendedGlobalThis[cacheHandlersSymbol] = {
+    ...extendedGlobalThis[cacheHandlersSymbol],
     DefaultCache: NetlifyDefaultUseCacheHandler,
+    RemoteCache: NetlifyRemoteUseCacheHandler,
+  }
+}
+
+// The incremental cache handler, used when the app doesn't configure its own `cacheHandler`
+export function configureFetchCacheHandler(FetchCache: unknown) {
+  extendedGlobalThis[cacheHandlersSymbol] = {
+    ...extendedGlobalThis[cacheHandlersSymbol],
+    FetchCache,
   }
 }

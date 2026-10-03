@@ -326,7 +326,17 @@ for (const {
 
         const origin = await LocalServer.run(async (req, res) => {
           expect(req.url).toBe('/test/next')
-          expect(req.headers['x-next-request-meta']).toBeUndefined()
+          const meta = req.headers['x-next-request-meta'] as string | undefined
+          if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+            // the resolved route travels in the same header, so adapter middleware sets it on every
+            // request - what the client sent still has to be gone
+            expect(JSON.parse(meta ?? '{}')).toMatchObject({
+              requestID: expect.not.stringMatching('forged'),
+              publicUrl: expect.not.stringMatching('example.com'),
+            })
+          } else {
+            expect(meta).toBeUndefined()
+          }
 
           res.write('Hello from origin!')
           res.end()
@@ -475,15 +485,20 @@ for (const {
           functions: [edgeFunctionNameRoot],
           origin,
           redirect: 'manual',
-          url: '/_next/data/dJvEyLV8MW7CBLFf0Ecbk/test/redirect-with-headers.json',
+          url: '/_next/data/build-id/test/redirect-with-headers.json',
+          headers: {
+            'x-nextjs-data': '1',
+          },
         })
 
         ctx.cleanup?.push(() => origin.stop())
 
+        const redirectLocation = response.headers.get('x-nextjs-redirect')
+
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(redirectLocation, 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(redirectLocation as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -500,15 +515,20 @@ for (const {
           functions: [edgeFunctionNameRoot],
           origin,
           redirect: 'manual',
-          url: '/_next/data/dJvEyLV8MW7CBLFf0Ecbk/test/redirect-with-headers.json',
+          url: '/_next/data/build-id/test/redirect-with-headers.json',
+          headers: {
+            'x-nextjs-data': '1',
+          },
         })
 
         ctx.cleanup?.push(() => origin.stop())
 
+        const redirectLocation = response.headers.get('x-nextjs-redirect')
+
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(redirectLocation, 'added a location header').toBeTypeOf('string')
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(redirectLocation as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -537,7 +557,13 @@ for (const {
           url: `/api/edge-headers`,
         })
         const res = await response.json()
-        expect(res.url).toBe('/api/edge-headers')
+        expect(res.url).toBe(
+          process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+            ? // trailing slash handling redirect is part of routing in adapter middleware
+              // so middleware response is different than standalone handling which offloads this to server handler
+              '/api/edge-headers/'
+            : '/api/edge-headers',
+        )
         expect(response.status).toBe(200)
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })
@@ -917,7 +943,11 @@ describe('public URL of a middleware rewrite in the server handler', () => {
   const publicUrl = 'https://example.netlify/test/public-prefix/echo?ref=xyz'
 
   // Route Handlers derive request.url from initURL since https://github.com/vercel/next.js/pull/80008
-  test.skipIf(!nextVersionSatisfies('>=15.4.0'))<FixtureTestContext>(
+  // Standalone only: in adapter mode the edge function always sends its routing result along with the
+  // public URL, the server handler never routes a request the edge function already rewrote.
+  test.skipIf(
+    !nextVersionSatisfies('>=15.4.0') || Boolean(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER),
+  )<FixtureTestContext>(
     'is used as request.url when vouched for by the request id',
     async (ctx) => {
       await createFixture('middleware', ctx)

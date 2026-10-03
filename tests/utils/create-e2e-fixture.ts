@@ -325,6 +325,7 @@ export async function deploySiteWithCLI(
   const siteDir = join(isolatedFixtureRoot, cwd)
   await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
+  console.log(output)
 
   const { siteName, deployID } =
     new RegExp(

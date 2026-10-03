@@ -32,10 +32,12 @@ import {
   runPlugin,
 } from '../utils/fixture.js'
 import {
-  decodeBlobKeyToRoute,
+  decodePageBlobKey,
   generateRandomObjectID,
   getBlobEntries,
+  pageBlobKey,
   startMockBlobStore,
+  isAdapterMode,
 } from '../utils/helpers.js'
 import {
   hasDefaultTurbopackBuilds,
@@ -108,10 +110,12 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
   await runPlugin(ctx)
   // check if the blob entries where successful set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key)).sort()).toEqual(
+  expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
     [
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
-      shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+      shouldHaveAppRouterNotFoundInPrerenderManifest() && !isAdapterMode
+        ? '/_not-found'
+        : undefined,
       '/api/cached-permanent',
       '/api/cached-revalidate',
       '/app-redirect/dest',
@@ -188,7 +192,9 @@ test<FixtureTestContext>('image requests do not use the Next.js on-disk image ca
   // `ImageOptimizerCache` constructor, which runs *before* the params are validated - and
   // it keeps this test independent of `sharp` being loadable for the current platform.
   const image = await invokeFunction(ctx, { url: '/_next/image?url=%2Fsquirrel.jpg' })
-  expect(image.statusCode).toBe(400)
+  // in adapter mode `/_next/image` is not an output, so the request never reaches Next's image
+  // optimizer and 404s instead — the assertion below still guards against the cache dir showing up
+  expect(image.statusCode).toBe(process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER ? 404 : 400)
 
   // The mkdir is fire-and-forget and not tracked as background work, so give it a
   // window to land rather than racing it.
@@ -282,7 +288,7 @@ test<FixtureTestContext>('404 responses for PHP pages should be cached indefinit
   await createFixture('simple', ctx)
   await runPlugin(ctx)
   const index = await invokeFunction(ctx, { url: '/admin.php' })
-  expect(index.headers?.['netlify-cdn-cache-control']).toContain('max-age=31536000, durable')
+  expect(index.headers?.['netlify-cdn-cache-control'] ?? '').toContain('max-age=31536000, durable')
 })
 
 test<FixtureTestContext>('handlers receive correct site domain', async (ctx) => {
@@ -370,7 +376,10 @@ test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=f
 
   const permanentlyCachedResponse = await invokeFunction(ctx, { url: '/api/cached-permanent' })
   expect(permanentlyCachedResponse.headers['netlify-cdn-cache-control']).toBe(
-    's-maxage=31536000, stale-while-revalidate=31536000, durable',
+    // adapter mode passes on Next's own cache-control, like for pages
+    process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+      ? 's-maxage=31536000, durable'
+      : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
   )
 })
 
@@ -411,18 +420,16 @@ test<FixtureTestContext>('cacheable route handler is cached on cdn (revalidate=1
   await createFixture('simple', ctx)
   await runPlugin(ctx)
 
+  // build output is fresh as of the build (see prerendered.ts), so the prerendered response is
+  // already cacheable with the route's revalidate
   const firstTimeCachedResponse = await invokeFunction(ctx, { url: '/api/cached-revalidate' })
-  // this will be "stale" response from build
-  expect(firstTimeCachedResponse.headers['netlify-cdn-cache-control']).toBe(
-    'public, max-age=0, must-revalidate, durable',
+  expect(firstTimeCachedResponse.headers['netlify-cdn-cache-control']).toMatch(
+    /(max-age|s-maxage)=15, stale-while-revalidate=\d+, durable/,
   )
-
-  // allow server to regenerate fresh response in background
-  await new Promise((res) => setTimeout(res, 1_000))
 
   const secondTimeCachedResponse = await invokeFunction(ctx, { url: '/api/cached-revalidate' })
   expect(secondTimeCachedResponse.headers['netlify-cdn-cache-control']).toMatch(
-    /(max-age|s-maxage)=15, stale-while-revalidate=31536000, durable/,
+    /(max-age|s-maxage)=15, stale-while-revalidate=\d+, durable/,
   )
 })
 
@@ -466,12 +473,14 @@ test.skipIf(
 
   // check if the blob entries were successfully set on the build plugin
   const blobEntries = await getBlobEntries(ctx)
-  expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key)).sort()).toEqual(
+  expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
     [
       shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
       isExperimentalPPRHardDeprecated() ? undefined : '/static-params/[id]',
       shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-      shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+      shouldHaveAppRouterNotFoundInPrerenderManifest() && !isAdapterMode
+        ? '/_not-found'
+        : undefined,
       '/dynamic-params/[id]',
       '/index',
       '/static-params/1',

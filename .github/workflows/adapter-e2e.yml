@@ -7,11 +7,11 @@ on:
     inputs:
       nextjsRepo:
         description: "Next.js repo (owner/name) — e.g. a fork carrying test changes"
-        default: "vercel/next.js"
+        default: "pieh/next.js"
         type: string
       nextjsRef:
         description: "Next.js repo ref (branch/tag/SHA)"
-        default: "canary"
+        default: "e2e-tests-adjustments"
         type: string
       # Uncheck to test a fixture or adapter change against published next
       # without paying for a Rust compile.
@@ -19,8 +19,25 @@ on:
         description: "Build Next.js + next-swc from source (default: install published next from npm)"
         default: false
         type: boolean
+      # For a JS-only next.js change: packs this checkout's next (already built
+      # for the harness) and pairs it with the published @next/swc of the same
+      # version, which has to exist on npm (a released canary base does).
+      packNextjs:
+        description: "Test this checkout's Next.js JS with published next-swc (no Rust compile)"
+        default: false
+        type: boolean
+      # Same switch run-tests.yml's matrix flips: NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true
+      # makes onPreBuild hand next.js the adapter (src/index.ts) instead of the
+      # standalone output path.
+      adapterMode:
+        description: "Run the adapter in adapter mode (NETLIFY_NEXT_EXPERIMENTAL_ADAPTER=true) instead of standalone"
+        default: true
+        type: boolean
   # schedule:
   #   - cron: '0 2 * * *'
+
+# The Actions list is otherwise identical for the two modes.
+run-name: test-e2e-deploy (${{ inputs.adapterMode && 'adapter-minimal-mode' || 'standalone' }}, ${{ inputs.nextjsRepo }}@${{ inputs.nextjsRef }})
 
 jobs:
   build:
@@ -33,6 +50,7 @@ jobs:
       # Whether to test next.js from this checkout instead of the published npm
       # release — obeys the dispatch input's checkbox.
       BUILD_NEXTJS: ${{ inputs.buildNextjs }}
+      PACK_NEXTJS: ${{ inputs.buildNextjs || inputs.packNextjs }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -47,7 +65,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
 
       - uses: denoland/setup-deno@v2
         with:
@@ -129,23 +147,38 @@ jobs:
       # redirecting the fixture's resolution to it (scripts/e2e-deploy.sh) is
       # what makes a from-source next-packed.tgz installable at all.
       - name: Pack Next.js
-        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        if: ${{ env.PACK_NEXTJS == 'true' }}
         working-directory: nextjs
         run: |
+          # The source package.json has no @next/swc-* optional dependencies, the release adds them
+          # (sharp is the only one here). Without the local native build, take the published ones.
+          if [ "$BUILD_NEXTJS" != true ]; then
+            VERSION="$(node -p "require('./packages/next/package.json').version")"
+            npm view "next@$VERSION" optionalDependencies --json > published-optional-deps.json
+            node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('packages/next/package.json', 'utf8'));
+            pkg.optionalDependencies = JSON.parse(fs.readFileSync('published-optional-deps.json', 'utf8'));
+            fs.writeFileSync('packages/next/package.json', JSON.stringify(pkg, null, 2));
+            "
+          fi
           TARBALL="$(cd packages/next && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
           mv "$TARBALL" next-packed.tgz
-          ENV_TARBALL="$(cd packages/next-env && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
-          mv "$ENV_TARBALL" next-env-packed.tgz
-          ls -la next-packed.tgz next-env-packed.tgz
+          # packNextjs alone needs a published version (for next-swc), so @next/env resolves from npm
+          if [ "$BUILD_NEXTJS" = true ]; then
+            ENV_TARBALL="$(cd packages/next-env && pnpm pack --pack-destination "$PWD/../.." | tail -1)"
+            mv "$ENV_TARBALL" next-env-packed.tgz
+          fi
+          ls -la next-packed.tgz next-env-packed.tgz 2>/dev/null || true
 
       # Fail loudly rather than letting the shards quietly test published next —
       # the whole failure mode this input exists to fix is a silent one.
       - name: Verify Next.js was built from source
-        if: ${{ env.BUILD_NEXTJS == 'true' }}
+        if: ${{ env.PACK_NEXTJS == 'true' }}
         working-directory: nextjs
         run: |
           ok=1
-          if ! ls packages/next-swc/native/*.node >/dev/null 2>&1; then
+          if [ "$BUILD_NEXTJS" = true ] && ! ls packages/next-swc/native/*.node >/dev/null 2>&1; then
             echo "::error::next-swc native binary missing; shards would use the published @next/swc instead of this checkout's Rust code"
             ok=0
           fi
@@ -153,12 +186,12 @@ jobs:
             echo "::error::next-packed.tgz missing; shards would use the published next instead of this checkout's JS"
             ok=0
           fi
-          if [ ! -f next-env-packed.tgz ]; then
+          if [ "$BUILD_NEXTJS" = true ] && [ ! -f next-env-packed.tgz ]; then
             echo "::error::next-env-packed.tgz missing; next's @next/env dependency would resolve from npm instead of this checkout"
             ok=0
           fi
           [ "$ok" -eq 1 ] || exit 1
-          ls -la packages/next-swc/native/
+          [ "$BUILD_NEXTJS" != true ] || ls -la packages/next-swc/native/
 
       - name: Install Playwright
         working-directory: nextjs
@@ -200,7 +233,9 @@ jobs:
             "nextjsRef": "${{ inputs.nextjsRef }}",
             "nextjsSha": "$NEXT_SHA",
             "nextjsVersion": "$NEXT_VERSION",
-            "nextjsFromSource": $BUILD_NEXTJS
+            "nextjsFromSource": $BUILD_NEXTJS,
+            "nextjsJsFromSource": $PACK_NEXTJS,
+            "mode": "${{ inputs.adapterMode && 'adapter-minimal-mode' || 'standalone' }}"
           }
           JSON
           cat adapter/adapter-e2e-metadata.json
@@ -263,7 +298,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
 
       - uses: denoland/setup-deno@v2
         with:
@@ -327,6 +362,27 @@ jobs:
             echo "@next/env: published (from npm)"
           fi
 
+      # `run-tests.js --timings --group N/16` bin-packs the shards from a
+      # `{ test file: seconds }` map it reads as test-timings.json in its cwd (nextjs).
+      # Without one it splits round-robin, which is what leaves shards finishing tens of
+      # minutes apart — the map totals ~7.4h, so a balanced split is ~28m a shard.
+      #
+      # The file is committed here rather than fetched: it is derived data that changes
+      # only when we regenerate it (from the ingest app's Timings tab, which takes the
+      # median per file over recent runs), and a committed copy keeps the test job free of
+      # a network dependency it would have to tolerate failing anyway.
+      #
+      # Tolerated as missing on purpose: a stale or deleted file should cost the run a
+      # worse split, not fail all 16 shards over an optimisation.
+      - name: Use committed test timings
+        run: |
+          if [ -f adapter/test-timings.json ]; then
+            cp adapter/test-timings.json nextjs/test-timings.json
+            echo "timings: $(node -p 'Object.keys(require("./nextjs/test-timings.json")).length') files"
+          else
+            echo "no adapter/test-timings.json — shards will be split round-robin"
+          fi
+
       - name: Run deploy tests
         working-directory: nextjs
         env:
@@ -334,6 +390,14 @@ jobs:
           ADAPTER_TARBALL: ${{ github.workspace }}/adapter/adapter-package.tgz
           IS_TURBOPACK_TEST: 1
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          # Reaches each fixture's build by inheritance alone: run-tests.js -> jest
+          # -> next-deploy.ts (execa, ...process.env) -> e2e-deploy.sh -> `netlify
+          # deploy` -> plugin child, where onPreBuild reads it. Empty rather than
+          # "false" in standalone mode: src/index.ts checks truthiness.
+          NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ inputs.adapterMode && 'true' || '' }}
+          # The harness's "adapter test variant": tests and gates pick adapter expectations over the
+          # legacy Vercel builder's. With a custom deploy script it has no other effect.
+          NEXT_ENABLE_ADAPTER: ${{ inputs.adapterMode && '1' || '' }}
           NETLIFY_SITE_ID: 1d5a5c76-d445-4ae5-b694-b0d3f2e2c395
           NEXT_E2E_TEST_TIMEOUT: 240000
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json

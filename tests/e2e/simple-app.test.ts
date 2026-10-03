@@ -229,21 +229,32 @@ test('requesting a non existing page route that needs to be fetched from the blo
 
   await expect(page.locator('h1')).toHaveText('404 Not Found')
 
-  // https://github.com/vercel/next.js/pull/66674 made changes to returned cache-control header,
-  // before that 404 page would have `private` directive, after that (14.2.4 and canary.24) it
-  // would not ... and then https://github.com/vercel/next.js/pull/69802 changed it back again
-  // (14.2.10 and canary.147)
-  const shouldHavePrivateDirective = nextVersionSatisfies(
-    '<14.2.4 || >=14.2.10 <15.0.0-canary.24 || >=15.0.0-canary.147',
-  )
+  if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+    // The 404 page is build output that only a deploy can change, so it is cached like the
+    // `notFound()` case below rather than re-rendered per request - same as Vercel serves for
+    // every not-found shape but a fully static `pages/404.js` (measured 2026-09-18).
+    expect(headers['debug-netlify-cdn-cache-control']).toMatch(
+      /(max-age|s-maxage)=31536000, durable/,
+    )
+    expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
+  } else {
+    // https://github.com/vercel/next.js/pull/66674 made changes to returned cache-control header,
+    // before that 404 page would have `private` directive, after that (14.2.4 and canary.24) it
+    // would not ... and then https://github.com/vercel/next.js/pull/69802 changed it back again
+    // (14.2.10 and canary.147)
+    const shouldHavePrivateDirective = nextVersionSatisfies(
+      '<14.2.4 || >=14.2.10 <15.0.0-canary.24 || >=15.0.0-canary.147',
+    )
 
-  expect(headers['debug-netlify-cdn-cache-control']).toBe(
-    (shouldHavePrivateDirective ? 'private, ' : '') +
-      'no-cache, no-store, max-age=0, must-revalidate, durable',
-  )
-  expect(headers['cache-control']).toBe(
-    (shouldHavePrivateDirective ? 'private,' : '') + 'no-cache,no-store,max-age=0,must-revalidate',
-  )
+    expect(headers['debug-netlify-cdn-cache-control']).toBe(
+      (shouldHavePrivateDirective ? 'private, ' : '') +
+        'no-cache, no-store, max-age=0, must-revalidate, durable',
+    )
+    expect(headers['cache-control']).toBe(
+      (shouldHavePrivateDirective ? 'private,' : '') +
+        'no-cache,no-store,max-age=0,must-revalidate',
+    )
+  }
 })
 
 test('requesting a non existing page route that needs to be fetched from the blob store like 404.html (notFound())', async ({
