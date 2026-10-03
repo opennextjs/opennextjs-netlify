@@ -32,8 +32,8 @@ export const getMemoizedKeyValueStoreBackedByRegionalBlobStore = (
         return memoizedValue.currentRequestValue as T | null | Promise<T | null>
       }
 
-      const blobKey = await encodeBlobKey(key)
       const getPromise = withActiveSpan(tracer, otelSpanTitle, async (span) => {
+        const blobKey = await encodeBlobKey(key)
         const { etag: previousEtag, globalValue: previousBlob } = memoizedValue?.conditional
           ? memoizedValue
           : {}

@@ -25,6 +25,12 @@ import type {
   NetlifyCacheHandlerValue,
   NetlifyIncrementalCacheValue,
 } from '../../shared/cache-types.cjs'
+import {
+  getOwnerSourceRoute,
+  getRouteCacheKey,
+  ROUTE_CACHE_KEY_NEXT_VERSION_RANGE,
+  type RouteCacheKind,
+} from '../../shared/route-cache-key.cjs'
 import type { PluginContext, PluginContextAdapter } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 
@@ -61,6 +67,47 @@ const routeToFilePath = (path: string) => {
   }
 
   return `/${path}`
+}
+
+/**
+ * Strip a leading i18n locale segment from a route, mirroring Next's `normalizeLocalePath`. The route
+ * that owns an i18n entry is locale-agnostic (Next scopes the key by the locale-stripped source
+ * route), while prerender manifest entries and `getFallbacks` are locale-prefixed. `/de/blog/x` ->
+ * `/blog/x`, `/de` -> `/`; a route without a known locale prefix is returned unchanged.
+ */
+const stripLocalePrefix = (route: string, locales: string[]): string => {
+  const withLeadingSlash = route.startsWith('/') ? route : `/${route}`
+  for (const locale of locales) {
+    if (withLeadingSlash === `/${locale}`) {
+      return '/'
+    }
+    if (withLeadingSlash.startsWith(`/${locale}/`)) {
+      return withLeadingSlash.slice(locale.length + 1)
+    }
+  }
+  return withLeadingSlash
+}
+
+/**
+ * Blob key to seed a prerendered entry under. On patched Next this is the route-scoped cache key; on
+ * older Next it's the plain file-path key.
+ */
+const getSeedBlobKey = ({
+  route,
+  kind,
+  sourceRoute,
+  useRouteCacheKey,
+}: {
+  route: string
+  kind: RouteCacheKind
+  /** Source route without the App Router segment suffix; see `getOwnerSourceRoute`. */
+  sourceRoute: string
+  useRouteCacheKey: boolean
+}): string => {
+  if (!useRouteCacheKey) {
+    return routeToFilePath(route)
+  }
+  return getRouteCacheKey(route, { kind, sourceRoute: getOwnerSourceRoute(sourceRoute, kind) })
 }
 
 function prerenderManifestRouteToRevalidateAndCacheControlProperties(
@@ -239,6 +286,21 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
           })
         : false
 
+      // From 15.5.27 / 16.3.8 the incremental cache scopes every response cache key by the route that
+      // owns the entry before handing it to a custom cache handler. Older Next passes the handler a
+      // plain pathname. When the running Next scopes keys we must seed prerendered blobs under the same
+      // scoped key, otherwise every entry misses at runtime and re-renders on first request.
+      // https://github.com/vercel/next.js/commit/719e4c67d6e92df60246f95e1d96e2dd60789a52
+      const useRouteCacheKey = ctx.nextVersion
+        ? satisfies(ctx.nextVersion, ROUTE_CACHE_KEY_NEXT_VERSION_RANGE, {
+            includePrerelease: true,
+          })
+        : false
+
+      // i18n entries are locale-prefixed in the manifest, but Next scopes their cache key by the
+      // locale-stripped source route, so we strip the locale when deriving `sourceRoute`.
+      const locales = ctx.buildConfig.i18n?.locales ?? []
+
       let appRouterNotFoundDefinedInPrerenderManifest = false
 
       await Promise.all([
@@ -253,8 +315,11 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
               // build cache, and the backdating cost a regeneration per route per deploy and threw
               // away route-handler prerenders outright.
               const lastModified = Date.now()
+              // `key` is the on-disk file-path key for reading the build output (unchanged); the blob
+              // is written under `blobKey`, which is route-scoped on patched Next (see getSeedBlobKey).
               const key = routeToFilePath(route)
               let value: NetlifyIncrementalCacheValue
+              let cacheKind: RouteCacheKind
               switch (true) {
                 // Parallel route default layout has no prerendered page
                 case prerenderManifestRoute.dataRoute?.endsWith('/default.rsc') &&
@@ -270,6 +335,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
                     prerenderManifestRoute,
                     shouldUseEnumKind,
                   )
+                  cacheKind = 'PAGES'
                   break
                 case prerenderManifestRoute.dataRoute?.endsWith('.rsc'):
                   value = await buildAppCacheValue(
@@ -278,6 +344,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
                     shouldUseAppPageKind,
                     prerenderManifestRoute.renderingMode !== 'PARTIALLY_STATIC',
                   )
+                  cacheKind = 'APP_PAGE'
                   if (route === '/_not-found') {
                     appRouterNotFoundDefinedInPrerenderManifest = true
                   }
@@ -288,6 +355,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
                     prerenderManifestRoute,
                     shouldUseEnumKind,
                   )
+                  cacheKind = 'APP_ROUTE'
                   break
                 default:
                   throw new Error(`Unrecognized content: ${route}`)
@@ -298,7 +366,14 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
                 verifyNetlifyForms(ctx, value.html)
               }
 
-              await writeCacheEntry(key, value, lastModified, ctx)
+              const blobKey = getSeedBlobKey({
+                route,
+                kind: cacheKind,
+                sourceRoute: prerenderManifestRoute.srcRoute ?? stripLocalePrefix(route, locales),
+                useRouteCacheKey,
+              })
+
+              await writeCacheEntry(blobKey, value, lastModified, ctx)
             }),
         ),
         ...ctx.getFallbacks(manifest).map((route) =>
@@ -311,7 +386,15 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
               true, // there is no corresponding json file for fallback, so we are skipping it for this entry
             )
 
-            await writeCacheEntry(key, value, Date.now(), ctx)
+            // A fallback is the dynamic route's own shell, so it owns itself as the source route.
+            const blobKey = getSeedBlobKey({
+              route,
+              kind: 'PAGES',
+              sourceRoute: stripLocalePrefix(route, locales),
+              useRouteCacheKey,
+            })
+
+            await writeCacheEntry(blobKey, value, Date.now(), ctx)
           }),
         ),
         ...ctx.getShells(manifest).map((route) =>
@@ -325,7 +408,15 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
               false,
             )
 
-            await writeCacheEntry(key, value, Date.now(), ctx)
+            // A shell is the dynamic route's own PPR shell, so it owns itself as the source route.
+            const blobKey = getSeedBlobKey({
+              route,
+              kind: 'APP_PAGE',
+              sourceRoute: stripLocalePrefix(route, locales),
+              useRouteCacheKey,
+            })
+
+            await writeCacheEntry(blobKey, value, Date.now(), ctx)
           }),
         ),
       ])
@@ -343,7 +434,13 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
           undefined,
           shouldUseAppPageKind,
         )
-        await writeCacheEntry(key, value, lastModified, ctx)
+        const blobKey = getSeedBlobKey({
+          route: key,
+          kind: 'APP_PAGE',
+          sourceRoute: key,
+          useRouteCacheKey,
+        })
+        await writeCacheEntry(blobKey, value, lastModified, ctx)
       }
     } catch (error) {
       ctx.failBuild('Failed assembling prerendered content for upload', error)

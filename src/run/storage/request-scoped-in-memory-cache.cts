@@ -6,6 +6,7 @@ import {
   type BlobType,
   isHtmlBlob,
   isTagManifest,
+  isTagRevalidationMarker,
   isUseCacheBlob,
 } from '../../shared/blob-types.cjs'
 import { getRequestContext } from '../handlers/request-context.cjs'
@@ -73,6 +74,10 @@ const estimateBlobKnownTypeSize = (
     : { data: valueToStore, baseSize: BASE_BLOB_SIZE }
 
   if (isTagManifest(data)) {
+    return baseSize
+  }
+
+  if (isTagRevalidationMarker(data)) {
     return baseSize
   }
 

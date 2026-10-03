@@ -5,9 +5,11 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
 import {
-  encodeBlobKey,
+  encodeBlobKeyForRoute,
+  encodeBlobKeyForTag,
   generateRandomObjectID,
   getBlobServerGets,
+  isAdapterMode,
   pageBlobKey,
   startMockBlobStore,
 } from '../utils/helpers.js'
@@ -56,8 +58,18 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
   await createFixture('server-components', ctx)
   await runPlugin(ctx)
 
-  expect(await ctx.blobStore.get(pageBlobKey('/static-fetch/1'))).not.toBeNull()
-  expect(await ctx.blobStore.get(encodeBlobKey('_N_T_/static-fetch/[id]/page'))).toBeNull()
+  expect(
+    await ctx.blobStore.get(
+      isAdapterMode
+        ? pageBlobKey('/static-fetch/1')
+        : encodeBlobKeyForRoute({
+            route: '/static-fetch/1',
+            kind: 'APP_PAGE',
+            sourceRoute: '/static-fetch/[id]',
+          }),
+    ),
+  ).not.toBeNull()
+  expect(await ctx.blobStore.get(encodeBlobKeyForTag('_N_T_/static-fetch/[id]/page'))).toBeNull()
 
   ctx.blobServerOnRequestSpy.mockClear()
 
@@ -105,7 +117,9 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
   // it does not wait for the cache.set so we have to manually wait here until the blob storage got populated
   await new Promise<void>((resolve) => setTimeout(resolve, 1000))
 
-  expect(await ctx.blobStore.get(encodeBlobKey('_N_T_/static-fetch/[id]/page'))).not.toBeNull()
+  expect(
+    await ctx.blobStore.get(encodeBlobKeyForTag('_N_T_/static-fetch/[id]/page')),
+  ).not.toBeNull()
 
   ctx.blobServerOnRequestSpy.mockClear()
 

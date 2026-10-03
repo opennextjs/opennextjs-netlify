@@ -12,6 +12,7 @@ import {
 import {
   countOfBlobServerGetsForKey,
   decodePageBlobKey,
+  encodeBlobKeyForRoute,
   generateRandomObjectID,
   getBlobEntries,
   pageBlobKey,
@@ -72,27 +73,28 @@ describe('page router', () => {
     // let the build entries go stale (revalidate-slow has a 10s TTL): the flow below is stale → swr
     await new Promise<void>((resolve) => setTimeout(resolve, 11_000))
     // check if the blob entries where successful set on the build plugin
-    const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodePageBlobKey(key, 50)).sort()).toEqual(
-      [
-        '/fallback-true/[slug]',
-        '/fallback-true/prerendered',
-        // the real key is much longer and ends in a hash, but we only assert on the first 50 chars to make it easier
-        '/products/an-incredibly-long-product-',
-        '/products/prerendered',
-        '/products/事前レンダリング,te',
-        // the adapter output has a prerender (404.html) for the `notFound: true` page
-        isAdapterMode ? '/static/not-found' : undefined,
-        '/static/revalidate-automatic',
-        '/static/revalidate-manual',
-        '/static/revalidate-slow',
-        '/static/revalidate-slow-data',
-        '404.html',
-        '500.html',
-        'fallback-true/[slug].html',
-        'static/fully-static.html',
-      ].filter(Boolean),
-    )
+    // `decodePageBlobKey` maps a (possibly route-scoped or prerender group) key back to its route. The long product
+    // route's on-disk key is truncated and ends in a hash, so only its prefix survives — we match it
+    // separately and assert the rest exactly.
+    const routes = (await getBlobEntries(ctx)).map(({ key }) => decodePageBlobKey(key))
+    const longProductRoute = routes.find((route) => route.startsWith('/products/an-incr'))
+    expect(longProductRoute).toBeDefined()
+    expect(routes.filter((route) => route !== longProductRoute).sort()).toEqual([
+      '/fallback-true/[slug]',
+      '/fallback-true/prerendered',
+      '/products/prerendered',
+      '/products/事前レンダリング,test',
+      // the adapter output has a prerender (404.html) for the `notFound: true` page
+      ...(isAdapterMode ? ['/static/not-found'] : []),
+      '/static/revalidate-automatic',
+      '/static/revalidate-manual',
+      '/static/revalidate-slow',
+      '/static/revalidate-slow-data',
+      '404.html',
+      '500.html',
+      'fallback-true/[slug].html',
+      'static/fully-static.html',
+    ])
 
     // test the function call
     const call1 = await invokeFunction(ctx, { url: 'static/revalidate-automatic' })
@@ -312,7 +314,17 @@ describe('app router', () => {
     ).toBe(1)
     ctx.blobServerOnRequestSpy.mockClear()
 
-    expect(await ctx.blobStore.get(pageBlobKey('/posts/3', '/posts/[id]?nxtPid=3'))).toBeNull()
+    expect(
+      await ctx.blobStore.get(
+        isAdapterMode
+          ? pageBlobKey('/posts/3', '/posts/[id]?nxtPid=3')
+          : encodeBlobKeyForRoute({
+              route: '/posts/3',
+              kind: 'APP_PAGE',
+              sourceRoute: '/posts/[id]',
+            }),
+      ),
+    ).toBeNull()
     // this page is not pre-rendered and should result in a cache miss
     const post3 = await invokeFunction(ctx, { url: 'posts/3' })
     expect(post3.statusCode).toBe(200)
@@ -326,7 +338,17 @@ describe('app router', () => {
     // wait to have a stale page
     await new Promise<void>((resolve) => setTimeout(resolve, 6_000))
     // after the dynamic call of `posts/3` it should be in cache, note this is after the timeout as the cache set happens async
-    expect(await ctx.blobStore.get(pageBlobKey('/posts/3', '/posts/[id]?nxtPid=3'))).not.toBeNull()
+    expect(
+      await ctx.blobStore.get(
+        isAdapterMode
+          ? pageBlobKey('/posts/3', '/posts/[id]?nxtPid=3')
+          : encodeBlobKeyForRoute({
+              route: '/posts/3',
+              kind: 'APP_PAGE',
+              sourceRoute: '/posts/[id]',
+            }),
+      ),
+    ).not.toBeNull()
 
     const stale = await invokeFunction(ctx, { url: 'posts/1' })
     const staleDate = load(stale.body)('[data-testid="date-now"]').text()
@@ -465,9 +487,14 @@ describe('route', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 8_000))
 
     // check if the route got prerendered
-    const blobEntry = await ctx.blobStore.get(pageBlobKey('/api/revalidate-handler'), {
-      type: 'json',
-    })
+    const blobEntry = await ctx.blobStore.get(
+      isAdapterMode
+        ? pageBlobKey('/api/revalidate-handler')
+        : encodeBlobKeyForRoute({ route: '/api/revalidate-handler', kind: 'APP_ROUTE' }),
+      {
+        type: 'json',
+      },
+    )
     expect(blobEntry).not.toBeNull()
 
     ctx.blobServerOnRequestSpy.mockClear()

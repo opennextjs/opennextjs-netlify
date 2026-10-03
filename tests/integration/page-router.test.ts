@@ -8,8 +8,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi 
 import { type FixtureTestContext } from '../utils/contexts.js'
 import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
 import {
+  encodeBlobKeyForRoute,
   generateRandomObjectID,
   getPageHtml,
+  isAdapterMode,
   pageBlobKey,
   startMockBlobStore,
 } from '../utils/helpers.js'
@@ -72,9 +74,14 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
 
   expect(staticPageInitial.statusCode).toBe(200)
   expect(staticPageInitial.headers?.['cache-status']).toMatch(/"Next.js"; hit/)
-  const blobDataInitial = await ctx.blobStore.get(pageBlobKey('/static/revalidate-manual'), {
-    type: 'json',
-  })
+  const blobDataInitial = await ctx.blobStore.get(
+    isAdapterMode
+      ? pageBlobKey('/static/revalidate-manual')
+      : encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
+    {
+      type: 'json',
+    },
+  )
   const blobDateInitial = load(getPageHtml(blobDataInitial, '/static/revalidate-manual')).html(
     '[data-testid="date-now"]',
   )
@@ -84,9 +91,14 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
 
   await new Promise<void>((resolve) => setTimeout(resolve, 100))
 
-  const blobDataRevalidated = await ctx.blobStore.get(pageBlobKey('/static/revalidate-manual'), {
-    type: 'json',
-  })
+  const blobDataRevalidated = await ctx.blobStore.get(
+    isAdapterMode
+      ? pageBlobKey('/static/revalidate-manual')
+      : encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
+    {
+      type: 'json',
+    },
+  )
 
   const blobDateRevalidated = load(
     getPageHtml(blobDataRevalidated, '/static/revalidate-manual'),
@@ -177,6 +189,31 @@ test<FixtureTestContext>('Should serve correct locale-aware custom 404 pages', a
     load(responseNonDefaultLocale.body)('[data-testid="locale"]').text(),
     'Served 404 page content should use non-default locale if non-default locale is explicitly used in pathname (after basePath)',
   ).toBe('fr')
+})
+
+test<FixtureTestContext>('Should serve prerendered i18n pages (basePath) from the response cache as a hit', async (ctx) => {
+  // Regression test for route-scoped cache keys with i18n: Next scopes the key by the
+  // locale-stripped source route, so seeding must strip the locale too or these all miss.
+  await createFixture('page-router-base-path-i18n', ctx)
+  await runPlugin(ctx)
+
+  const cases = [
+    // static page (no `srcRoute` in the prerender manifest)
+    { url: '/base/path/static/revalidate-manual', label: 'static, implicit default locale' },
+    { url: '/base/path/en/static/revalidate-manual', label: 'static, explicit default locale' },
+    { url: '/base/path/de/static/revalidate-manual', label: 'static, non-default locale' },
+    // dynamic page (`srcRoute` is `/products/[slug]`, already locale-stripped)
+    { url: '/base/path/products/prerendered', label: 'dynamic, implicit default locale' },
+    { url: '/base/path/de/products/prerendered', label: 'dynamic, non-default locale' },
+  ]
+
+  for (const { url, label } of cases) {
+    const response = await invokeFunction(ctx, { url })
+    expect(response.statusCode, label).toBe(200)
+    expect(response.headers?.['cache-status'], `${label} should be a Next.js cache hit`).toMatch(
+      /"Next.js"; hit/,
+    )
+  }
 })
 
 // These tests describe how the 404 caching should work, but unfortunately it doesn't work like

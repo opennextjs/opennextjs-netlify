@@ -11,6 +11,11 @@ export type TagManifest = {
   expireAt: number
 }
 
+// written once per deploy by the first tag revalidation
+export type TagRevalidationMarker = {
+  revalidatedAt: number
+}
+
 export type HtmlBlob = {
   html: string
   isFullyStaticPage: boolean
@@ -64,6 +69,7 @@ export const getPrerenderGroupTags = (
 export type BlobType =
   | NetlifyCacheHandlerValue
   | TagManifest
+  | TagRevalidationMarker
   | HtmlBlob
   | UseCacheBlob
   | PrerenderGroupBlob
@@ -74,9 +80,19 @@ export const isTagManifest = (value: BlobType): value is TagManifest => {
     value !== null &&
     'staleAt' in value &&
     typeof value.staleAt === 'number' &&
-    'expiredAt' in value &&
-    typeof value.expiredAt === 'number' &&
+    'expireAt' in value &&
+    typeof value.expireAt === 'number' &&
     Object.keys(value).length === 2
+  )
+}
+
+export const isTagRevalidationMarker = (value: BlobType): value is TagRevalidationMarker => {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'revalidatedAt' in value &&
+    typeof value.revalidatedAt === 'number' &&
+    Object.keys(value).length === 1
   )
 }
 

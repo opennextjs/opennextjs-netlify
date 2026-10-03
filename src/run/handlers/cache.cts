@@ -20,6 +20,7 @@ import {
   type NetlifyCacheHandlerValue,
   type NetlifyIncrementalCacheValue,
 } from '../../shared/cache-types.cjs'
+import { routeCacheKeyToPathname } from '../../shared/route-cache-key.cjs'
 import {
   getMemoizedKeyValueStoreBackedByRegionalBlobStore,
   MemoizedKeyValueStoreBackedByRegionalBlobStore,
@@ -30,6 +31,7 @@ import {
   encodeCacheTag,
   isAnyTagStaleOrExpired,
   markTagsAsStaleAndPurgeEdgeCache,
+  prefetchTagRevalidationMarker,
   purgeEdgeCache,
   type RevalidateTagDurations,
   type TagStaleOrExpiredStatus,
@@ -39,6 +41,17 @@ import { getTracer, recordWarning, withActiveSpan } from './tracer.cjs'
 const NEXT_CACHE_TAGS_HEADER = 'x-next-cache-tags'
 
 let memoizedPrerenderManifest: PrerenderManifest
+
+/**
+ * Pages Router entries have no cache-tag header, so we synthesize the implicit path tag Next uses for
+ * on-demand revalidation (`res.revalidate` / `revalidatePath`), which is derived from the request
+ * pathname. From Next 15.5.27 / 16.3.8 the cache key handed to us is route-scoped, so recover the
+ * pathname first; `/index` maps back to `/` (both for the scoped root and the legacy `/index` key).
+ */
+const getPagesRouterImplicitTag = (key: string): string => {
+  const pathname = routeCacheKeyToPathname(key)
+  return `_N_T_${pathname === '/index' ? '/' : encodeCacheTag(pathname)}`
+}
 
 export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
   options: CacheHandlerContext
@@ -148,7 +161,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
     // Set cache tags for 404 pages as well so that the content can later be purged
     if (!cacheValue) {
-      const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeCacheTag(key)}`]
+      const cacheTags = [getPagesRouterImplicitTag(key)]
       requestContext.responseCacheTags = cacheTags
       return
     }
@@ -175,7 +188,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         // so we need to generate appropriate cache tags for it
         // encode here to deal with non ASCII characters in the key
 
-        const cacheTags = [`_N_T_${key === '/index' ? '/' : encodeCacheTag(key)}`]
+        const cacheTags = [getPagesRouterImplicitTag(key)]
         requestContext.responseCacheTags = cacheTags
       }
     }
@@ -274,6 +287,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
 
       span?.setAttributes({ key })
 
+      prefetchTagRevalidationMarker()
       const blob = await this.cacheStore.get<NetlifyCacheHandlerValue>(key, 'blobStore.get')
 
       // if blob is null then we don't have a cache entry
@@ -501,7 +515,7 @@ export class NetlifyCacheHandler implements CacheHandlerForMultipleVersions {
         const requestContext = getRequestContext()
         if (requestContext?.didPagesRouterOnDemandRevalidate) {
           // encode here to deal with non ASCII characters in the key
-          const tag = `_N_T_${key === '/index' ? '/' : encodeCacheTag(key)}`
+          const tag = getPagesRouterImplicitTag(key)
 
           requestContext?.trackBackgroundWork(purgeEdgeCache(tag))
         }
