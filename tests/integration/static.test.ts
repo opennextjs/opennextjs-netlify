@@ -54,7 +54,7 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
       '/static/revalidate-slow-data',
       '404.html',
       '500.html',
-      'fallback-true/[slug].html',
+      ...(isAdapterMode ? [] : ['fallback-true/[slug].html']),
       'static/fully-static.html',
     ].filter(Boolean),
   )

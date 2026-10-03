@@ -92,7 +92,7 @@ describe('page router', () => {
       '/static/revalidate-slow-data',
       '404.html',
       '500.html',
-      'fallback-true/[slug].html',
+      ...(isAdapterMode ? [] : ['fallback-true/[slug].html']),
       'static/fully-static.html',
     ])
 

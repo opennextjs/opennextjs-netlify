@@ -59,10 +59,18 @@ export const copyStaticContent = async (ctx: PluginContext): Promise<void> => {
         paths
           .filter((path) => !path.endsWith('.json') && !paths.includes(`${path.slice(0, -5)}.json`))
           .map(async (path): Promise<void> => {
+            const isFallback = fallbacks.includes(path.slice(0, -5))
+            // adapter mode serves fallbacks from their prerender group (copyPrerenderGroups)
+            // TODO: adapter mode still stores the static HTML outputs (404.html, 500.html, fully
+            // static pages) in blobs for the static-file handler; figure out how to serve them as
+            // static files from the CDN instead (status codes, error page cache headers)
+            if (isFallback && ctx.hasAdapter()) {
+              return
+            }
+
             const html = await readFile(join(srcDir, path), 'utf-8')
             verifyNetlifyForms(ctx, html)
 
-            const isFallback = fallbacks.includes(path.slice(0, -5))
             const isFullyStaticPage = !isFallback && fullyStaticPages.includes(path)
 
             await writeFile(
