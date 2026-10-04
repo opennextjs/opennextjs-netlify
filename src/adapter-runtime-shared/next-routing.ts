@@ -226,3 +226,115 @@ export async function answerWithoutCompute(
     return apply(new Response(null, { status }), status)
   }
 }
+
+// The handoff (L2): the routing edge function sends its resolution to the server handler in the
+// private meta header instead of the server routing a second time.
+
+/**
+ * Serialize a ResolveRoutesResult into a header value for the server handler.
+ */
+export function serializeResolution(resolution: ResolveRoutesResult): string {
+  const serialized: Record<string, unknown> = {
+    resolvedPathname: resolution.resolvedPathname ?? null,
+    resolvedQuery: resolution.resolvedQuery ?? null,
+    invocationTarget: resolution.invocationTarget ?? null,
+    routeMatches: resolution.routeMatches ?? null,
+    invocation: resolution.invocation ?? null,
+    status: resolution.status ?? null,
+    redirect: null,
+    externalRewrite: null,
+    middlewareResponded: resolution.middlewareResponded ?? false,
+  }
+
+  // Serialize Headers to plain object
+  if (resolution.resolvedHeaders) {
+    const headers: Record<string, string> = {}
+    for (const [key, value] of resolution.resolvedHeaders.entries()) {
+      headers[key] = value
+    }
+    serialized.resolvedHeaders = headers
+  } else {
+    serialized.resolvedHeaders = null
+  }
+
+  if (resolution.redirect) {
+    serialized.redirect = {
+      url: resolution.redirect.url.toString(),
+      status: resolution.redirect.status,
+    }
+  }
+
+  if (resolution.externalRewrite) {
+    serialized.externalRewrite = resolution.externalRewrite.toString()
+  }
+
+  // The resolution travels in a header, and headers are ByteStrings: a non-ASCII character
+  // anywhere in it (a unicode search param, say) makes `Headers.set` throw. JSON's own `\uXXXX`
+  // escapes keep it ASCII and `JSON.parse` turns them back into the original characters.
+  return JSON.stringify(serialized).replace(
+    /[\u0080-\uFFFF]/g,
+    (character) => `\\u${character.codePointAt(0)?.toString(16).padStart(4, '0')}`,
+  )
+}
+
+/**
+ * Deserialize a ResolveRoutesResult from the private meta header the edge function sets.
+ * The routing edge function serializes the resolution as JSON with
+ * Headers → plain object, URL → string conversions.
+ */
+export function deserializeResolution(serialized: string): ResolveRoutesResult {
+  const parsed = JSON.parse(serialized) as {
+    resolvedPathname: string | null
+    resolvedQuery: ResolveRoutesResult['resolvedQuery'] | null
+    invocationTarget: ResolveRoutesResult['invocationTarget'] | null
+    routeMatches: Record<string, string> | null
+    invocation?: ResolveRoutesResult['invocation'] | null
+    resolvedHeaders: Record<string, string> | null
+    status: number | null
+    redirect: { url: string; status: number } | null
+    externalRewrite: string | null
+    middlewareResponded: boolean
+  }
+
+  const resolution: ResolveRoutesResult = {}
+
+  if (parsed.resolvedPathname !== null) {
+    resolution.resolvedPathname = parsed.resolvedPathname
+  }
+  if (parsed.resolvedQuery !== null) {
+    resolution.resolvedQuery = parsed.resolvedQuery
+  }
+  if (parsed.invocationTarget !== null) {
+    resolution.invocationTarget = parsed.invocationTarget
+  }
+  if (parsed.routeMatches !== null) {
+    resolution.routeMatches = parsed.routeMatches
+  }
+  if (parsed.invocation) {
+    resolution.invocation = parsed.invocation
+  }
+  if (parsed.status !== null) {
+    resolution.status = parsed.status
+  }
+  if (parsed.middlewareResponded) {
+    resolution.middlewareResponded = parsed.middlewareResponded
+  }
+  if (parsed.resolvedHeaders !== null) {
+    const headers = new Headers()
+    for (const [key, value] of Object.entries(parsed.resolvedHeaders)) {
+      headers.set(key, value)
+    }
+    resolution.resolvedHeaders = headers
+  }
+  if (parsed.redirect !== null) {
+    resolution.redirect = {
+      url: new URL(parsed.redirect.url),
+      status: parsed.redirect.status,
+    }
+  }
+  if (parsed.externalRewrite !== null) {
+    resolution.externalRewrite = new URL(parsed.externalRewrite)
+  }
+
+  return resolution
+}

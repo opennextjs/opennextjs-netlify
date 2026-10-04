@@ -6,6 +6,7 @@ import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js
 import {
   answerWithoutCompute,
   applyResolutionToResponse,
+  deserializeResolution,
   isUnmatchedNextDataRequest,
   resolve,
   stripInternalRequestHeaders,
@@ -145,68 +146,6 @@ const revalidate: NonNullable<RequestMeta['revalidate']> = async (args) => {
 }
 
 configureInvoke({ render404, revalidate, renderErrorPage })
-
-/**
- * Deserialize a ResolveRoutesResult from the private meta header the edge function sets.
- * The routing edge function serializes the resolution as JSON with
- * Headers → plain object, URL → string conversions.
- */
-function deserializeResolution(serialized: string): ResolveRoutesResult {
-  const parsed = JSON.parse(serialized) as {
-    resolvedPathname: string | null
-    resolvedQuery: ResolveRoutesResult['resolvedQuery'] | null
-    invocationTarget: ResolveRoutesResult['invocationTarget'] | null
-    routeMatches: Record<string, string> | null
-    invocation?: ResolveRoutesResult['invocation'] | null
-    resolvedHeaders: Record<string, string> | null
-    status: number | null
-    redirect: { url: string; status: number } | null
-    externalRewrite: string | null
-    middlewareResponded: boolean
-  }
-
-  const resolution: ResolveRoutesResult = {}
-
-  if (parsed.resolvedPathname !== null) {
-    resolution.resolvedPathname = parsed.resolvedPathname
-  }
-  if (parsed.resolvedQuery !== null) {
-    resolution.resolvedQuery = parsed.resolvedQuery
-  }
-  if (parsed.invocationTarget !== null) {
-    resolution.invocationTarget = parsed.invocationTarget
-  }
-  if (parsed.routeMatches !== null) {
-    resolution.routeMatches = parsed.routeMatches
-  }
-  if (parsed.invocation) {
-    resolution.invocation = parsed.invocation
-  }
-  if (parsed.status !== null) {
-    resolution.status = parsed.status
-  }
-  if (parsed.middlewareResponded) {
-    resolution.middlewareResponded = parsed.middlewareResponded
-  }
-  if (parsed.resolvedHeaders !== null) {
-    const headers = new Headers()
-    for (const [key, value] of Object.entries(parsed.resolvedHeaders)) {
-      headers.set(key, value)
-    }
-    resolution.resolvedHeaders = headers
-  }
-  if (parsed.redirect !== null) {
-    resolution.redirect = {
-      url: new URL(parsed.redirect.url),
-      status: parsed.redirect.status,
-    }
-  }
-  if (parsed.externalRewrite !== null) {
-    resolution.externalRewrite = new URL(parsed.externalRewrite)
-  }
-
-  return resolution
-}
 
 export default async function ServerHandler(
   request: Request,

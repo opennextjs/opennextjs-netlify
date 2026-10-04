@@ -25,9 +25,10 @@ import {
   isUnmatchedNextDataRequest,
   resolve,
   responseToMiddlewareResult,
+  serializeResolution,
   stripInternalRequestHeaders,
 } from '../adapter-runtime-shared/next-routing.js'
-import type { ResolveRoutesResult, RoutingConfig } from '../adapter-runtime-shared/next-routing.js'
+import type { RoutingConfig } from '../adapter-runtime-shared/next-routing.js'
 // import { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
 const REWRITE_HEADERS = new Set(['x-nextjs-rewritten-path', 'x-nextjs-rewritten-query'])
@@ -47,53 +48,6 @@ interface MiddlewareContext {
   url: URL
   headers: Headers
   requestBody: ReadableStream
-}
-
-/**
- * Serialize a ResolveRoutesResult into a header value for the server handler.
- */
-function serializeResolution(resolution: ResolveRoutesResult): string {
-  const serialized: Record<string, unknown> = {
-    resolvedPathname: resolution.resolvedPathname ?? null,
-    resolvedQuery: resolution.resolvedQuery ?? null,
-    invocationTarget: resolution.invocationTarget ?? null,
-    routeMatches: resolution.routeMatches ?? null,
-    invocation: resolution.invocation ?? null,
-    status: resolution.status ?? null,
-    redirect: null,
-    externalRewrite: null,
-    middlewareResponded: resolution.middlewareResponded ?? false,
-  }
-
-  // Serialize Headers to plain object
-  if (resolution.resolvedHeaders) {
-    const headers: Record<string, string> = {}
-    for (const [key, value] of resolution.resolvedHeaders.entries()) {
-      headers[key] = value
-    }
-    serialized.resolvedHeaders = headers
-  } else {
-    serialized.resolvedHeaders = null
-  }
-
-  if (resolution.redirect) {
-    serialized.redirect = {
-      url: resolution.redirect.url.toString(),
-      status: resolution.redirect.status,
-    }
-  }
-
-  if (resolution.externalRewrite) {
-    serialized.externalRewrite = resolution.externalRewrite.toString()
-  }
-
-  // The resolution travels in a header, and headers are ByteStrings: a non-ASCII character
-  // anywhere in it (a unicode search param, say) makes `Headers.set` throw. JSON's own `\uXXXX`
-  // escapes keep it ASCII and `JSON.parse` turns them back into the original characters.
-  return JSON.stringify(serialized).replace(
-    /[\u0080-\uFFFF]/g,
-    (character) => `\\u${character.codePointAt(0)?.toString(16).padStart(4, '0')}`,
-  )
 }
 
 /**
