@@ -387,6 +387,19 @@ async function regeneratePrerenderGroup(
   { onDemandToken, ...args }: CommonHandlerArg & { onDemandToken?: string },
 ): Promise<PrerenderGroupBlob> {
   const invocationId = randomUUID()
+  // `allowQuery` (the group key) leaves out params the output pathname already fixes
+  // (`/en/docs/[...parts]` has no `nxtPlang`), but Next only splits a catch-all into an array when
+  // it gets all of them. Params left as placeholders stay out: they're shared by the group.
+  const routeParams = new URLSearchParams(params)
+  const requestParams = args.resolution.invocation?.requestMeta.params ?? {}
+  for (const [name, value] of Object.entries(requestParams)) {
+    const key = `nxtP${name}`
+    if (!routeParams.has(key) && !new RegExp(`\\[(?:\\.{3})?${name}]`).test(group.entry.pathname)) {
+      for (const item of [value].flat()) {
+        routeParams.append(key, item)
+      }
+    }
+  }
   const variants: PrerenderGroupBlob['variants'] = {}
   let postponed: string | undefined
   let entryHtml: string | undefined
@@ -410,7 +423,7 @@ async function regeneratePrerenderGroup(
       continue
     }
     const url = new URL(member.pathname, args.request.url)
-    url.search = params.toString()
+    url.search = routeParams.toString()
     const response = await handler({
       ...args,
       request: new Request(url, {
