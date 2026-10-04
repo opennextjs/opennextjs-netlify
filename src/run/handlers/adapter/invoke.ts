@@ -20,6 +20,9 @@ import type { InvokeOptions, Produced, ProduceRequest } from './types.js'
  * What invocation calls back into in the layers above it: Next's mid-render callbacks and the 500
  * page for a render that failed before its headers. The entry sets them at startup; importing them
  * here would be circular.
+ * TODO(adapter): code smell, a module-level singleton set as a startup side effect. render404 and
+ * revalidate belong to the request (closures carried in ProduceRequest), and a failure before headers
+ * could come back as a Produced for dispatch to turn into the 500 page.
  */
 type InvokeCallbacks = {
   render404: NonNullable<RequestMeta['render404']>
