@@ -102,12 +102,12 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
       const { adapterOutput, relativeAppDir, staticDir, netlifyConfig, publishDir } = ctx
       if (adapterOutput) {
         // the adapter output lists `<distDir>/static` and the static metadata routes (robots.txt,
-        // sitemap.xml, manifest.webmanifest, static opengraph-image...) that Next writes to
-        // `server/app/<route>.body`; `public/` is not in it (copied above). Static HTML pages stay
-        // on blobs: the function handles their 404 status and durable caching.
+        // sitemap.xml, manifest.webmanifest, static opengraph-image...) as `<route>.body` files;
+        // `public/` is not in it (copied above). Static HTML pages (`server/pages/`) stay on blobs:
+        // the function handles their 404 status and durable caching.
         const { repoRoot, config, outputs, routing } = adapterOutput
         const distDir = join(relativeAppDir, config.distDir)
-        const cdnServedPrefixes = [`${distDir}/static/`, `${distDir}/server/app/`]
+        const blobServedPrefix = `${distDir}/server/pages/`
         // `headers()` from next.config: the routing tables apply them before middleware runs, but a
         // file the CDN serves never reaches routing, so bake them into the deploy config. Rules with
         // `has`/`missing` conditions or a status (the internal redirects) can't be evaluated here.
@@ -121,7 +121,7 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
             const filePath = isAbsolute(output.filePath)
               ? relative(repoRoot, output.filePath)
               : output.filePath
-            if (!cdnServedPrefixes.some((prefix) => filePath.startsWith(prefix))) {
+            if (filePath.startsWith(blobServedPrefix)) {
               return
             }
             const src = join(repoRoot, filePath)
