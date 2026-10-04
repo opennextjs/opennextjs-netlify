@@ -99,12 +99,17 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         // Resolve the absolute source path for copying.
         allAssets.set(output.filePath, join(ctx.adapterOutput.repoRoot, output.filePath))
 
-        // Add all traced assets. Keys are documented as repoRoot-relative, but for edge outputs Next
-        // makes them relative to <repoRoot>/<distDir> instead, so derive the key from the absolute path.
-        for (const absPath of [
-          ...Object.values(output.assets),
-          ...Object.values(output.wasmAssets ?? {}),
-        ]) {
+        // Add all traced assets. Keys are documented as repoRoot-relative destinations (files from
+        // Turbopack additional roots go to `next_additional_roots/<name>/`, linked from inside the
+        // app), but for edge outputs Next makes them relative to <repoRoot>/<distDir> instead, so
+        // derive the key from the absolute path there.
+        for (const [key, absPath] of Object.entries(output.assets)) {
+          allAssets.set(
+            output.runtime === 'edge' ? relative(ctx.adapterOutput.repoRoot, absPath) : key,
+            absPath,
+          )
+        }
+        for (const absPath of Object.values(output.wasmAssets ?? {})) {
           allAssets.set(relative(ctx.adapterOutput.repoRoot, absPath), absPath)
         }
       }
