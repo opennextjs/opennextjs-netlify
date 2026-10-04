@@ -901,6 +901,134 @@ const extendedGlobalThis = globalThis as typeof globalThis & {
 }
 
 /**
+ * What a request resolved to `pathname` is for: an output (served from its prerender group when
+ * there is one to serve), an error page, or an answer dispatch gives itself.
+ */
+type Target =
+  | {
+      kind: 'output'
+      output: RoutedOutput
+      prerender?: {
+        variant: PrerenderOutput
+        group: Required<PrerenderGroup>
+        onDemand?: OnDemandRevalidate
+      }
+      // a server action on a PPR page renders with the page's postponed state
+      postponedFrom?: Required<PrerenderGroup>
+    }
+  | { kind: 'error'; status: 404 }
+  | { kind: 'answer'; response: Response; status?: number }
+
+function dispatch(
+  pathname: string,
+  resolution: ResolveRoutesResult,
+  request: Request,
+  requestHeaders: Headers,
+): Target {
+  const url = new URL(request.url)
+  const output = outputsByPathname.get(pathname)
+  if (!output) {
+    // A rewrite whose target has no output - middleware sending `/x` to `/en-EN/x` in an app
+    // with no such route, say. Next's router 404s on the target rather than erroring.
+    return { kind: 'error', status: 404 }
+  }
+
+  // A prerendered or fully static page answers reads only: Next's router-server sets
+  // `Allow: GET, HEAD` and 405s every other method on a static output, and base-server does the
+  // same for an SSG page. Route modules carry neither check, so it lands on the host (adapter-k8s
+  // gates its static serves the same way). Server actions and postponed resumes legitimately
+  // POST to a page URL — and a form-submitted action carries no `next-action` header, only a
+  // form content-type, so check it the same way base-server does.
+  if (
+    !['GET', 'HEAD'].includes(request.method) &&
+    readOnlyPathnames.has(pathname) &&
+    !isPossibleServerAction(request) &&
+    !request.headers.has('next-resume')
+  ) {
+    return {
+      kind: 'answer',
+      response: new Response('Method Not Allowed', {
+        status: 405,
+        headers: { allow: 'GET, HEAD', 'content-type': 'text/plain; charset=utf-8' },
+      }),
+      status: 405,
+    }
+  }
+
+  const isDataRequest = Boolean(resolution.invocation?.headers['x-nextjs-data'])
+  // Pages Router middleware prefetch (`Link` prefetch when middleware exists): Next's server
+  // answers with an empty, non-cacheable result for pages without getStaticProps so the client
+  // does the real data request on navigation instead of running getServerSideProps twice
+  if (
+    request.headers.has('x-middleware-prefetch') &&
+    isDataRequest &&
+    !ssgPathnames.has(pathname)
+  ) {
+    return {
+      kind: 'answer',
+      response: new Response('{}', {
+        headers: {
+          'x-middleware-skip': '1',
+          'cache-control': 'private, no-cache, no-store, max-age=0, must-revalidate',
+          'content-type': 'application/json; charset=utf-8',
+        },
+      }),
+    }
+  }
+
+  const variant = getPrerenderVariant(pathname, requestHeaders, isDataRequest)
+  const group = variant && prerenderGroups.get(variant.groupId)
+  if (!variant || !group?.entry) {
+    return { kind: 'output', output }
+  }
+  if (!shouldBypassPrerender(variant, request, url)) {
+    const isOnDemandRevalidate =
+      variant.bypassToken !== undefined &&
+      request.headers.get('x-prerender-revalidate') === variant.bypassToken
+    return {
+      kind: 'output',
+      output,
+      prerender: {
+        variant,
+        group: group as Required<PrerenderGroup>,
+        onDemand: isOnDemandRevalidate
+          ? { onlyGenerated: request.headers.has('x-prerender-revalidate-if-generated') }
+          : undefined,
+      },
+    }
+  }
+  const isActionOnPprPage =
+    group.entry.resumeHeaders &&
+    request.method === 'POST' &&
+    (variant.bypassFor ?? []).some((has) => matchesHas(has, request, url))
+  // a server action (the output's `bypassFor`) on a PPR page, see the adapter docs
+  return isActionOnPprPage
+    ? { kind: 'output', output, postponedFrom: group as Required<PrerenderGroup> }
+    : { kind: 'output', output }
+}
+
+async function produceTarget(
+  { output, prerender, postponedFrom }: Extract<Target, { kind: 'output' }>,
+  args: CommonHandlerArg,
+): Promise<Produced> {
+  if (prerender) {
+    const served = await servePrerenderGroup(
+      prerender.variant,
+      prerender.group,
+      args,
+      prerender.onDemand,
+    )
+    if (served) {
+      return served
+    }
+  }
+  if (postponedFrom) {
+    args.postponed = await getPrerenderGroupPostponed(postponedFrom, args)
+  }
+  return produceOutput(output, args)
+}
+
+/**
  * Custom error page for the request, like Next's router: 404 renders app router `/_not-found` if
  * the app has one, else pages router `/404` (locale variant first); 500 renders `/500`. The app
  * entry wins even over a custom `pages/404` and even under i18n, which is what base-server does
@@ -945,16 +1073,17 @@ async function renderErrorPage(
   }
   // a prerendered error page is served like a request for it: in minimal mode Next only renders
   // the static shell of a PPR page, the rest comes from resuming the group's postponed state
-  const prerenderVariant = getPrerenderVariant(pathname, request.headers, false)
-  const prerenderGroup = prerenderVariant && prerenderGroups.get(prerenderVariant.groupId)
-  const produced =
-    prerenderVariant && prerenderGroup?.entry
-      ? ((await servePrerenderGroup(
-          prerenderVariant,
-          prerenderGroup as Required<PrerenderGroup>,
-          errorArgs,
-        )) ?? (await produceOutput(routed, errorArgs)))
-      : await produceOutput(routed, errorArgs)
+  const variant = getPrerenderVariant(pathname, request.headers, false)
+  const group = variant && prerenderGroups.get(variant.groupId)
+  const produced = await produceTarget(
+    {
+      kind: 'output',
+      output: routed,
+      ...(variant &&
+        group?.entry && { prerender: { variant, group: group as Required<PrerenderGroup> } }),
+    },
+    errorArgs,
+  )
   return { kind: 'error', status, produced }
 }
 
@@ -1457,37 +1586,17 @@ export default async function ServerHandler(
     // Handle matched route
     if (resolution.resolvedPathname) {
       span?.setAttribute('matched.pathname', resolution.resolvedPathname)
-      const matched = outputsByPathname.get(resolution.resolvedPathname)
-      if (!matched) {
-        // A rewrite whose target has no output - middleware sending `/x` to `/en-EN/x` in an app
-        // with no such route, say. Next's router 404s on the target rather than erroring.
+      const target = dispatch(resolution.resolvedPathname, resolution, request, requestHeaders)
+      if (target.kind === 'error') {
         span?.setAttribute('matched.noOutput', true)
         return finalize(
-          await renderErrorPage(404, { request, requestContext, tracer, span }),
+          await renderErrorPage(target.status, { request, requestContext, tracer, span }),
           request,
-          (response) => applyResolutionToThisResponse(response, 404),
+          (response) => applyResolutionToThisResponse(response, target.status),
         )
       }
-
-      // A prerendered or fully static page answers reads only: Next's router-server sets
-      // `Allow: GET, HEAD` and 405s every other method on a static output, and base-server does the
-      // same for an SSG page. Route modules carry neither check, so it lands on the host (adapter-k8s
-      // gates its static serves the same way). Server actions and postponed resumes legitimately
-      // POST to a page URL — and a form-submitted action carries no `next-action` header, only a
-      // form content-type, so check it the same way base-server does.
-      if (
-        !['GET', 'HEAD'].includes(request.method) &&
-        readOnlyPathnames.has(resolution.resolvedPathname) &&
-        !isPossibleServerAction(request) &&
-        !request.headers.has('next-resume')
-      ) {
-        return applyResolutionToThisResponse(
-          new Response('Method Not Allowed', {
-            status: 405,
-            headers: { allow: 'GET, HEAD', 'content-type': 'text/plain; charset=utf-8' },
-          }),
-          405,
-        )
+      if (target.kind === 'answer') {
+        return applyResolutionToThisResponse(target.response, target.status)
       }
 
       // Next's route modules expect req.url to be the URL the client requested (that's req.url and
@@ -1495,25 +1604,6 @@ export default async function ServerHandler(
       // The routing edge function forwards the rewrite target as the URL though (so the CDN can cache
       // by it) and passes the requested URL in the private meta header.
       const publicUrl = requestMeta?.publicUrl ?? request.url
-
-      // Pages Router middleware prefetch (`Link` prefetch when middleware exists): Next's server
-      // answers with an empty, non-cacheable result for pages without getStaticProps so the client
-      // does the real data request on navigation instead of running getServerSideProps twice
-      if (
-        request.headers.has('x-middleware-prefetch') &&
-        resolution.invocation?.headers['x-nextjs-data'] &&
-        !ssgPathnames.has(resolution.resolvedPathname)
-      ) {
-        return applyResolutionToThisResponse(
-          new Response('{}', {
-            headers: {
-              'x-middleware-skip': '1',
-              'cache-control': 'private, no-cache, no-store, max-age=0, must-revalidate',
-              'content-type': 'application/json; charset=utf-8',
-            },
-          }),
-        )
-      }
 
       // `x-nextjs-data` as routing decided it: set for data requests, never trusted from the client
       const handlerHeaders = new Headers(requestHeaders)
@@ -1537,43 +1627,7 @@ export default async function ServerHandler(
         span,
       }
 
-      let produced: Produced | undefined
-      const prerenderVariant = getPrerenderVariant(
-        resolution.resolvedPathname,
-        requestHeaders,
-        Boolean(resolution.invocation?.headers['x-nextjs-data']),
-      )
-      const prerenderGroup = prerenderVariant && prerenderGroups.get(prerenderVariant.groupId)
-      if (
-        prerenderVariant &&
-        prerenderGroup?.entry &&
-        !shouldBypassPrerender(prerenderVariant, request, url)
-      ) {
-        const isOnDemandRevalidate =
-          prerenderVariant.bypassToken !== undefined &&
-          request.headers.get('x-prerender-revalidate') === prerenderVariant.bypassToken
-        produced = await servePrerenderGroup(
-          prerenderVariant,
-          prerenderGroup as Required<PrerenderGroup>,
-          handlerArgs,
-          isOnDemandRevalidate
-            ? { onlyGenerated: request.headers.has('x-prerender-revalidate-if-generated') }
-            : undefined,
-        )
-      }
-      if (
-        prerenderVariant &&
-        prerenderGroup?.entry?.resumeHeaders &&
-        request.method === 'POST' &&
-        (prerenderVariant.bypassFor ?? []).some((has) => matchesHas(has, request, url))
-      ) {
-        // a server action (the output's `bypassFor`) on a PPR page, see the adapter docs
-        handlerArgs.postponed = await getPrerenderGroupPostponed(
-          prerenderGroup as Required<PrerenderGroup>,
-          handlerArgs,
-        )
-      }
-      produced ??= await produceOutput(matched, handlerArgs)
+      const produced = await produceTarget(target, handlerArgs)
 
       const isNotFoundPage = isNotFoundPageRequest(request, resolution.resolvedPathname)
       const status = isNotFoundPage
