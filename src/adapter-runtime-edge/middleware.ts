@@ -161,30 +161,10 @@ export async function runNextRouting(
     basePath: routingConfig.basePath,
   })
 
-  const answered = await answerWithoutCompute(resolution, {
-    request,
-    basePath: routingConfig.basePath,
-    middlewareResponse,
-    // request headers set by middleware (`NextResponse.rewrite(url, { request: { headers } })`)
-    outgoingRequest: () =>
-      new Request(request, {
-        headers: middlewareRequestHeaders ?? routingHeaders,
-        body: originBody,
-        // @ts-expect-error duplex is needed for streaming bodies
-        duplex: 'half',
-      }),
-  })
-  if (answered) {
-    return answered
-  }
-
-  // Next applies the middleware response headers to the final response, and they win over what the
-  // origin sent: `applyResolutionToResponse` keeps an origin cache-control (a CDN-served static
-  // file carries the one we configured for it at build time), middleware asking for another one is
-  // the whole point of `NextResponse.next({ headers: { 'cache-control': … } })`.
-  // TODO(adapter): for a response the server handler produced, it already applied middleware's
-  // cache-control (routing wins, translated for the CDN); re-applying it here only puts the raw value
-  // back on the browser header. Telling function from CDN responses apart here needs a reliable signal.
+  // Middleware's response headers are applied here, after the CDN cache, and nowhere else:
+  // `@next/routing` keeps them out of `resolvedHeaders`, so the handoff (and what the server handler
+  // returns for the CDN to cache) only carries the routing rules' headers. As in Next, they win over
+  // what the origin sent, cache-control included (`NextResponse.next({ headers: { … } })`).
   const withMiddlewareResponseHeaders = (response: Response) => {
     if (!middlewareResponseHeaders) {
       return response
@@ -206,6 +186,23 @@ export async function runNextRouting(
       statusText: response.statusText,
       headers,
     })
+  }
+
+  const answered = await answerWithoutCompute(resolution, {
+    request,
+    basePath: routingConfig.basePath,
+    middlewareResponse,
+    // request headers set by middleware (`NextResponse.rewrite(url, { request: { headers } })`)
+    outgoingRequest: () =>
+      new Request(request, {
+        headers: middlewareRequestHeaders ?? routingHeaders,
+        body: originBody,
+        // @ts-expect-error duplex is needed for streaming bodies
+        duplex: 'half',
+      }),
+  })
+  if (answered) {
+    return withMiddlewareResponseHeaders(answered)
   }
 
   if (
@@ -236,15 +233,6 @@ export async function runNextRouting(
       routeResolution: serialized,
     }
     forwardHeaders.set(REQUEST_META_HEADER, JSON.stringify(meta))
-  }
-
-  // Apply any request headers from middleware
-  if (resolution.resolvedHeaders) {
-    for (const [key, value] of resolution.resolvedHeaders.entries()) {
-      // Only forward request-modifying headers, not response headers
-      // The server handler will apply response headers from the serialized resolution
-      forwardHeaders.set(key, value)
-    }
   }
 
   const forwardRequest = new Request(getInvocationUrl(request, resolution), {

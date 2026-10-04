@@ -34,7 +34,7 @@ function applyCacheHeaders(response: Response, request: Request, cache: CacheInp
 /**
  * The one place a produced response gets its platform headers (CDN cache control, cache tags,
  * Netlify-Vary, Cache-Status), see `Produced`. `request` is the one the producer answered.
- * `routed` applies routing's response headers (`headers()` rules, middleware) and status first, so a
+ * `routed` applies routing's response headers (`headers()` rules; middleware's are applied at the edge, after the cache) and status first, so a
  * `Cache-Control` from them is translated for the CDN like Next's own.
  */
 export async function finalize(
