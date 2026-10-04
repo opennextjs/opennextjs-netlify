@@ -226,6 +226,22 @@ esac
 # Fixtures with a distDir outside `.next` declare where it is for Vercel in vercel.json
 # (`outputDirectory`), which is the same thing as Netlify's publish directory.
 PUBLISH_DIR="$(node -p "try { require('./vercel.json').outputDirectory || '.next' } catch { '.next' }")"
+# In a workspace (pnpm-workspace.yaml or package.json `workspaces`) netlify-cli asks which
+# package to deploy, and with no TTY to answer that hangs until the harness times out.
+# `--filter` answers it with the Next.js app's package. The app is the directory holding
+# next.config.*, not the publish dir's parent: distDir can live outside the app
+# (upward-distdir: `apps/.next`, nx-handling: `dist/apps/next-nx-test/.next`). Without a
+# package.json there it's not a workspace package and there is nothing to select. The root
+# next.config.js is skipped: the harness always writes a stub there.
+# TODO: fixtures don't declare their Next.js project dir; we infer it from files and from
+# vercel.json, which is Vercel config. The harness should let tests state the app dir (and
+# distDir) explicitly so deploy scripts don't depend on either.
+FILTER_ARGS=()
+APP_DIR="$(dirname "$(find . -path ./node_modules -prune -o -path './*/*' -name 'next.config.*' -print -quit)")"
+APP_DIR="${APP_DIR#./}"
+if [ "$APP_DIR" != "." ] && [ -f "$APP_DIR/package.json" ]; then
+  FILTER_ARGS=(--filter "$APP_DIR")
+fi
 
 # Create netlify.toml pointing to the installed plugin
 cat > netlify.toml <<EOF
@@ -256,7 +272,7 @@ EOF
 # We deliberately do NOT also stream to stderr: run-tests.js buffers child output
 # and prints it only for failed tests, so sending it to stderr here as well would
 # duplicate the whole log in the GitHub Actions failed-test output.
-if ! NO_COLOR=1 NETLIFY_NEXT_SKEW_PROTECTION=1 PLATFORM_PROVIDES_CACHE_HANDLER=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy ${DEPLOY_ENV_ARGS[@]+"${DEPLOY_ENV_ARGS[@]}"} >> .adapter-deploy.log 2>&1; then
+if ! NO_COLOR=1 NETLIFY_NEXT_SKEW_PROTECTION=1 PLATFORM_PROVIDES_CACHE_HANDLER=1 "$ADAPTER_DIR/node_modules/.bin/netlify" deploy ${FILTER_ARGS[@]+"${FILTER_ARGS[@]}"} ${DEPLOY_ENV_ARGS[@]+"${DEPLOY_ENV_ARGS[@]}"} >> .adapter-deploy.log 2>&1; then
   cat .adapter-deploy.log
   exit 1
 fi
