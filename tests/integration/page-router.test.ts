@@ -359,7 +359,12 @@ describe('404 page caching', () => {
     expect(
       notExistingPage.headers['netlify-cdn-cache-control'],
       'should be cached permanently',
-    ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
+    ).toBe(
+      // adapter mode: the static 404.html's own headers, no CACHE_404_PAGE heuristic
+      isAdapterMode
+        ? 'max-age=31536000, durable'
+        : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
+    )
   })
 
   test<FixtureTestContext>('404 with getStaticProps without revalidate', async (ctx) => {
@@ -375,7 +380,12 @@ describe('404 page caching', () => {
     expect(
       notExistingPage.headers['netlify-cdn-cache-control'],
       'should be cached permanently',
-    ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
+    ).toBe(
+      // adapter mode: the prerendered 404's own cache-control, no CACHE_404_PAGE heuristic
+      isAdapterMode
+        ? 's-maxage=31536000, durable'
+        : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
+    )
   })
 
   test<FixtureTestContext>('404 with getStaticProps with revalidate', async (ctx) => {
@@ -398,6 +408,12 @@ describe('404 page caching', () => {
     expect(
       notExistingPage.headers['netlify-cdn-cache-control'],
       'should be cached for 404 page revalidate',
-    ).toBe('s-maxage=300, stale-while-revalidate=31536000, durable')
+    ).toBe(
+      // adapter mode: the prerendered 404's own cache-control (Next's expire), no CACHE_404_PAGE
+      // heuristic
+      isAdapterMode
+        ? 's-maxage=300, stale-while-revalidate=31535700, durable'
+        : 's-maxage=300, stale-while-revalidate=31536000, durable',
+    )
   })
 })

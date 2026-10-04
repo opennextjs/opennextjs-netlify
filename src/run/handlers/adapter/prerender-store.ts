@@ -348,8 +348,6 @@ export async function servePrerenderGroup(
     cache: {
       lastModified: nextCache === 'MISS' ? undefined : blob.lastModified,
       tags: stored.headers['x-next-cache-tags'] ? undefined : blob.tags.map(encodeCacheTag),
-      // the 404 caching heuristics read it for a prerendered 404 page
-      revalidate: blob.revalidate,
     },
   }
 }

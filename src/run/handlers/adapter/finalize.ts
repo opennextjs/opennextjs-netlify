@@ -1,7 +1,6 @@
 // L7: turns a produced response into the platform response (CDN cache control, cache tags,
 // Netlify-Vary, Cache-Status), see docs/request-layers.md.
 import {
-  notFoundHeuristics,
   setCacheStatusHeader,
   setCdnCacheControlFromNext,
   setDateFromLastModified,
@@ -11,17 +10,6 @@ import { encodeCacheTag } from '../tags-handler.cjs'
 
 import { manifest } from './manifest.js'
 import type { CacheInputs, Produced } from './types.js'
-
-export function setCacheControl(
-  response: Response,
-  request: Request,
-  pageRevalidate: CacheInputs['revalidate'],
-) {
-  if (response.status === 404 && notFoundHeuristics(request, response.headers, pageRevalidate)) {
-    return
-  }
-  setCdnCacheControlFromNext(response.headers, request)
-}
 
 function applyCacheHeaders(response: Response, request: Request, cache: CacheInputs = {}) {
   const { headers } = response
@@ -35,20 +23,12 @@ function applyCacheHeaders(response: Response, request: Request, cache: CacheInp
   if ((nextCache === 'HIT' || nextCache === 'STALE') && cache.lastModified) {
     setDateFromLastModified(headers, cache.lastModified)
   }
-  setCacheControl(response, request, cache.revalidate)
+  setCdnCacheControlFromNext(headers, request)
   if (tags && (headers.has('cache-control') || headers.has('netlify-cdn-cache-control'))) {
     headers.set('netlify-cache-tag', tags.join(','))
   }
   setVaryHeaders(headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
   setCacheStatusHeader(headers, nextCache)
-}
-
-/** the stored response's cache inputs, through an error page to what rendered it */
-export function cacheOf(produced: Produced): CacheInputs | undefined {
-  if (produced.kind === 'error') {
-    return cacheOf(produced.produced)
-  }
-  return produced.kind === 'next' ? produced.cache : undefined
 }
 
 /**
@@ -105,7 +85,8 @@ export async function finalize(
       const errorResponse = routed(
         new Response(response.body, { status: produced.status, headers: response.headers }),
       )
-      setCacheControl(errorResponse, request, cacheOf(produced.produced)?.revalidate)
+      // routing's Cache-Control (applied with the status) replaces the one translated above
+      setCdnCacheControlFromNext(errorResponse.headers, request)
       // A cacheable 404 still has to miss for preview requests: a `fallback: false` path that is
       // not prerendered answers 404 to everyone but renders for the preview cookie, and the
       // static-file handler that produced this response only varies on the query.

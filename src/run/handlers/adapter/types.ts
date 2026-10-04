@@ -4,7 +4,6 @@ import type { Span } from '@opentelemetry/api'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
 import type { ResolveRoutesResult } from '../../../adapter-runtime-shared/next-routing.js'
-import type { PrerenderGroupBlob } from '../../../shared/blob-types.cjs'
 import type { RequestContext } from '../request-context.cjs'
 import type { getTracer } from '../tracer.cjs'
 
@@ -64,7 +63,6 @@ export type CacheInputs = {
   tags?: string[]
   // when the stored response was generated, the CDN counts its age from there
   lastModified?: number
-  revalidate?: PrerenderGroupBlob['revalidate']
 }
 
 /**
