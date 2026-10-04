@@ -750,20 +750,25 @@ async function applyCacheHeaders(
 /**
  * The one place a produced response gets its platform headers (CDN cache control, cache tags,
  * Netlify-Vary, Cache-Status), see `Produced`. `request` is the one the producer answered.
+ * `routed` applies routing's response headers (`headers()` rules, middleware) and status first, so a
+ * `Cache-Control` from them is translated for the CDN like Next's own.
  */
 async function finalize(
   produced: Produced,
   request: Request,
   requestContext: RequestContext,
+  routed: (response: Response) => Response = (response) => response,
 ): Promise<Response> {
   switch (produced.kind) {
     case 'next': {
-      await applyCacheHeaders(produced.response, request, requestContext, produced.span)
-      return produced.response
+      const response = routed(produced.response)
+      await applyCacheHeaders(response, request, requestContext, produced.span)
+      return response
     }
     case 'shell':
     case 'resume': {
-      const { kind, response } = produced
+      const { kind } = produced
+      const response = routed(produced.response)
       const cacheControl =
         kind === 'shell'
           ? 'public, max-age=0, must-revalidate'
@@ -775,7 +780,8 @@ async function finalize(
       return response
     }
     case 'static-page': {
-      const { headers } = produced.response
+      const response = routed(produced.response)
+      const { headers } = response
       // the CDN caches this for a year: without varying on the RSC headers a flight request that
       // arrives without Next's `_rsc` cache-buster would be served the HTML copy
       setVaryHeaders(headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
@@ -783,7 +789,7 @@ async function finalize(
         headers.set('cache-control', 'public, max-age=0, must-revalidate')
         headers.set('netlify-cdn-cache-control', 'max-age=31536000, durable')
       }
-      return produced.response
+      return response
     }
     case 'error': {
       const response = await finalize(produced.produced, request, requestContext)
@@ -793,10 +799,9 @@ async function finalize(
       // bot probe. That matches what Vercel serves for every not-found shape except a fully static
       // `pages/404.js`, which they leave uncached (measured 2026-09-18, see
       // docs/404-caching-vercel-matrix.md).
-      const errorResponse = new Response(response.body, {
-        status: produced.status,
-        headers: response.headers,
-      })
+      const errorResponse = routed(
+        new Response(response.body, { status: produced.status, headers: response.headers }),
+      )
       setCacheControlHeaders(errorResponse, request, requestContext)
       // A cacheable 404 still has to miss for preview requests: a `fallback: false` path that is
       // not prerendered answers 404 to everyone but renders for the preview cookie, and the
@@ -809,7 +814,7 @@ async function finalize(
       return errorResponse
     }
     default:
-      return produced.response
+      return routed(produced.response)
   }
 }
 
@@ -1420,13 +1425,11 @@ export default async function ServerHandler(request: Request, requestContext: Re
         // A rewrite whose target has no output - middleware sending `/x` to `/en-EN/x` in an app
         // with no such route, say. Next's router 404s on the target rather than erroring.
         span?.setAttribute('matched.noOutput', true)
-        return applyResolutionToThisResponse(
-          await finalize(
-            await renderErrorPage(404, { request, requestContext, tracer, span }),
-            request,
-            requestContext,
-          ),
-          404,
+        return finalize(
+          await renderErrorPage(404, { request, requestContext, tracer, span }),
+          request,
+          requestContext,
+          (response) => applyResolutionToThisResponse(response, 404),
         )
       }
 
@@ -1535,24 +1538,26 @@ export default async function ServerHandler(request: Request, requestContext: Re
         )
       }
       produced ??= await matchedHandler(handlerArgs)
-      const handlerResponse = await finalize(produced, handlerArgs.request, requestContext)
 
-      if (isNotFoundPageRequest(request, resolution.resolvedPathname)) {
+      const isNotFoundPage = isNotFoundPageRequest(request, resolution.resolvedPathname)
+      const status = isNotFoundPage
+        ? 404
+        : isStatusPageRequest(request, resolution.resolvedPathname, 500)
+          ? 500
+          : resolution.status
+      const response = await finalize(produced, handlerArgs.request, requestContext, (routed) =>
+        applyResolutionToThisResponse(routed, status),
+      )
+      if (isNotFoundPage) {
         // Next's server responds 404 here, and CACHE_404_PAGE cache-control handling keys off that
-        const notFoundResponse = applyResolutionToThisResponse(handlerResponse, 404)
-        setCacheControlHeaders(notFoundResponse, request, requestContext)
+        setCacheControlHeaders(response, request, requestContext)
         setVaryHeaders(
-          notFoundResponse.headers,
+          response.headers,
           request,
           manifest.config as Parameters<typeof setVaryHeaders>[2],
         )
-        return notFoundResponse
       }
-      if (isStatusPageRequest(request, resolution.resolvedPathname, 500)) {
-        return applyResolutionToThisResponse(handlerResponse, 500)
-      }
-
-      return applyResolutionToThisResponse(handlerResponse, resolution.status)
+      return response
     }
 
     // the edge function answers this itself; behind it `url` is the rewrite target
@@ -1582,13 +1587,11 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // TODO(adapter): this can be cached forever because it will never match any routes
     // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
     // which would require setting correct netlify-vary header.
-    return applyResolutionToThisResponse(
-      await finalize(
-        await renderErrorPage(404, { request, requestContext, tracer, span }),
-        request,
-        requestContext,
-      ),
-      404,
+    return finalize(
+      await renderErrorPage(404, { request, requestContext, tracer, span }),
+      request,
+      requestContext,
+      (response) => applyResolutionToThisResponse(response, 404),
     )
   })
 }
