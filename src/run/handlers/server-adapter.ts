@@ -114,7 +114,23 @@ type CommonHandlerArg = {
   }) => void
 }
 
-type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
+/**
+ * A response and what `finalize` needs to know to turn it into the platform response. Producers
+ * (prerender groups, invocation, static files, error pages) leave the CDN headers to `finalize`.
+ */
+type Produced =
+  // Next's response, rendered or stored: its cache-control is translated for the CDN
+  | { kind: 'next'; response: Response; span?: Parameters<typeof adjustDateHeader>[0]['span'] }
+  // per request: a fallback shell is revalidated on every request, a PPR resume is never stored
+  | { kind: 'shell' | 'resume'; response: Response }
+  // stored static HTML, a fully static page is cached for a year
+  | { kind: 'static-page'; response: Response; fullyStatic: boolean }
+  // an error page: what rendered it, served with this status
+  | { kind: 'error'; status: 404 | 500; produced: Produced }
+  // complete as is
+  | { kind: 'final'; response: Response }
+
+type Handler = (requestArgs: CommonHandlerArg) => Promise<Produced> | Produced
 
 // Build a map of pathname -> handler output for quick lookup at request time
 const handlerDefsByPathname = new Map<string, Handler>()
@@ -413,16 +429,21 @@ async function regeneratePrerenderGroup(
     }
     const url = new URL(member.pathname, args.request.url)
     url.search = routeParams.toString()
-    const response = await handler({
-      ...args,
-      request: new Request(url, {
-        headers: onDemandToken ? { 'x-prerender-revalidate': onDemandToken } : {},
-      }),
-      resolution: {},
-      invocationId,
-      raw: true,
-      ...(member === group.entry && { onCacheEntry: captureEntry }),
+    const memberRequest = new Request(url, {
+      headers: onDemandToken ? { 'x-prerender-revalidate': onDemandToken } : {},
     })
+    const response = await finalize(
+      await handler({
+        ...args,
+        request: memberRequest,
+        resolution: {},
+        invocationId,
+        raw: true,
+        ...(member === group.entry && { onCacheEntry: captureEntry }),
+      }),
+      memberRequest,
+      args.requestContext,
+    )
     const body = Buffer.from(await response.arrayBuffer())
     variants[member.pathname] = {
       status: response.status,
@@ -490,7 +511,7 @@ async function servePrerenderGroup(
   group: Required<PrerenderGroup>,
   args: CommonHandlerArg,
   onDemand?: OnDemandRevalidate,
-): Promise<Response | undefined> {
+): Promise<Produced | undefined> {
   const { request, requestContext, resolution } = args
   const params = getPrerenderGroupQuery(
     group.entry,
@@ -506,7 +527,10 @@ async function servePrerenderGroup(
 
   if (onDemand) {
     if (onDemand.onlyGenerated && !blob) {
-      return new Response('This page could not be found', { status: 404 })
+      return {
+        kind: 'final',
+        response: new Response('This page could not be found', { status: 404 }),
+      }
     }
     blob = await regeneratePrerenderGroup(groupKey, group, params, {
       ...args,
@@ -572,11 +596,7 @@ async function servePrerenderGroup(
         request.method === 'HEAD' ? null : Buffer.from(shellVariant.body, 'base64'),
         { status: shellVariant.status, headers: shellVariant.headers },
       )
-      response.headers.delete('x-next-cache-tags')
-      response.headers.set('cache-control', 'public, max-age=0, must-revalidate')
-      response.headers.set('netlify-cdn-cache-control', 'public, max-age=0, must-revalidate')
-      await applyCacheHeaders(response, request, requestContext)
-      return response
+      return { kind: 'shell', response }
     }
   }
 
@@ -628,8 +648,7 @@ async function servePrerenderGroup(
   }
   // what the cache handler reported for Pages Router entries, the 404 caching heuristics read it
   requestContext.pageHandlerRevalidate ??= blob.revalidate
-  await applyCacheHeaders(response, request, requestContext)
-  return response
+  return { kind: 'next', response }
 }
 
 /**
@@ -650,7 +669,7 @@ async function resumePrerender(
     stored?: PrerenderGroupBlob['variants'][string]
   },
   args: CommonHandlerArg,
-): Promise<Response | undefined> {
+): Promise<Produced | undefined> {
   const { request, requestContext } = args
   const { rsc } = manifest
   const isRSCRequest = Boolean(rsc) && request.headers.get(rsc.header) === '1'
@@ -676,7 +695,11 @@ async function resumePrerender(
           async start(controller) {
             controller.enqueue(shell)
             try {
-              const resumed = await handler({ ...args, resume })
+              const resumed = await finalize(
+                await handler({ ...args, resume }),
+                request,
+                requestContext,
+              )
               if (resumed.body) {
                 const reader = resumed.body.getReader()
                 for (;;) {
@@ -694,13 +717,10 @@ async function resumePrerender(
             controller.close()
           },
         })
-  const response = new Response(body, { status: stored.status, headers: stored.headers })
-  response.headers.delete('x-next-cache-tags')
-  const noStore = 'private, no-cache, no-store, max-age=0, must-revalidate'
-  response.headers.set('cache-control', noStore)
-  response.headers.set('netlify-cdn-cache-control', noStore)
-  await applyCacheHeaders(response, request, requestContext)
-  return response
+  return {
+    kind: 'resume',
+    response: new Response(body, { status: stored.status, headers: stored.headers }),
+  }
 }
 
 async function applyCacheHeaders(
@@ -725,6 +745,72 @@ async function applyCacheHeaders(
   setCacheTagsHeaders(response.headers, requestContext)
   setVaryHeaders(response.headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
   setCacheStatusHeader(response.headers, nextCache)
+}
+
+/**
+ * The one place a produced response gets its platform headers (CDN cache control, cache tags,
+ * Netlify-Vary, Cache-Status), see `Produced`. `request` is the one the producer answered.
+ */
+async function finalize(
+  produced: Produced,
+  request: Request,
+  requestContext: RequestContext,
+): Promise<Response> {
+  switch (produced.kind) {
+    case 'next': {
+      await applyCacheHeaders(produced.response, request, requestContext, produced.span)
+      return produced.response
+    }
+    case 'shell':
+    case 'resume': {
+      const { kind, response } = produced
+      const cacheControl =
+        kind === 'shell'
+          ? 'public, max-age=0, must-revalidate'
+          : 'private, no-cache, no-store, max-age=0, must-revalidate'
+      response.headers.delete('x-next-cache-tags')
+      response.headers.set('cache-control', cacheControl)
+      response.headers.set('netlify-cdn-cache-control', cacheControl)
+      await applyCacheHeaders(response, request, requestContext)
+      return response
+    }
+    case 'static-page': {
+      const { headers } = produced.response
+      // the CDN caches this for a year: without varying on the RSC headers a flight request that
+      // arrives without Next's `_rsc` cache-buster would be served the HTML copy
+      setVaryHeaders(headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
+      if (produced.fullyStatic) {
+        headers.set('cache-control', 'public, max-age=0, must-revalidate')
+        headers.set('netlify-cdn-cache-control', 'max-age=31536000, durable')
+      }
+      return produced.response
+    }
+    case 'error': {
+      const response = await finalize(produced.produced, request, requestContext)
+      // The error page keeps the cache headers of whatever rendered it. A static `404.html` is build
+      // output that only a deploy can change, and a prerendered not-found carries its own
+      // revalidate, so both are cacheable; forcing no-store here would put an origin hit on every
+      // bot probe. That matches what Vercel serves for every not-found shape except a fully static
+      // `pages/404.js`, which they leave uncached (measured 2026-09-18, see
+      // docs/404-caching-vercel-matrix.md).
+      const errorResponse = new Response(response.body, {
+        status: produced.status,
+        headers: response.headers,
+      })
+      setCacheControlHeaders(errorResponse, request, requestContext)
+      // A cacheable 404 still has to miss for preview requests: a `fallback: false` path that is
+      // not prerendered answers 404 to everyone but renders for the preview cookie, and the
+      // static-file handler that produced this response only varies on the query.
+      setVaryHeaders(
+        errorResponse.headers,
+        request,
+        manifest.config as Parameters<typeof setVaryHeaders>[2],
+      )
+      return errorResponse
+    }
+    default:
+      return produced.response
+  }
 }
 
 // serve static files
@@ -783,7 +869,7 @@ const extendedGlobalThis = globalThis as typeof globalThis & {
 async function renderErrorPage(
   status: 404 | 500,
   { request, requestContext, tracer, span }: Omit<CommonHandlerArg, 'resolution'>,
-): Promise<Response> {
+): Promise<Produced> {
   const url = new URL(request.url)
   const candidates: string[] = []
   if (status === 404) {
@@ -800,7 +886,10 @@ async function renderErrorPage(
   const pathname = candidates.find((candidate) => handlerDefsByPathname.has(candidate))
   const handler = pathname ? handlerDefsByPathname.get(pathname) : undefined
   if (!pathname || !handler) {
-    return new Response(status === 404 ? 'Not Found' : 'Internal Server Error', { status })
+    return {
+      kind: 'final',
+      response: new Response(status === 404 ? 'Not Found' : 'Internal Server Error', { status }),
+    }
   }
 
   const errorArgs: CommonHandlerArg = {
@@ -815,7 +904,7 @@ async function renderErrorPage(
   // the static shell of a PPR page, the rest comes from resuming the group's postponed state
   const prerenderVariant = getPrerenderVariant(pathname, request.headers, false)
   const prerenderGroup = prerenderVariant && prerenderGroups.get(prerenderVariant.groupId)
-  const response =
+  const produced =
     prerenderVariant && prerenderGroup?.entry
       ? ((await servePrerenderGroup(
           prerenderVariant,
@@ -823,23 +912,7 @@ async function renderErrorPage(
           errorArgs,
         )) ?? (await handler(errorArgs)))
       : await handler(errorArgs)
-
-  // The error page keeps the cache headers of whatever rendered it. A static `404.html` is build
-  // output that only a deploy can change, and a prerendered not-found carries its own revalidate,
-  // so both are cacheable; forcing no-store here would put an origin hit on every bot probe. That
-  // matches what Vercel serves for every not-found shape except a fully static `pages/404.js`,
-  // which they leave uncached (measured 2026-09-18, see docs/404-caching-vercel-matrix.md).
-  const errorResponse = new Response(response.body, { status, headers: response.headers })
-  setCacheControlHeaders(errorResponse, request, requestContext)
-  // A cacheable 404 still has to miss for preview requests: a `fallback: false` path that is not
-  // prerendered answers 404 to everyone but renders for the preview cookie, and the static-file
-  // handler that produced this response only varies on the query.
-  setVaryHeaders(
-    errorResponse.headers,
-    request,
-    manifest.config as Parameters<typeof setVaryHeaders>[2],
-  )
-  return errorResponse
+  return { kind: 'error', status, produced }
 }
 
 // a literal request for the 404 page (or its locale variant) responds with 404, like Next's server
@@ -877,11 +950,16 @@ const render404: NonNullable<RequestMeta['render404']> = async (
   if (!requestContext?.originalRequest) {
     throw new Error('render404 called outside of request context')
   }
-  const response = await renderErrorPage(404, {
-    request: requestContext.originalRequest,
+  // Next calls this mid-render and takes the page into its own response, so it is final here
+  const response = await finalize(
+    await renderErrorPage(404, {
+      request: requestContext.originalRequest,
+      requestContext,
+      tracer: getTracer(),
+    }),
+    requestContext.originalRequest,
     requestContext,
-    tracer: getTracer(),
-  })
+  )
   if (!res.headersSent) {
     res.statusCode = 404
     for (const [name, value] of response.headers) {
@@ -976,7 +1054,7 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
 async function serverStaticFile(
   { filePath, pathname }: StaticFileHandlerArg,
   { request }: CommonHandlerArg,
-) {
+): Promise<Produced> {
   // only static HTML pages live in blobs (copyStaticContent), every other static output is on the
   // CDN (copyStaticAssets). A request for the file itself never reaches the function then, so
   // getting here means a rewrite landed on it: fetch it from the CDN.
@@ -984,46 +1062,36 @@ async function serverStaticFile(
   if (!pagesBlobKey) {
     if (new URL(request.url).pathname === pathname) {
       // the CDN doesn't have it either (see copyStaticAssets), don't loop through it
-      return new Response('Not Found', { status: 404 })
+      return { kind: 'final', response: new Response('Not Found', { status: 404 }) }
     }
-    return proxyExternalRewrite(new URL(pathname, request.url), request)
+    return {
+      kind: 'final',
+      response: await proxyExternalRewrite(new URL(pathname, request.url), request),
+    }
   }
 
   const cacheStore = getMemoizedKeyValueStoreBackedByRegionalBlobStore()
   const htmlFile = await cacheStore.get<HtmlBlob>(pagesBlobKey, 'staticHtml.get')
 
-  const headers = new Headers()
-  let body = 'Not found static file'
-  let status = 404
-
-  if (htmlFile) {
-    body = htmlFile.html
-    status = 200
-    headers.set('Content-Type', 'text/html; charset=utf-8')
-    // Next appends this to any response to a flight request, Pages Router included, "to avoid
-    // caching issues when navigating between pages and app" (`base-server` `setVaryHeader`). This
-    // handler answers from stored HTML without going through a route module, so do it here too.
-    if (request.headers.has('rsc')) {
-      headers.set(
-        'vary',
-        'rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch',
-      )
-    }
-    // ...and tell the CDN, which caches this response for a year: without it the entry is keyed by
-    // query alone, so a flight request that arrives without Next's `_rsc` cache-buster would be
-    // served the HTML copy. The invoke path does this for every other response.
-    setVaryHeaders(headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
-    if (htmlFile.isFullyStaticPage) {
-      // handle CDN Cache Control on fully static pages
-      headers.set('cache-control', 'public, max-age=0, must-revalidate')
-      headers.set('netlify-cdn-cache-control', 'max-age=31536000, durable')
-    }
+  if (!htmlFile) {
+    return { kind: 'final', response: new Response('Not found static file', { status: 404 }) }
   }
 
-  return new Response(body, {
-    headers,
-    status,
-  })
+  const headers = new Headers({ 'Content-Type': 'text/html; charset=utf-8' })
+  // Next appends this to any response to a flight request, Pages Router included, "to avoid
+  // caching issues when navigating between pages and app" (`base-server` `setVaryHeader`). This
+  // handler answers from stored HTML without going through a route module, so do it here too.
+  if (request.headers.has('rsc')) {
+    headers.set(
+      'vary',
+      'rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch',
+    )
+  }
+  return {
+    kind: 'static-page',
+    response: new Response(htmlFile.html, { headers, status: 200 }),
+    fullyStatic: Boolean(htmlFile.isFullyStaticPage),
+  }
 }
 
 // Next's router answers a no-match for `_next/static` assets with plain text instead of rendering
@@ -1065,13 +1133,13 @@ async function invokeHandler(
     postponed,
     onCacheEntry,
   }: CommonHandlerArg,
-) {
+): Promise<Produced> {
   span?.setAttribute('matched.sourcePage', sourcePage)
   span?.setAttribute('matched.runtime', runtime)
   return await withActiveSpan(tracer, 'invoke route handler', async (invokeSpan) => {
     if (runtime === 'edge') {
       try {
-        return await invokeEdgeRuntimeOutput({
+        const response = await invokeEdgeRuntimeOutput({
           outputId: id,
           request,
           requestContext,
@@ -1082,11 +1150,15 @@ async function invokeHandler(
           // URL the sandbox invokes with, and as request meta it'd end up in `resolvedUrl` too
           requestMeta: { initURL: resolution.invocation?.requestMeta.initURL ?? request.url },
         })
+        return { kind: 'final' as const, response }
       } catch (error) {
         console.error('edge runtime output error', error)
         getLogger().withError(error).error('edge runtime output error')
         invokeSpan?.setAttribute('http.status_code', 500)
-        return new Response('Internal Server Error', { status: 500 })
+        return {
+          kind: 'final' as const,
+          response: new Response('Internal Server Error', { status: 500 }),
+        }
       }
     }
 
@@ -1167,10 +1239,11 @@ async function invokeHandler(
             res.emit('close')
           },
         })
-        return new Response(response.body?.pipeThrough(untilRendered), response)
+        return {
+          kind: 'final' as const,
+          response: new Response(response.body?.pipeThrough(untilRendered), response),
+        }
       }
-
-      await applyCacheHeaders(response, request, requestContext, invokeSpan)
 
       // eslint-disable-next-line no-inner-declarations
       async function waitForBackgroundWork() {
@@ -1200,12 +1273,22 @@ async function invokeHandler(
         await waitForBackgroundWork()
       }
 
-      return new Response(response.body?.pipeThrough(keepOpenUntilNextFullyRendered), response)
+      return {
+        kind: 'next' as const,
+        response: new Response(
+          response.body?.pipeThrough(keepOpenUntilNextFullyRendered),
+          response,
+        ),
+        span: invokeSpan,
+      }
     } catch (error) {
       console.error('route handler error', error)
       getLogger().withError(error).error('route handler error')
       invokeSpan?.setAttribute('http.status_code', 500)
-      return new Response('Internal Server Error', { status: 500 })
+      return {
+        kind: 'final' as const,
+        response: new Response('Internal Server Error', { status: 500 }),
+      }
     }
   })
 }
@@ -1338,7 +1421,11 @@ export default async function ServerHandler(request: Request, requestContext: Re
         // with no such route, say. Next's router 404s on the target rather than erroring.
         span?.setAttribute('matched.noOutput', true)
         return applyResolutionToThisResponse(
-          await renderErrorPage(404, { request, requestContext, tracer, span }),
+          await finalize(
+            await renderErrorPage(404, { request, requestContext, tracer, span }),
+            request,
+            requestContext,
+          ),
           404,
         )
       }
@@ -1411,7 +1498,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
         span,
       }
 
-      let handlerResponse: Response | undefined
+      let produced: Produced | undefined
       const prerenderVariant = getPrerenderVariant(
         resolution.resolvedPathname,
         requestHeaders,
@@ -1426,7 +1513,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
         const isOnDemandRevalidate =
           prerenderVariant.bypassToken !== undefined &&
           request.headers.get('x-prerender-revalidate') === prerenderVariant.bypassToken
-        handlerResponse = await servePrerenderGroup(
+        produced = await servePrerenderGroup(
           prerenderVariant,
           prerenderGroup as Required<PrerenderGroup>,
           handlerArgs,
@@ -1447,7 +1534,8 @@ export default async function ServerHandler(request: Request, requestContext: Re
           handlerArgs,
         )
       }
-      handlerResponse ??= await matchedHandler(handlerArgs)
+      produced ??= await matchedHandler(handlerArgs)
+      const handlerResponse = await finalize(produced, handlerArgs.request, requestContext)
 
       if (isNotFoundPageRequest(request, resolution.resolvedPathname)) {
         // Next's server responds 404 here, and CACHE_404_PAGE cache-control handling keys off that
@@ -1495,7 +1583,11 @@ export default async function ServerHandler(request: Request, requestContext: Re
     // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
     // which would require setting correct netlify-vary header.
     return applyResolutionToThisResponse(
-      await renderErrorPage(404, { request, requestContext, tracer, span }),
+      await finalize(
+        await renderErrorPage(404, { request, requestContext, tracer, span }),
+        request,
+        requestContext,
+      ),
       404,
     )
   })
