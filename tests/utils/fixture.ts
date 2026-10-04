@@ -10,7 +10,7 @@ import getPort from 'get-port'
 import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, parse, relative, resolve } from 'node:path'
 import { env } from 'node:process'
@@ -25,6 +25,7 @@ import {
 } from './lambda-helpers.mjs'
 
 import { glob, globSync } from 'fast-glob'
+import { http, HttpResponse } from 'msw'
 import {
   EDGE_HANDLER_NAME,
   PluginContext,
@@ -399,8 +400,64 @@ export async function runPlugin(
 
   await Promise.all([bundleEdgeFunctions(), bundleFunctions(), uploadBlobs(ctx, base.blobDir)])
 
+  if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+    ctx.cdn = { staticDir: base.staticDir, redirects: options.netlifyConfig.redirects }
+    cdnCtx = ctx
+  }
+
   return options
 }
+
+// Adapter mode publishes static output to the CDN, which on Netlify answers before the function
+// and also answers the function's own proxy requests (to the site origin). Emulate both from the
+// published `.netlify/static` and the forced status rules.
+let cdnCtx: FixtureTestContext | undefined
+
+const CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.json': 'application/json',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.txt': 'text/plain; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+}
+
+async function serveFromCdn(ctx: FixtureTestContext, url: URL): Promise<Response | undefined> {
+  if (!ctx.cdn) {
+    return
+  }
+  let pathname = decodeURIComponent(url.pathname)
+  let status = 200
+  const rule = ctx.cdn.redirects.find(
+    (redirect) => redirect.force && redirect.from === pathname && (redirect.status ?? 301) >= 400,
+  )
+  if (rule) {
+    pathname = rule.to
+    status = rule.status as number
+  }
+  for (const candidate of [pathname, `${pathname}.html`, join(pathname, 'index.html')]) {
+    const file = join(ctx.cdn.staticDir, candidate)
+    if (!file.startsWith(ctx.cdn.staticDir) || !(await stat(file).catch(() => null))?.isFile()) {
+      continue
+    }
+    return new Response(await readFile(file), {
+      status,
+      headers: {
+        'content-type': CONTENT_TYPES[parse(file).ext] ?? 'application/octet-stream',
+        // what Netlify sends for deploy files: revalidated by browsers, kept by the CDN until the next deploy
+        'cache-control': 'public, max-age=0, must-revalidate',
+        'netlify-cdn-cache-control': 'max-age=31536000, durable',
+      },
+    })
+  }
+}
+
+/** msw handler answering the function's requests to the site origin from the emulated CDN */
+export const cdnHandler = http.all('https://example.netlify/*', async ({ request }) => {
+  const response = cdnCtx && (await serveFromCdn(cdnCtx, new URL(request.url)))
+  return response ?? new HttpResponse('Not Found', { status: 404 })
+})
 
 export async function uploadBlobs(ctx: FixtureTestContext, blobsDir: string) {
   const files = await glob('**/*', {
@@ -445,6 +502,23 @@ export async function invokeFunction(
   ctx: FixtureTestContext,
   options: FunctionInvocationOptions = {},
 ) {
+  if (!options.httpMethod || ['GET', 'HEAD'].includes(options.httpMethod)) {
+    const cdnResponse = await serveFromCdn(
+      ctx,
+      new URL(options.url || '/', 'https://example.netlify'),
+    )
+    if (cdnResponse) {
+      const bodyBuffer = Buffer.from(await cdnResponse.arrayBuffer())
+      return {
+        statusCode: cdnResponse.status,
+        bodyBuffer,
+        body: bodyBuffer.toString('utf-8'),
+        headers: Object.fromEntries(cdnResponse.headers),
+        isBase64Encoded: false,
+      }
+    }
+  }
+
   // now for the execution set the process working directory to the dist entry point.
   // The handler may chdir into the app dir on load (adapter and monorepo handlers do) and Next.js
   // resolves manifests from process.cwd(), so track chdir instead of returning a fixed value. The

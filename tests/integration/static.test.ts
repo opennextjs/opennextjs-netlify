@@ -1,12 +1,21 @@
 import { load } from 'cheerio'
 import glob from 'fast-glob'
 import { getLogger } from 'lambda-local'
+import { http, passthrough } from 'msw'
+import { setupServer } from 'msw/node'
 import { existsSync } from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
 import { join } from 'node:path'
 import { v4 } from 'uuid'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
-import { createFixture, invokeFunction, runPlugin, runPluginStep } from '../utils/fixture.js'
+import {
+  cdnHandler,
+  createFixture,
+  invokeFunction,
+  runPlugin,
+  runPluginStep,
+} from '../utils/fixture.js'
 import {
   decodePageBlobKey,
   generateRandomObjectID,
@@ -18,6 +27,20 @@ import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 // Disable the verbose logging of the lambda-local runtime
 getLogger().level = 'alert'
+
+const server = setupServer(
+  cdnHandler,
+  http.all(/.*/, () => passthrough()),
+)
+// the runtime's ESM named imports of `node:https` only see msw's patch once synced
+beforeAll(() => {
+  server.listen()
+  syncBuiltinESMExports()
+})
+afterAll(() => {
+  server.close()
+  syncBuiltinESMExports()
+})
 
 beforeEach<FixtureTestContext>(async (ctx) => {
   // set for each test a new deployID and siteID

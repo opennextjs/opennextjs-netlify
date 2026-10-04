@@ -16,6 +16,10 @@ export interface FixtureTestContext extends TestContext {
   functionCwd?: string
   edgeFunctionPort: number
   edgeFunctionOutput: WriteStream
+  cdn?: {
+    staticDir: string
+    redirects: { from: string; to: string; status?: number; force?: boolean }[]
+  }
   cleanup?: (() => Promise<void>)[]
   skipAutoCleanup?: boolean
 }
