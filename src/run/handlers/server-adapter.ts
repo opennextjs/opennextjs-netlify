@@ -157,23 +157,34 @@ type Produced =
   // complete as is
   | { kind: 'final'; response: Response }
 
-type Handler = (requestArgs: CommonHandlerArg) => Promise<Produced> | Produced
-
-// Build a map of pathname -> handler output for quick lookup at request time
-const handlerDefsByPathname = new Map<string, Handler>()
-const handlerDefsId = new Map<string, Handler>()
-const basePath = manifest.config.basePath || ''
-// `@next/routing` resolves requests to the routing config's pathnames as given, so they double as
-// handler keys
-function registerHandler(pathname: string, handler: Handler) {
-  handlerDefsByPathname.set(pathname, handler)
-}
-
 type InvokeHandlerArg = {
   id: string
   entrypoint: string
   runtime: 'nodejs' | 'edge'
   sourcePage: string
+}
+
+type StaticFileHandlerArg = {
+  filePath: string
+  pathname: string
+}
+
+// what a routable pathname leads to: a compute output to invoke, or a static file to serve
+type RoutedOutput =
+  | { kind: 'compute'; output: InvokeHandlerArg }
+  | { kind: 'static'; file: StaticFileHandlerArg }
+
+// `@next/routing` resolves requests to the routing config's pathnames as given, so they double as
+// output keys
+const outputsByPathname = new Map<string, RoutedOutput>()
+// prerenders render through their parent compute output
+const computeOutputsById = new Map<string, InvokeHandlerArg>()
+const basePath = manifest.config.basePath || ''
+
+function produceOutput(routed: RoutedOutput, args: CommonHandlerArg): Promise<Produced> {
+  return routed.kind === 'compute'
+    ? invokeHandler(routed.output, args)
+    : serverStaticFile(routed.file, args)
 }
 
 // pages/app pages that are prerendered or fully static: those answer reads only, see readOnlyPathnames
@@ -192,15 +203,6 @@ const ssgSourcePages = new Set(
 )
 const ssgPathnames = new Set<string>()
 
-function createInvokeHandler(output: AdapterManifestComputeOutput): Handler {
-  return invokeHandler.bind(null, {
-    id: output.id,
-    entrypoint: output.filePath,
-    runtime: output.runtime,
-    sourcePage: output.sourcePage,
-  })
-}
-
 // outputs that invoke compute (the runtime manifest is minimized, output types come from the list)
 for (const outputs of [
   manifest.outputs.pages,
@@ -214,24 +216,29 @@ for (const outputs of [
 }
 
 function registerComputeOutput(output: AdapterManifestComputeOutput) {
-  const handler = createInvokeHandler(output)
-  handlerDefsId.set(output.id, handler)
-  registerHandler(output.pathname, handler)
+  const computeOutput = {
+    id: output.id,
+    entrypoint: output.filePath,
+    runtime: output.runtime,
+    sourcePage: output.sourcePage,
+  }
+  computeOutputsById.set(output.id, computeOutput)
+  outputsByPathname.set(output.pathname, { kind: 'compute', output: computeOutput })
   if (ssgSourcePages.has(output.sourcePage)) {
     ssgPathnames.add(output.pathname)
   }
 }
 
 for (const output of manifest.outputs.prerenders) {
-  const parentHandler = handlerDefsId.get(output.parentOutputId)
-  if (!parentHandler) {
+  const parent = computeOutputsById.get(output.parentOutputId)
+  if (!parent) {
     throw new Error(
       `Prerender output ${output.id} has parentOutputId ${output.parentOutputId} which does not exist`,
     )
   }
   // params come from the route a prerender renders: `/en/posts/[slug]` may be a shell of
   // `/[locale]/posts/[slug]`
-  registerHandler(output.pathname, parentHandler)
+  outputsByPathname.set(output.pathname, { kind: 'compute', output: parent })
   if (staticPageOutputIds.has(output.parentOutputId)) {
     readOnlyPathnames.add(output.pathname)
   }
@@ -450,8 +457,8 @@ async function regeneratePrerenderGroup(
   }
   // the entry first: its render fills Next's response cache for the other variants
   for (const member of [group.entry, ...group.members.filter((item) => item !== group.entry)]) {
-    const handler = handlerDefsId.get(member.parentOutputId)
-    if (!handler) {
+    const output = computeOutputsById.get(member.parentOutputId)
+    if (!output) {
       continue
     }
     const url = new URL(member.pathname, args.request.url)
@@ -460,7 +467,7 @@ async function regeneratePrerenderGroup(
       headers: onDemandToken ? { 'x-prerender-revalidate': onDemandToken } : {},
     })
     const response = await finalize(
-      await handler({
+      await invokeHandler(output, {
         ...args,
         request: memberRequest,
         resolution: {},
@@ -701,13 +708,13 @@ async function resumePrerender(
   const { rsc } = manifest
   const isRSCRequest = Boolean(rsc) && request.headers.get(rsc.header) === '1'
   const isPrefetch = isRSCRequest && request.headers.get(rsc.prefetchHeader) === '1'
-  const handler = handlerDefsId.get(variant.parentOutputId)
-  if (!handler || isPrefetch || (variant !== entry && !isRSCRequest)) {
+  const output = computeOutputsById.get(variant.parentOutputId)
+  if (!output || isPrefetch || (variant !== entry && !isRSCRequest)) {
     return
   }
   const resume = { postponed, headers: entry.resumeHeaders }
   if (isRSCRequest) {
-    return handler({ ...args, resume })
+    return invokeHandler(output, { ...args, resume })
   }
   if (!stored) {
     return
@@ -722,7 +729,10 @@ async function resumePrerender(
           async start(controller) {
             controller.enqueue(shell)
             try {
-              const resumed = await finalize(await handler({ ...args, resume }), request)
+              const resumed = await finalize(
+                await invokeHandler(output, { ...args, resume }),
+                request,
+              )
               if (resumed.body) {
                 const reader = resumed.body.getReader()
                 for (;;) {
@@ -855,30 +865,21 @@ async function finalize(
   }
 }
 
-// serve static files
-type StaticFileHandlerArg = {
-  filePath: string
-  pathname: string
-}
-function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
-  return serverStaticFile.bind(null, output)
-}
-
 // `public/` files live on the CDN, so a direct request never reaches the function — but a rewrite
 // resolved here does, and then the file has to be fetched from the CDN like any other static output
 for (const pathname of manifest.publicPathnames) {
-  registerHandler(
-    pathname,
-    createStaticFileHandler({ filePath: `public${pathname.slice(basePath.length)}`, pathname }),
-  )
+  outputsByPathname.set(pathname, {
+    kind: 'static',
+    file: { filePath: `public${pathname.slice(basePath.length)}`, pathname },
+  })
 }
 
 for (const output of manifest.outputs.staticFiles) {
   readOnlyPathnames.add(output.pathname)
-  registerHandler(
-    output.pathname,
-    createStaticFileHandler({ filePath: output.filePath, pathname: output.pathname }),
-  )
+  outputsByPathname.set(output.pathname, {
+    kind: 'static',
+    file: { filePath: output.filePath, pathname: output.pathname },
+  })
 }
 
 type NodeHandlerFn = (
@@ -925,9 +926,9 @@ async function renderErrorPage(
   }
   candidates.push(`${basePath}/${status}`, `${basePath}/_error`)
 
-  const pathname = candidates.find((candidate) => handlerDefsByPathname.has(candidate))
-  const handler = pathname ? handlerDefsByPathname.get(pathname) : undefined
-  if (!pathname || !handler) {
+  const pathname = candidates.find((candidate) => outputsByPathname.has(candidate))
+  const routed = pathname ? outputsByPathname.get(pathname) : undefined
+  if (!pathname || !routed) {
     return {
       kind: 'final',
       response: new Response(status === 404 ? 'Not Found' : 'Internal Server Error', { status }),
@@ -952,8 +953,8 @@ async function renderErrorPage(
           prerenderVariant,
           prerenderGroup as Required<PrerenderGroup>,
           errorArgs,
-        )) ?? (await handler(errorArgs)))
-      : await handler(errorArgs)
+        )) ?? (await produceOutput(routed, errorArgs)))
+      : await produceOutput(routed, errorArgs)
   return { kind: 'error', status, produced }
 }
 
@@ -1456,8 +1457,8 @@ export default async function ServerHandler(
     // Handle matched route
     if (resolution.resolvedPathname) {
       span?.setAttribute('matched.pathname', resolution.resolvedPathname)
-      const matchedHandler = handlerDefsByPathname.get(resolution.resolvedPathname)
-      if (!matchedHandler) {
+      const matched = outputsByPathname.get(resolution.resolvedPathname)
+      if (!matched) {
         // A rewrite whose target has no output - middleware sending `/x` to `/en-EN/x` in an app
         // with no such route, say. Next's router 404s on the target rather than erroring.
         span?.setAttribute('matched.noOutput', true)
@@ -1572,7 +1573,7 @@ export default async function ServerHandler(
           handlerArgs,
         )
       }
-      produced ??= await matchedHandler(handlerArgs)
+      produced ??= await produceOutput(matched, handlerArgs)
 
       const isNotFoundPage = isNotFoundPageRequest(request, resolution.resolvedPathname)
       const status = isNotFoundPage
