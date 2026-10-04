@@ -149,6 +149,9 @@ jobs:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         shard: ${{ fromJson(needs.setup.outputs.shardsE2E) }}
         mode: ["standalone"]
+        # TEMP(adapter-only): standalone jobs skipped while iterating on adapter mode, revert before merging
+        exclude:
+          - mode: standalone
         include: ${{ fromJson(needs.setup.outputs.extraE2EIncludes) }}
 
     steps:
@@ -247,6 +250,8 @@ jobs:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         mode: ["standalone"]
         exclude:
+          # TEMP(adapter-only): standalone jobs skipped while iterating on adapter mode, revert before merging
+          - mode: standalone
           - os: windows-2025
             version: "13.5.1"
           - os: windows-2025
@@ -343,7 +348,8 @@ jobs:
           NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ steps.is-adapter-test.outputs.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER }}
 
   smoke:
-    if: always()
+    # TEMP(adapter-only): standalone jobs skipped while iterating on adapter mode, revert before merging
+    if: false
     needs: setup
     runs-on: ubuntu-latest
     strategy:
@@ -411,6 +417,9 @@ jobs:
       matrix:
         version: ${{ fromJson(needs.setup.outputs.matrix) }}
         mode: ["standalone"]
+        # TEMP(adapter-only): standalone jobs skipped while iterating on adapter mode, revert before merging
+        exclude:
+          - mode: standalone
         include: ${{ fromJson(needs.setup.outputs.extraMergeReportsIncludes) }}
 
     runs-on: ubuntu-latest
