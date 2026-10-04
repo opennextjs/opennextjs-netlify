@@ -13,7 +13,7 @@ import {
 } from '../../adapter-runtime-shared/next-routing.js'
 import type { ResolveRoutesResult } from '../../adapter-runtime-shared/next-routing.js'
 import { PLUGIN_DIR } from '../constants.js'
-import { getRequestMeta, setVaryHeaders } from '../headers.js'
+import { getRequestMeta } from '../headers.js'
 import {
   setFetchBeforeNextPatchedIt,
   setInMemoryCacheMaxSizeFromNextConfig,
@@ -27,7 +27,7 @@ import {
   produceTarget,
   renderErrorPage,
 } from './adapter/dispatch.js'
-import { cacheOf, finalize, setCacheControl } from './adapter/finalize.js'
+import { finalize } from './adapter/finalize.js'
 import { configureInvoke } from './adapter/invoke.js'
 import { basePath, manifest } from './adapter/manifest.js'
 import { servePrerenderGroup } from './adapter/prerender-store.js'
@@ -297,19 +297,13 @@ export default async function ServerHandler(
         : isStatusPageRequest(request, resolution.resolvedPathname, 500)
           ? 500
           : resolution.status
-      const response = await finalize(produced, handlerArgs.request, (routed) =>
-        applyResolutionToProduced(routed, status),
+      // Next's server responds 404 to a direct request for the 404 page, served like any error page
+      // (CACHE_404_PAGE cache-control handling keys off the status)
+      return finalize(
+        isNotFoundPage ? { kind: 'error', status: 404, produced } : produced,
+        handlerArgs.request,
+        (routed) => applyResolutionToProduced(routed, status),
       )
-      if (isNotFoundPage) {
-        // Next's server responds 404 here, and CACHE_404_PAGE cache-control handling keys off that
-        setCacheControl(response, request, cacheOf(produced)?.revalidate)
-        setVaryHeaders(
-          response.headers,
-          request,
-          manifest.config as Parameters<typeof setVaryHeaders>[2],
-        )
-      }
-      return response
     }
 
     // the edge function answers this itself; behind it `url` is the rewrite target

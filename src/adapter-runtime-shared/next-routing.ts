@@ -157,7 +157,10 @@ export function applyResolutionToResponse(
         if (hasExplicitCacheControl && !routingCacheControlWins) {
           continue
         }
+        // the CDN policy derived from the replaced Cache-Control goes with it (an error page is
+        // translated before it gets its status and routing's headers)
         headers.delete('cdn-cache-control')
+        headers.delete('netlify-cdn-cache-control')
       }
       if (normalizedKey === 'location' && resolution.redirect) {
         headers.set(key, resolution.redirect.url.toString())
