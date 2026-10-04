@@ -61,15 +61,16 @@ export const copyStaticContent = async (ctx: PluginContext): Promise<void> => {
           .map(async (path): Promise<void> => {
             const isFallback = fallbacks.includes(path.slice(0, -5))
             // adapter mode serves fallbacks from their prerender group (copyPrerenderGroups)
-            // TODO: adapter mode still stores the static HTML outputs (404.html, 500.html, fully
-            // static pages) in blobs for the static-file handler; figure out how to serve them as
-            // static files from the CDN instead (status codes, error page cache headers)
             if (isFallback && ctx.hasAdapter()) {
               return
             }
 
             const html = await readFile(join(srcDir, path), 'utf-8')
             verifyNetlifyForms(ctx, html)
+            // adapter mode publishes static HTML to the CDN (copyStaticAssets)
+            if (ctx.hasAdapter()) {
+              return
+            }
 
             const isFullyStaticPage = !isFallback && fullyStaticPages.includes(path)
 
@@ -99,15 +100,13 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
           recursive: true,
         })
       }
-      const { adapterOutput, relativeAppDir, staticDir, netlifyConfig, publishDir } = ctx
+      const { adapterOutput, staticDir, netlifyConfig, publishDir } = ctx
       if (adapterOutput) {
-        // the adapter output lists `<distDir>/static` and the static metadata routes (robots.txt,
-        // sitemap.xml, manifest.webmanifest, static opengraph-image...) as `<route>.body` files;
-        // `public/` is not in it (copied above). Static HTML pages (`server/pages/`) stay on blobs:
-        // the function handles their 404 status and durable caching.
+        // the adapter output lists `<distDir>/static`, the static metadata routes (robots.txt,
+        // sitemap.xml, manifest.webmanifest, static opengraph-image...) as `<route>.body` files and
+        // the static Pages HTML (fully static pages, 404, 500) as `server/pages/*.html`; `public/` is
+        // not in it (copied above)
         const { repoRoot, config, outputs, routing } = adapterOutput
-        const distDir = join(relativeAppDir, config.distDir)
-        const blobServedPrefix = `${distDir}/server/pages/`
         // `headers()` from next.config: the routing tables apply them before middleware runs, but a
         // file the CDN serves never reaches routing, so bake them into the deploy config. Rules with
         // `has`/`missing` conditions or a status (the internal redirects) can't be evaluated here.
@@ -121,11 +120,17 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
             const filePath = isAbsolute(output.filePath)
               ? relative(repoRoot, output.filePath)
               : output.filePath
-            if (filePath.startsWith(blobServedPrefix)) {
-              return
-            }
             const src = join(repoRoot, filePath)
-            const dest = join(staticDir, output.pathname)
+            const dest = join(staticDir, getPublishedPath(output.pathname, filePath, config))
+            if (isStatusPagePathname(output.pathname, config)) {
+              // the CDN serves a file with 200, a direct request for the 404/500 page gets its status
+              netlifyConfig.redirects.push({
+                from: output.pathname,
+                to: getPublishedPath(output.pathname, filePath, config),
+                status: Number(output.pathname.slice(-3)),
+                force: true,
+              })
+            }
             await mkdir(dirname(dest), { recursive: true })
             await cp(src, dest)
             const configHeaders = Object.assign(
@@ -173,6 +178,34 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
       ctx.failBuild('Failed copying static assets', error)
     }
   })
+}
+
+// HTML is published under a name the CDN serves for the route (`/about` from `about.html`, or
+// `about/index.html` with trailingSlash); other static outputs keep their pathname (`robots.txt`)
+function getPublishedPath(
+  pathname: string,
+  filePath: string,
+  { basePath, trailingSlash }: { basePath?: string; trailingSlash?: boolean },
+): string {
+  if (!filePath.endsWith('.html')) {
+    return pathname
+  }
+  if (pathname === (basePath || '/') || pathname === `${basePath}/`) {
+    return `${basePath}/index.html`
+  }
+  return trailingSlash ? `${pathname.replace(/\/$/, '')}/index.html` : `${pathname}.html`
+}
+
+function isStatusPagePathname(
+  pathname: string,
+  { basePath = '', i18n }: { basePath?: string; i18n?: { locales: readonly string[] } | null },
+): boolean {
+  const pages = ['404', '500']
+  return pages.some(
+    (page) =>
+      pathname === `${basePath}/${page}` ||
+      (i18n?.locales ?? []).some((locale) => pathname === `${basePath}/${locale}/${page}`),
+  )
 }
 
 export const setHeadersConfig = async (ctx: PluginContext): Promise<void> => {
