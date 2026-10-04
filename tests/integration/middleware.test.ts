@@ -10,7 +10,7 @@ import {
   invokeFunction,
   runPlugin,
 } from '../utils/fixture.js'
-import { generateRandomObjectID, startMockBlobStore } from '../utils/helpers.js'
+import { generateRandomObjectID, isAdapterMode, startMockBlobStore } from '../utils/helpers.js'
 import { LocalServer } from '../utils/local-server.js'
 import { hasNodeMiddlewareSupport, nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
@@ -986,3 +986,41 @@ describe('public URL of a middleware rewrite in the server handler', () => {
     expect(url.search).toBe('?added=1')
   })
 })
+
+// The edge function routes when the app has middleware, the server handler when nothing ran in front
+// of it. Both go through the shared `resolve()`/`answerWithoutCompute()`, so what routing answers on
+// its own (no output invoked) must come out the same from either.
+describe.skipIf(!isAdapterMode)(
+  'routing answers from the edge function and the server handler',
+  () => {
+    test<FixtureTestContext>('agree on redirects and unmatched data requests', async (ctx) => {
+      await createFixture('middleware-pages', ctx)
+      await runPlugin(ctx)
+
+      const origin = await LocalServer.run(async (_req, res) => {
+        res.write('origin')
+        res.end()
+      })
+      ctx.cleanup?.push(() => origin.stop())
+
+      for (const url of ['/redirect-1', '/_next/data/build-id/does/not/exist.json']) {
+        const edge = await invokeEdgeFunction(ctx, {
+          functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+          origin,
+          redirect: 'manual',
+          url,
+        })
+        const server = await invokeFunction(ctx, { url })
+
+        expect(server.statusCode, url).toBe(edge.status)
+        const location = (value: string | null | undefined) =>
+          value ? new URL(value, 'http://n').pathname : value
+        expect(location(server.headers.location as string | undefined), url).toBe(
+          location(edge.headers.get('location')) ?? undefined,
+        )
+        expect(server.body, url).toBe(await edge.text())
+      }
+      expect(origin.calls).toBe(0)
+    })
+  },
+)
