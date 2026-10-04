@@ -56,6 +56,11 @@ function getFallbackRequestID() {
   return `#${requestNumber}`
 }
 
+/** The CDN revalidating a stale response in the background (stale-while-revalidate) */
+export function isBackgroundRevalidationRequest(request: Request): boolean {
+  return request.headers.get('netlify-invocation-source') === 'background-revalidation'
+}
+
 export function createRequestContext(request?: Request, context?: Context): RequestContext {
   const backgroundWorkPromises: Promise<unknown>[] = []
 
@@ -71,8 +76,7 @@ export function createRequestContext(request?: Request, context?: Context): Requ
       url: request?.url,
     })
 
-  const isBackgroundRevalidation =
-    request?.headers.get('netlify-invocation-source') === 'background-revalidation'
+  const isBackgroundRevalidation = request ? isBackgroundRevalidationRequest(request) : false
 
   if (isBackgroundRevalidation) {
     logger.debug('[NetlifyNextRuntime] Background revalidation request')

@@ -29,11 +29,11 @@ import { getAdapterManifest } from '../config.js'
 import { PLUGIN_DIR } from '../constants.js'
 import { toComputeResponse, toReqRes } from '../fetch-api-to-req-res.js'
 import {
-  adjustDateHeader,
   getRequestMeta,
-  setCacheControlHeaders,
+  notFoundHeuristics,
   setCacheStatusHeader,
-  setCacheTagsHeaders,
+  setCdnCacheControlFromNext,
+  setDateFromLastModified,
   setVaryHeaders,
 } from '../headers.js'
 import {
@@ -44,7 +44,11 @@ import {
 
 import { NetlifyAdapterCacheHandler } from './cache-adapter.cjs'
 import { invokeEdgeRuntimeOutput } from './edge-runtime-sandbox.js'
-import { getRequestContext, type RequestContext } from './request-context.cjs'
+import {
+  getRequestContext,
+  isBackgroundRevalidationRequest,
+  type RequestContext,
+} from './request-context.cjs'
 import { getLogger } from './request-context.cjs'
 import { encodeCacheTag, isAnyTagStaleOrExpired, purgeEdgeCache } from './tags-handler.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
@@ -115,12 +119,23 @@ type CommonHandlerArg = {
 }
 
 /**
+ * What a stored prerender group knows about the response it serves, for its cache headers. A
+ * rendered response says it itself (`x-next-cache-tags`, `cache-control`).
+ */
+type CacheInputs = {
+  tags?: string[]
+  // when the stored response was generated, the CDN counts its age from there
+  lastModified?: number
+  revalidate?: PrerenderGroupBlob['revalidate']
+}
+
+/**
  * A response and what `finalize` needs to know to turn it into the platform response. Producers
  * (prerender groups, invocation, static files, error pages) leave the CDN headers to `finalize`.
  */
 type Produced =
   // Next's response, rendered or stored: its cache-control is translated for the CDN
-  | { kind: 'next'; response: Response; span?: Parameters<typeof adjustDateHeader>[0]['span'] }
+  | { kind: 'next'; response: Response; cache?: CacheInputs }
   // per request: a fallback shell is revalidated on every request, a PPR resume is never stored
   | { kind: 'shell' | 'resume'; response: Response }
   // stored static HTML, a fully static page is cached for a year
@@ -442,7 +457,6 @@ async function regeneratePrerenderGroup(
         ...(member === group.entry && { onCacheEntry: captureEntry }),
       }),
       memberRequest,
-      args.requestContext,
     )
     const body = Buffer.from(await response.arrayBuffer())
     variants[member.pathname] = {
@@ -544,7 +558,7 @@ async function servePrerenderGroup(
     const tags = await isAnyTagStaleOrExpired(blob.tags, blob.lastModified)
     const expired = tags.expired || (blob.expire !== undefined && age > blob.expire)
     const stale = tags.stale || (blob.revalidate !== false && age > blob.revalidate)
-    if (expired || (stale && requestContext.isBackgroundRevalidation)) {
+    if (expired || (stale && isBackgroundRevalidationRequest(request))) {
       blob = null
     } else if (stale) {
       nextCache = 'STALE'
@@ -640,15 +654,16 @@ async function servePrerenderGroup(
     { status: stored.status, headers: stored.headers },
   )
   response.headers.set('x-nextjs-cache', nextCache)
-  if (nextCache !== 'MISS') {
-    requestContext.responseCacheGetLastModified = blob.lastModified
+  return {
+    kind: 'next',
+    response,
+    cache: {
+      lastModified: nextCache === 'MISS' ? undefined : blob.lastModified,
+      tags: stored.headers['x-next-cache-tags'] ? undefined : blob.tags.map(encodeCacheTag),
+      // the 404 caching heuristics read it for a prerendered 404 page
+      revalidate: blob.revalidate,
+    },
   }
-  if (!stored.headers['x-next-cache-tags']) {
-    requestContext.responseCacheTags ??= blob.tags.map(encodeCacheTag)
-  }
-  // what the cache handler reported for Pages Router entries, the 404 caching heuristics read it
-  requestContext.pageHandlerRevalidate ??= blob.revalidate
-  return { kind: 'next', response }
 }
 
 /**
@@ -670,7 +685,7 @@ async function resumePrerender(
   },
   args: CommonHandlerArg,
 ): Promise<Produced | undefined> {
-  const { request, requestContext } = args
+  const { request } = args
   const { rsc } = manifest
   const isRSCRequest = Boolean(rsc) && request.headers.get(rsc.header) === '1'
   const isPrefetch = isRSCRequest && request.headers.get(rsc.prefetchHeader) === '1'
@@ -695,11 +710,7 @@ async function resumePrerender(
           async start(controller) {
             controller.enqueue(shell)
             try {
-              const resumed = await finalize(
-                await handler({ ...args, resume }),
-                request,
-                requestContext,
-              )
+              const resumed = await finalize(await handler({ ...args, resume }), request)
               if (resumed.body) {
                 const reader = resumed.body.getReader()
                 for (;;) {
@@ -723,28 +734,43 @@ async function resumePrerender(
   }
 }
 
-async function applyCacheHeaders(
+function setCacheControl(
   response: Response,
   request: Request,
-  requestContext: RequestContext,
-  span?: Parameters<typeof adjustDateHeader>[0]['span'],
+  pageRevalidate: CacheInputs['revalidate'],
 ) {
-  // in minimal mode Next leaves the tags on the response instead of going through the cache handler
-  const nextCacheTags = response.headers.get('x-next-cache-tags')
-  if (nextCacheTags) {
-    // split like the cache handler and the purge do, `%2c` included
-    requestContext.responseCacheTags ??= nextCacheTags.split(/,|%2c/gi).map(encodeCacheTag)
-    response.headers.delete('x-next-cache-tags')
+  if (response.status === 404 && notFoundHeuristics(request, response.headers, pageRevalidate)) {
+    return
   }
+  setCdnCacheControlFromNext(response.headers, request)
+}
 
-  const nextCache = response.headers.get('x-nextjs-cache')
-  if (nextCache === 'HIT' || nextCache === 'STALE') {
-    await adjustDateHeader({ headers: response.headers, request, span, requestContext })
+function applyCacheHeaders(response: Response, request: Request, cache: CacheInputs = {}) {
+  const { headers } = response
+  // in minimal mode Next leaves the tags on the response instead of going through the cache handler
+  const nextCacheTags = headers.get('x-next-cache-tags')
+  // split like the cache handler and the purge do, `%2c` included
+  const tags = nextCacheTags ? nextCacheTags.split(/,|%2c/gi).map(encodeCacheTag) : cache.tags
+  headers.delete('x-next-cache-tags')
+
+  const nextCache = headers.get('x-nextjs-cache')
+  if ((nextCache === 'HIT' || nextCache === 'STALE') && cache.lastModified) {
+    setDateFromLastModified(headers, cache.lastModified)
   }
-  setCacheControlHeaders(response, request, requestContext)
-  setCacheTagsHeaders(response.headers, requestContext)
-  setVaryHeaders(response.headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
-  setCacheStatusHeader(response.headers, nextCache)
+  setCacheControl(response, request, cache.revalidate)
+  if (tags && (headers.has('cache-control') || headers.has('netlify-cdn-cache-control'))) {
+    headers.set('netlify-cache-tag', tags.join(','))
+  }
+  setVaryHeaders(headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
+  setCacheStatusHeader(headers, nextCache)
+}
+
+/** the stored response's cache inputs, through an error page to what rendered it */
+function cacheOf(produced: Produced): CacheInputs | undefined {
+  if (produced.kind === 'error') {
+    return cacheOf(produced.produced)
+  }
+  return produced.kind === 'next' ? produced.cache : undefined
 }
 
 /**
@@ -756,13 +782,12 @@ async function applyCacheHeaders(
 async function finalize(
   produced: Produced,
   request: Request,
-  requestContext: RequestContext,
   routed: (response: Response) => Response = (response) => response,
 ): Promise<Response> {
   switch (produced.kind) {
     case 'next': {
       const response = routed(produced.response)
-      await applyCacheHeaders(response, request, requestContext, produced.span)
+      applyCacheHeaders(response, request, produced.cache)
       return response
     }
     case 'shell':
@@ -776,7 +801,7 @@ async function finalize(
       response.headers.delete('x-next-cache-tags')
       response.headers.set('cache-control', cacheControl)
       response.headers.set('netlify-cdn-cache-control', cacheControl)
-      await applyCacheHeaders(response, request, requestContext)
+      applyCacheHeaders(response, request)
       return response
     }
     case 'static-page': {
@@ -792,7 +817,7 @@ async function finalize(
       return response
     }
     case 'error': {
-      const response = await finalize(produced.produced, request, requestContext)
+      const response = await finalize(produced.produced, request)
       // The error page keeps the cache headers of whatever rendered it. A static `404.html` is build
       // output that only a deploy can change, and a prerendered not-found carries its own
       // revalidate, so both are cacheable; forcing no-store here would put an origin hit on every
@@ -802,7 +827,7 @@ async function finalize(
       const errorResponse = routed(
         new Response(response.body, { status: produced.status, headers: response.headers }),
       )
-      setCacheControlHeaders(errorResponse, request, requestContext)
+      setCacheControl(errorResponse, request, cacheOf(produced.produced)?.revalidate)
       // A cacheable 404 still has to miss for preview requests: a `fallback: false` path that is
       // not prerendered answers 404 to everyone but renders for the preview cookie, and the
       // static-file handler that produced this response only varies on the query.
@@ -963,7 +988,6 @@ const render404: NonNullable<RequestMeta['render404']> = async (
       tracer: getTracer(),
     }),
     requestContext.originalRequest,
-    requestContext,
   )
   if (!res.headersSent) {
     res.statusCode = 404
@@ -1012,8 +1036,6 @@ const revalidate: NonNullable<RequestMeta['revalidate']> = async (args) => {
     },
   )
 
-  // ensure to trigger cache-tag revalidation after storing cache entries in cache handler
-  requestContext.didPagesRouterOnDemandRevalidate = true
   const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
   requestContext.trackBackgroundWork(revalidatePromise)
   return revalidatePromise
@@ -1284,7 +1306,6 @@ async function invokeHandler(
           response.body?.pipeThrough(keepOpenUntilNextFullyRendered),
           response,
         ),
-        span: invokeSpan,
       }
     } catch (error) {
       console.error('route handler error', error)
@@ -1428,7 +1449,6 @@ export default async function ServerHandler(request: Request, requestContext: Re
         return finalize(
           await renderErrorPage(404, { request, requestContext, tracer, span }),
           request,
-          requestContext,
           (response) => applyResolutionToThisResponse(response, 404),
         )
       }
@@ -1545,12 +1565,12 @@ export default async function ServerHandler(request: Request, requestContext: Re
         : isStatusPageRequest(request, resolution.resolvedPathname, 500)
           ? 500
           : resolution.status
-      const response = await finalize(produced, handlerArgs.request, requestContext, (routed) =>
+      const response = await finalize(produced, handlerArgs.request, (routed) =>
         applyResolutionToThisResponse(routed, status),
       )
       if (isNotFoundPage) {
         // Next's server responds 404 here, and CACHE_404_PAGE cache-control handling keys off that
-        setCacheControlHeaders(response, request, requestContext)
+        setCacheControl(response, request, cacheOf(produced)?.revalidate)
         setVaryHeaders(
           response.headers,
           request,
@@ -1590,7 +1610,6 @@ export default async function ServerHandler(request: Request, requestContext: Re
     return finalize(
       await renderErrorPage(404, { request, requestContext, tracer, span }),
       request,
-      requestContext,
       (response) => applyResolutionToThisResponse(response, 404),
     )
   })

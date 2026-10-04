@@ -245,6 +245,10 @@ export const adjustDateHeader = async ({
     return
   }
 
+  setDateFromLastModified(headers, lastModified)
+}
+
+export function setDateFromLastModified(headers: Headers, lastModified: number) {
   const lastModifiedDate = new Date(lastModified)
   // Show actual date of the function call in the date header
   headers.set('x-nextjs-date', headers.get('date') ?? lastModifiedDate.toUTCString())
@@ -268,7 +272,8 @@ function setCacheControlFromRequestContext(
 export function notFoundHeuristics(
   request: Request,
   headers: Headers,
-  requestContext: RequestContext,
+  // what the cache handler reported for the page, for CACHE_404_PAGE
+  pageRevalidate: NetlifyCachedRouteValue['revalidate'] | undefined,
 ) {
   if (request.url.endsWith('.php')) {
     // temporary CDN Cache Control handling for bot probes on PHP files
@@ -284,7 +289,7 @@ export function notFoundHeuristics(
     ['GET', 'HEAD'].includes(request.method)
   ) {
     // handle CDN Cache Control on 404 Page responses
-    setCacheControlFromRequestContext(headers, requestContext.pageHandlerRevalidate)
+    setCacheControlFromRequestContext(headers, pageRevalidate)
     return true
   }
 
@@ -311,10 +316,37 @@ export const setCacheControlHeaders = (
     return
   }
 
-  if (status === 404 && notFoundHeuristics(request, headers, requestContext)) {
+  if (
+    status === 404 &&
+    notFoundHeuristics(request, headers, requestContext.pageHandlerRevalidate)
+  ) {
     return
   }
 
+  if (setCdnCacheControlFromNext(headers, request)) {
+    return
+  }
+
+  if (
+    headers.get('cache-control') === null &&
+    ['GET', 'HEAD'].includes(request.method) &&
+    !headers.has('cdn-cache-control') &&
+    !headers.has('netlify-cdn-cache-control') &&
+    requestContext.usedFsReadForNonFallback &&
+    !requestContext.didPagesRouterOnDemandRevalidate
+  ) {
+    // handle CDN Cache Control on static files
+    headers.set('cache-control', 'public, max-age=0, must-revalidate')
+    headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
+  }
+}
+
+/**
+ * Split Next's cache-control into the browser's and the CDN's (`durable`, a year of
+ * stale-while-revalidate), unless the response already says what the CDN should do. Returns whether
+ * it did.
+ */
+export function setCdnCacheControlFromNext(headers: Headers, request: Request): boolean {
   const cacheControl = headers.get('cache-control')
 
   if (
@@ -349,21 +381,9 @@ export const setCacheControlHeaders = (
     // if cdn-cache-control is set by Next.js we need to remove it to avoid confusion, as we will be using netlify-cdn-cache-control
     headers.delete('cdn-cache-control')
     headers.set('netlify-cdn-cache-control', cdnCacheControl)
-    return
+    return true
   }
-
-  if (
-    cacheControl === null &&
-    ['GET', 'HEAD'].includes(request.method) &&
-    !headers.has('cdn-cache-control') &&
-    !headers.has('netlify-cdn-cache-control') &&
-    requestContext.usedFsReadForNonFallback &&
-    !requestContext.didPagesRouterOnDemandRevalidate
-  ) {
-    // handle CDN Cache Control on static files
-    headers.set('cache-control', 'public, max-age=0, must-revalidate')
-    headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
-  }
+  return false
 }
 
 export const setCacheTagsHeaders = (headers: Headers, requestContext: RequestContext) => {
