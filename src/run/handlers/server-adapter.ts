@@ -30,6 +30,7 @@ import {
 import { cacheOf, finalize, setCacheControl } from './adapter/finalize.js'
 import { configureInvoke } from './adapter/invoke.js'
 import { basePath, manifest } from './adapter/manifest.js'
+import { servePrerenderGroup } from './adapter/prerender-store.js'
 import type { AdapterRequestContext, ProduceRequest } from './adapter/types.js'
 import { NetlifyAdapterCacheHandler } from './cache-adapter.cjs'
 import { getLogger, getRequestContext } from './request-context.cjs'
@@ -101,6 +102,36 @@ const render404: NonNullable<RequestMeta['render404']> = async (
   res.end(Buffer.from(await response.arrayBuffer()))
 }
 
+/**
+ * `res.revalidate()`: Next hands over a path and the headers carrying the bypass token. Routing and
+ * dispatch find the prerender group (the path may be dynamic or rewritten), then the prerender store
+ * regenerates it on demand. Nothing is served, so there is nothing to finalize.
+ */
+async function revalidateOnDemand(
+  request: Request,
+  requestContext: AdapterRequestContext,
+): Promise<void> {
+  const headers = stripInternalRequestHeaders(new Headers(request.headers))
+  const resolution = await resolve(
+    { url: new URL(request.url), headers, requestBody: new ReadableStream() },
+    manifest.routingConfig,
+  )
+  if (!resolution.resolvedPathname) {
+    return
+  }
+  const target = dispatch(resolution.resolvedPathname, resolution, request, headers)
+  if (target.kind !== 'output' || !target.prerender?.onDemand) {
+    return
+  }
+  const { variant, group, onDemand } = target.prerender
+  await servePrerenderGroup(
+    variant,
+    group,
+    { request, requestContext, resolution, tracer: getTracer() },
+    onDemand,
+  )
+}
+
 // passed via requestMeta so pages router `res.revalidate()` goes through this handler instead of network
 const revalidate: NonNullable<RequestMeta['revalidate']> = async (args) => {
   const { urlPath, headers: revalidateHeaders } = args
@@ -134,7 +165,7 @@ const revalidate: NonNullable<RequestMeta['revalidate']> = async (args) => {
     },
   )
 
-  const revalidatePromise = ServerHandler(revalidateRequest, requestContext)
+  const revalidatePromise = revalidateOnDemand(revalidateRequest, requestContext)
   requestContext.trackBackgroundWork(revalidatePromise)
   return revalidatePromise
     .catch((revalidateError) => {
