@@ -22,73 +22,15 @@ import {
   applyResolutionToResponse,
   getInvocationUrl,
   isUnmatchedNextDataRequest,
-  resolveRoutes,
+  resolve,
   responseToMiddlewareResult,
   stripInternalRequestHeaders,
 } from '../adapter-runtime-shared/next-routing.js'
-import type { ResolveRoutesResult } from '../adapter-runtime-shared/next-routing.js'
+import type { ResolveRoutesResult, RoutingConfig } from '../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../adapter-runtime-shared/proxy-external-rewrite.js'
 // import { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
 const REWRITE_HEADERS = new Set(['x-nextjs-rewritten-path', 'x-nextjs-rewritten-query'])
-
-interface Route {
-  source?: string
-  sourceRegex: string
-  destination?: string
-  headers?: Record<string, string>
-  has?: Array<{ type: string; key?: string; value?: string }>
-  missing?: Array<{ type: string; key?: string; value?: string }>
-  status?: number
-  priority?: boolean
-}
-
-export interface RoutingConfig {
-  buildId: string
-  basePath: string
-  i18n: {
-    defaultLocale: string
-    locales: string[]
-    localeDetection?: false
-    domains?: Array<{
-      defaultLocale: string
-      domain: string
-      http?: true
-      locales?: string[]
-    }>
-  } | null
-  routes: {
-    caseSensitive?: boolean
-    beforeMiddleware: Array<Route>
-    middlewareMatchers?: Array<Route>
-    beforeFiles: Array<Route>
-    afterFiles: Array<Route>
-    dynamicRoutes: Array<Route>
-    onMatch: Array<Route>
-    fallback: Array<Route>
-    shouldNormalizeNextData: boolean
-  }
-  // output pathnames with the output type (`public/` files as `STATIC_FILE`), see collectPathnames
-  pathnames: Array<{ pathname: string; type: string }>
-  skipProxyUrlNormalize?: boolean
-}
-
-interface RequestData {
-  headers: Record<string, string>
-  method: string
-  url: string
-  body?: ReadableStream<Uint8Array>
-  nextConfig?: {
-    basePath?: string
-    i18n?: {
-      defaultLocale: string
-      localeDetection?: false
-      locales: string[]
-    } | null
-    trailingSlash?: boolean
-    skipMiddlewareUrlNormalize?: boolean
-  }
-}
 
 // an edge entry's `edgeRuntime.handlerExport` (Next's adapter docs, "Invoking entrypoints")
 type NextHandler = (
@@ -157,13 +99,11 @@ function serializeResolution(resolution: ResolveRoutesResult): string {
 /**
  * Main entry point for the routing + middleware edge function.
  */
-// eslint-disable-next-line max-params
 export async function runNextRouting(
   request: Request,
   context: Context,
   routingConfig: RoutingConfig,
   middlewareConfig: MiddlewareConfig,
-  nextConfig: RequestData['nextConfig'],
 ): Promise<Response | undefined> {
   const url = new URL(request.url)
   let middlewareResponse: Response | undefined
@@ -173,9 +113,6 @@ export async function runNextRouting(
   // (x-middleware-override-headers / x-middleware-request-*) are applied in place to this object
   let middlewareRequestHeaders: Headers | undefined
 
-  // Cast config values — local type definitions are intentionally loose
-  // since this file runs in Deno without type-checking. The next-routing
-  // package expects stricter literal types (e.g. `http?: true` vs `boolean`).
   // the edge function is where a request enters, so this is the boundary Next's router-server
   // filters at; `resolveRoutes` sets `x-nextjs-data` back from the URL
   // only this function may set the private meta header, a client must not be able to pre-populate
@@ -187,18 +124,10 @@ export async function runNextRouting(
   // middleware actually runs (Next buffers the whole body for the same reason, see
   // `getCloneableBody`/`cloneBodyStream`) and keep the branch nobody read out of the way.
   let originBody = request.body
-  const resolution = await resolveRoutes({
-    url,
-    buildId: routingConfig.buildId,
-    basePath: routingConfig.basePath,
-    trailingSlash: nextConfig?.trailingSlash,
-    skipMiddlewareUrlNormalize: nextConfig?.skipMiddlewareUrlNormalize,
-    requestBody: request.body ?? new ReadableStream(),
-    headers: routingHeaders,
-    pathnames: routingConfig.pathnames as Parameters<typeof resolveRoutes>[0]['pathnames'],
-    i18n: (routingConfig.i18n ?? undefined) as Parameters<typeof resolveRoutes>[0]['i18n'],
-    routes: routingConfig.routes as Parameters<typeof resolveRoutes>[0]['routes'],
-    invokeMiddleware: async (middlewareCtx: MiddlewareContext) => {
+  const resolution = await resolve(
+    { url, headers: routingHeaders, requestBody: request.body ?? new ReadableStream() },
+    routingConfig,
+    async (middlewareCtx: MiddlewareContext) => {
       // const shouldNormalize = routingConfig.routes.shouldNormalizeNextData
 
       if (!middlewareConfig.enabled || !middlewareConfig.load) {
@@ -270,7 +199,7 @@ export async function runNextRouting(
 
       return middlewareResult
     },
-  })
+  )
 
   const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, {
     request,

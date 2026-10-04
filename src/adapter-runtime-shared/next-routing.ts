@@ -1,6 +1,7 @@
+import { resolveRoutes } from '@next/routing'
 import type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
 
-export { resolveRoutes, responseToMiddlewareResult } from '@next/routing'
+export { responseToMiddlewareResult } from '@next/routing'
 export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
 
 /**
@@ -28,6 +29,18 @@ const INTERNAL_REQUEST_HEADERS = [
   'x-next-resume-state-length',
   'next-resume',
 ]
+
+/**
+ * `resolveRoutes` with the build's routing config, for both the routing edge function (which runs
+ * middleware) and the server handler without one in front (`invokeMiddleware` stays a no-op).
+ */
+export function resolve(
+  { url, headers, requestBody }: Pick<ResolveRoutesParams, 'url' | 'headers' | 'requestBody'>,
+  config: RoutingConfig,
+  invokeMiddleware: ResolveRoutesParams['invokeMiddleware'] = async () => ({}),
+): Promise<ResolveRoutesResult> {
+  return resolveRoutes({ ...config, url, headers, requestBody, invokeMiddleware })
+}
 
 export function stripInternalRequestHeaders(headers: Headers): Headers {
   for (const name of INTERNAL_REQUEST_HEADERS) {

@@ -272,7 +272,6 @@ async function writeRoutingEdgeFunctionEntry(
   middlewareOutput: MiddlewareOutput,
   handlerDirectory: string,
 ): Promise<void> {
-  const nextConfig = ctx.buildConfig
   const handlerName = getAdapterHandlerName()
 
   // Write the routing config as a JSON file for the edge function to import
@@ -281,23 +280,12 @@ async function writeRoutingEdgeFunctionEntry(
     JSON.stringify(await getRoutingConfig(ctx)),
   )
 
-  // Minimal next config for middleware request building — inlined in the entry template
-  const minimalNextConfig = {
-    basePath: nextConfig.basePath,
-    i18n: nextConfig.i18n,
-    trailingSlash: nextConfig.trailingSlash,
-    skipMiddlewareUrlNormalize:
-      nextConfig.skipProxyUrlNormalize ?? nextConfig.skipMiddlewareUrlNormalize,
-  }
-
   // Write the entry file
   await writeFile(
     join(handlerDirectory, `${handlerName}.js`),
     `
     import { runNextRouting } from './adapter-runtime-edge/middleware.js';
     import routingConfig from './routing-config.json' with { type: 'json' };
-
-    const nextConfig = ${JSON.stringify(minimalNextConfig)};
 
     let middlewareHandlerPromise = undefined
 
@@ -311,7 +299,7 @@ async function writeRoutingEdgeFunctionEntry(
       }
     };
 
-    export default (req, context) => runNextRouting(req, context, routingConfig, middlewareConfig, nextConfig);
+    export default (req, context) => runNextRouting(req, context, routingConfig, middlewareConfig);
     export const config = { pattern: '.*' };
     `,
   )

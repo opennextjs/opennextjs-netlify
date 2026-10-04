@@ -11,7 +11,7 @@ import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js
 import {
   applyResolutionToResponse,
   isUnmatchedNextDataRequest,
-  resolveRoutes,
+  resolve,
   stripInternalRequestHeaders,
 } from '../../adapter-runtime-shared/next-routing.js'
 import type { ResolveRoutesResult } from '../../adapter-runtime-shared/next-routing.js'
@@ -1301,18 +1301,10 @@ export default async function ServerHandler(request: Request, requestContext: Re
     } else {
       // No edge function (standalone mode fallback, or edge function not deployed)
       try {
-        resolution = await resolveRoutes({
-          ...manifest.routingConfig,
-          url,
-          requestBody: request.body ?? new ReadableStream(),
-          headers: requestHeaders,
-          invokeMiddleware: async () => {
-            // Middleware runs in Netlify Edge Function before the serverless function.
-            // By the time the request reaches this handler, middleware has already executed.
-            // Return a no-op result.
-            return {}
-          },
-        })
+        resolution = await resolve(
+          { url, headers: requestHeaders, requestBody: request.body ?? new ReadableStream() },
+          manifest.routingConfig,
+        )
       } catch (error) {
         console.error('route resolution error', error)
         getLogger().withError(error).error('route resolution error')
