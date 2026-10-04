@@ -14,10 +14,7 @@ import {
   resolveRoutes,
   stripInternalRequestHeaders,
 } from '../../adapter-runtime-shared/next-routing.js'
-import type {
-  ResolveRoutesParams,
-  ResolveRoutesResult,
-} from '../../adapter-runtime-shared/next-routing.js'
+import type { ResolveRoutesResult } from '../../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../../adapter-runtime-shared/proxy-external-rewrite.js'
 import {
   getPrerenderFallbackBlobKey,
@@ -122,19 +119,10 @@ type Handler = (requestArgs: CommonHandlerArg) => Promise<Response> | Response
 const handlerDefsByPathname = new Map<string, Handler>()
 const handlerDefsId = new Map<string, Handler>()
 const basePath = manifest.config.basePath || ''
-// `@next/routing` resolves requests to these pathnames as given, so they double as handler keys
-const routablePathnames: ResolveRoutesParams['pathnames'] = []
-type RoutablePathnameType = Exclude<ResolveRoutesParams['pathnames'][number], string>['type']
-function registerHandler(
-  pathname: string,
-  type: RoutablePathnameType,
-  handler: Handler,
-  route?: string,
-) {
+// `@next/routing` resolves requests to the routing config's pathnames as given, so they double as
+// handler keys
+function registerHandler(pathname: string, handler: Handler) {
   handlerDefsByPathname.set(pathname, handler)
-  routablePathnames.push(
-    route && route !== pathname ? { pathname, type, route } : { pathname, type },
-  )
 }
 
 type InvokeHandlerArg = {
@@ -170,21 +158,21 @@ function createInvokeHandler(output: AdapterManifestComputeOutput): Handler {
 }
 
 // outputs that invoke compute (the runtime manifest is minimized, output types come from the list)
-for (const [type, outputs] of [
-  ['PAGES', manifest.outputs.pages],
-  ['PAGES_API', manifest.outputs.pagesApi],
-  ['APP_PAGE', manifest.outputs.appPages],
-  ['APP_ROUTE', manifest.outputs.appRoutes],
-] as const) {
+for (const outputs of [
+  manifest.outputs.pages,
+  manifest.outputs.pagesApi,
+  manifest.outputs.appPages,
+  manifest.outputs.appRoutes,
+]) {
   for (const output of outputs) {
-    registerComputeOutput(type, output)
+    registerComputeOutput(output)
   }
 }
 
-function registerComputeOutput(type: RoutablePathnameType, output: AdapterManifestComputeOutput) {
+function registerComputeOutput(output: AdapterManifestComputeOutput) {
   const handler = createInvokeHandler(output)
   handlerDefsId.set(output.id, handler)
-  registerHandler(output.pathname, type, handler)
+  registerHandler(output.pathname, handler)
   if (ssgSourcePages.has(output.sourcePage)) {
     ssgPathnames.add(output.pathname)
   }
@@ -199,7 +187,7 @@ for (const output of manifest.outputs.prerenders) {
   }
   // params come from the route a prerender renders: `/en/posts/[slug]` may be a shell of
   // `/[locale]/posts/[slug]`
-  registerHandler(output.pathname, 'PRERENDER', parentHandler, output.route)
+  registerHandler(output.pathname, parentHandler)
   if (staticPageOutputIds.has(output.parentOutputId)) {
     readOnlyPathnames.add(output.pathname)
   }
@@ -238,7 +226,7 @@ function getPrerenderVariant(
       .get(output.groupId)
       ?.members.find((member) => member.pathname.startsWith(`${basePath}/_next/data/`))
   }
-  const { rsc } = manifest.routing
+  const { rsc } = manifest
   if (!rsc || headers.get(rsc.header) !== '1') {
     return output
   }
@@ -663,7 +651,7 @@ async function resumePrerender(
   args: CommonHandlerArg,
 ): Promise<Response | undefined> {
   const { request, requestContext } = args
-  const { rsc } = manifest.routing
+  const { rsc } = manifest
   const isRSCRequest = Boolean(rsc) && request.headers.get(rsc.header) === '1'
   const isPrefetch = isRSCRequest && request.headers.get(rsc.prefetchHeader) === '1'
   const handler = handlerDefsId.get(variant.parentOutputId)
@@ -752,7 +740,6 @@ function createStaticFileHandler(output: StaticFileHandlerArg): Handler {
 for (const pathname of manifest.publicPathnames) {
   registerHandler(
     pathname,
-    'STATIC_FILE',
     createStaticFileHandler({ filePath: `public${pathname.slice(basePath.length)}`, pathname }),
   )
 }
@@ -761,7 +748,6 @@ for (const output of manifest.outputs.staticFiles) {
   readOnlyPathnames.add(output.pathname)
   registerHandler(
     output.pathname,
-    'STATIC_FILE',
     createStaticFileHandler({ filePath: output.filePath, pathname: output.pathname }),
   )
 }
@@ -1316,18 +1302,10 @@ export default async function ServerHandler(request: Request, requestContext: Re
       // No edge function (standalone mode fallback, or edge function not deployed)
       try {
         resolution = await resolveRoutes({
+          ...manifest.routingConfig,
           url,
-          buildId: manifest.buildId,
-          basePath: manifest.config.basePath || '',
           requestBody: request.body ?? new ReadableStream(),
           headers: requestHeaders,
-          pathnames: routablePathnames,
-          // Cast i18n config — next-with-adapters uses readonly arrays while @next/routing expects mutable
-          i18n: (manifest.config.i18n ?? undefined) as ResolveRoutesParams['i18n'],
-          routes: {
-            ...manifest.routing,
-            caseSensitive: manifest.config.experimental?.caseSensitiveRoutes,
-          },
           invokeMiddleware: async () => {
             // Middleware runs in Netlify Edge Function before the serverless function.
             // By the time the request reaches this handler, middleware has already executed.
@@ -1528,7 +1506,7 @@ export default async function ServerHandler(request: Request, requestContext: Re
       isUnmatchedNextDataRequest(new URL(requestMeta?.publicUrl ?? request.url), resolution, {
         basePath: manifest.config.basePath || '',
         buildId: manifest.buildId,
-        middlewareMatchers: manifest.routing.middlewareMatchers,
+        middlewareMatchers: manifest.routingConfig.routes.middlewareMatchers,
       })
     ) {
       return applyResolutionToThisResponse(Response.json({}))

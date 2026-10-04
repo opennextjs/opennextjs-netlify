@@ -8,6 +8,7 @@ import { wrapTracer } from '@opentelemetry/api/experimental'
 
 import type { AdapterManifest, AdapterManifestComputeOutput } from '../../run/config.js'
 import { ADAPTER_MANIFEST_FILE } from '../../run/constants.js'
+import { getRoutingConfig } from '../functions/edge-adapter.js'
 import type { PluginContextAdapter } from '../plugin-context.js'
 
 import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
@@ -37,7 +38,8 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
     // are only needed for the copying below and are ~96% of the serialized output, and the
     // middleware output is consumed solely by the edge function (its `config.env` secrets included).
     const manifest: AdapterManifest = {
-      routing: ctx.adapterOutput.routing,
+      routingConfig: await getRoutingConfig(ctx),
+      rsc: ctx.adapterOutput.routing.rsc,
       outputs: {
         pages: ctx.adapterOutput.outputs.pages.map(computeOutput),
         pagesApi: ctx.adapterOutput.outputs.pagesApi.map(computeOutput),

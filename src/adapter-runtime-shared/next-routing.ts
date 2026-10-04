@@ -1,7 +1,16 @@
-import type { ResolveRoutesResult } from '@next/routing'
+import type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
 
 export { resolveRoutes, responseToMiddlewareResult } from '@next/routing'
 export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
+
+/**
+ * What `resolveRoutes` takes from the build. Produced once (getRoutingConfig) for both the routing
+ * edge function and the server handler, so they resolve the same way.
+ */
+export type RoutingConfig = Pick<
+  ResolveRoutesParams,
+  'buildId' | 'basePath' | 'pathnames' | 'trailingSlash' | 'skipMiddlewareUrlNormalize' | 'i18n' | 'routes'
+>
 
 // Next's router-server drops these from every incoming request before doing anything with it
 // (`filterInternalHeaders`): they are how Next's own tiers talk to each other, so honouring them

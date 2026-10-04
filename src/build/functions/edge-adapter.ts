@@ -5,7 +5,7 @@ import type { Manifest } from '@netlify/edge-functions'
 import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
-import { RoutingConfig } from '../../adapter-runtime-edge/middleware.js'
+import type { RoutingConfig } from '../../adapter-runtime-shared/next-routing.js'
 import { EDGE_HANDLER_NAME, PluginContextAdapter } from '../plugin-context.js'
 
 import { writeEdgeManifest } from './edge.js'
@@ -275,26 +275,11 @@ async function writeRoutingEdgeFunctionEntry(
   const nextConfig = ctx.buildConfig
   const handlerName = getAdapterHandlerName()
 
-  // `public/` files are not adapter outputs, routing treats them like static files
-  const publicPathnames = await ctx.getPublicPathnames()
   // Write the routing config as a JSON file for the edge function to import
-  const routingConfig = {
-    buildId: ctx.adapterOutput.buildId,
-    basePath: ctx.adapterOutput.config.basePath || '',
-    // @ts-expect-error ugh
-    i18n: ctx.adapterOutput.config.i18n ?? null,
-    routes: {
-      ...ctx.adapterOutput.routing,
-      caseSensitive: ctx.adapterOutput.config.experimental?.caseSensitiveRoutes,
-    },
-    pathnames: [
-      ...collectPathnames(ctx.adapterOutput),
-      ...publicPathnames.map((pathname) => ({ pathname, type: 'STATIC_FILE' })),
-    ],
-    skipProxyUrlNormalize: ctx.adapterOutput.config.skipProxyUrlNormalize,
-  } satisfies RoutingConfig
-
-  await writeFile(join(handlerDirectory, 'routing-config.json'), JSON.stringify(routingConfig))
+  await writeFile(
+    join(handlerDirectory, 'routing-config.json'),
+    JSON.stringify(await getRoutingConfig(ctx)),
+  )
 
   // Minimal next config for middleware request building — inlined in the entry template
   const minimalNextConfig = {
@@ -332,12 +317,34 @@ async function writeRoutingEdgeFunctionEntry(
   )
 }
 
+export async function getRoutingConfig(ctx: PluginContextAdapter): Promise<RoutingConfig> {
+  const { buildId, config, routing } = ctx.adapterOutput
+  // `public/` files are not adapter outputs, routing treats them like static files
+  const publicPathnames = await ctx.getPublicPathnames()
+  return {
+    buildId,
+    basePath: config.basePath || '',
+    // next-with-adapters types the i18n arrays readonly
+    i18n: (config.i18n ?? undefined) as RoutingConfig['i18n'],
+    trailingSlash: config.trailingSlash,
+    skipMiddlewareUrlNormalize: config.skipProxyUrlNormalize ?? config.skipMiddlewareUrlNormalize,
+    routes: {
+      ...routing,
+      caseSensitive: config.experimental?.caseSensitiveRoutes,
+    },
+    pathnames: [
+      ...collectPathnames(ctx.adapterOutput),
+      ...publicPathnames.map((pathname) => ({ pathname, type: 'STATIC_FILE' as const })),
+    ],
+  }
+}
+
 /**
  * Output pathnames with their output type, for route resolution.
  */
 function collectPathnames(
   adapterOutput: AdapterBuildCompleteContext,
-): Array<{ pathname: string; type: string; route?: string }> {
+): RoutingConfig['pathnames'] {
   const { outputs } = adapterOutput
   return [
     ...outputs.pages,

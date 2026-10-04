@@ -6,6 +6,7 @@ import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
 import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
+import type { RoutingConfig } from '../adapter-runtime-shared/next-routing.js'
 
 import { ADAPTER_MANIFEST_FILE, PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
 import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
@@ -28,7 +29,10 @@ export type AdapterManifestComputeOutput = Pick<
 /**
  * Subset of the adapter output that is needed at runtime for route resolution
  */
-export type AdapterManifest = Pick<AdapterBuildCompleteContext, 'routing' | 'buildId'> & {
+export type AdapterManifest = Pick<AdapterBuildCompleteContext, 'buildId'> & {
+  // the same config the routing edge function resolves with (getRoutingConfig)
+  routingConfig: RoutingConfig
+  rsc: AdapterBuildCompleteContext['routing']['rsc']
   // the config fields the runtime reads, route modules read the full config from required-server-files.json
   config: Pick<
     AdapterBuildCompleteContext['config'],
