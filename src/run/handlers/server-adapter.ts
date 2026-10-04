@@ -523,7 +523,8 @@ async function servePrerenderGroup(
       ...args,
       onDemandToken: group.entry.bypassToken,
     })
-    requestContext.trackBackgroundWork(purgeEdgeCache(blob.tags.map(encodeCacheTag)))
+    // `res.revalidate()` resolves with this response: callers expect the CDN to be fresh by then
+    await purgeEdgeCache(blob.tags.map(encodeCacheTag))
     nextCache = 'MISS'
   } else if (blob) {
     const age = (Date.now() - blob.lastModified) / 1000
