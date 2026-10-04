@@ -90,10 +90,10 @@ describe('page router', () => {
       '/static/revalidate-manual',
       '/static/revalidate-slow',
       '/static/revalidate-slow-data',
-      '404.html',
-      '500.html',
-      ...(isAdapterMode ? [] : ['fallback-true/[slug].html']),
-      'static/fully-static.html',
+      // adapter mode: static HTML is on the CDN, fallbacks in their prerender group
+      ...(isAdapterMode
+        ? []
+        : ['404.html', '500.html', 'fallback-true/[slug].html', 'static/fully-static.html']),
     ])
 
     // test the function call
@@ -273,8 +273,8 @@ describe('app router', () => {
         '/index',
         '/posts/1',
         '/posts/2',
-        '404.html',
-        '500.html',
+        // adapter mode publishes static HTML to the CDN instead of blobs
+        ...(isAdapterMode ? [] : ['404.html', '500.html']),
       ].filter(Boolean),
     )
 
@@ -458,8 +458,8 @@ describe('plugin', () => {
         '/static-fetch-3',
         '/static-fetch/1',
         '/static-fetch/2',
-        '404.html',
-        '500.html',
+        // adapter mode publishes static HTML to the CDN instead of blobs
+        ...(isAdapterMode ? [] : ['404.html', '500.html']),
       ].filter(Boolean),
     )
   })

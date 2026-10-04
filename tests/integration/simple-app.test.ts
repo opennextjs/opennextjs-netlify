@@ -132,9 +132,8 @@ test<FixtureTestContext>('Test that the simple next app is working', async (ctx)
       '/index',
       '/other',
       '/route-resolves-to-not-found',
-      '404.html',
-      '500.html',
-      'fully-static.html',
+      // adapter mode publishes static HTML to the CDN instead of blobs
+      ...(isAdapterMode ? [] : ['404.html', '500.html', 'fully-static.html']),
     ].filter(Boolean),
   )
 
@@ -488,8 +487,8 @@ test.skipIf(
       '/static-params/1',
       '/static-params/2',
       '/static-params/[id]',
-      '404.html',
-      '500.html',
+      // adapter mode publishes static HTML to the CDN instead of blobs
+      ...(isAdapterMode ? [] : ['404.html', '500.html']),
     ].filter(Boolean),
   )
 

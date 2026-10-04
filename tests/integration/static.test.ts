@@ -52,10 +52,10 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
       '/static/revalidate-manual',
       '/static/revalidate-slow',
       '/static/revalidate-slow-data',
-      '404.html',
-      '500.html',
-      ...(isAdapterMode ? [] : ['fallback-true/[slug].html']),
-      'static/fully-static.html',
+      // adapter mode: static HTML is on the CDN, fallbacks in their prerender group
+      ...(isAdapterMode
+        ? []
+        : ['404.html', '500.html', 'fallback-true/[slug].html', 'static/fully-static.html']),
     ].filter(Boolean),
   )
 
