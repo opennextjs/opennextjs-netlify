@@ -221,6 +221,13 @@ export default async function ServerHandler(
       resolution,
       basePath,
     })
+    // for what the function produced: routing's Cache-Control wins over Next's, as in `next start`
+    const applyResolutionToProduced = applyResolutionToResponse.bind(null, {
+      request,
+      resolution,
+      basePath,
+      routingCacheControlWins: true,
+    })
 
     const answered = await answerWithoutCompute(resolution, {
       request,
@@ -247,7 +254,7 @@ export default async function ServerHandler(
         return finalize(
           await renderErrorPage(target.status, { request, requestContext, tracer, span }),
           request,
-          (response) => applyResolutionToThisResponse(response, target.status),
+          (response) => applyResolutionToProduced(response, target.status),
         )
       }
       if (target.kind === 'answer') {
@@ -291,7 +298,7 @@ export default async function ServerHandler(
           ? 500
           : resolution.status
       const response = await finalize(produced, handlerArgs.request, (routed) =>
-        applyResolutionToThisResponse(routed, status),
+        applyResolutionToProduced(routed, status),
       )
       if (isNotFoundPage) {
         // Next's server responds 404 here, and CACHE_404_PAGE cache-control handling keys off that
@@ -335,7 +342,7 @@ export default async function ServerHandler(
     return finalize(
       await renderErrorPage(404, { request, requestContext, tracer, span }),
       request,
-      (response) => applyResolutionToThisResponse(response, 404),
+      (response) => applyResolutionToProduced(response, 404),
     )
   })
 }

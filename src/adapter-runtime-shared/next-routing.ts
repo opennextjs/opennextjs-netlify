@@ -135,7 +135,16 @@ export function applyResolutionToResponse(
     request,
     resolution,
     basePath,
-  }: { request: Request; resolution: ResolveRoutesResult; basePath: string },
+    routingCacheControlWins,
+  }: {
+    request: Request
+    resolution: ResolveRoutesResult
+    basePath: string
+    // a response Next rendered: like `next start`, which sets routing's headers before rendering and
+    // only adds its own Cache-Control (and CDN-Cache-Control) when none is set yet (send-payload.ts).
+    // Otherwise the origin's wins, e.g. what we configured for a CDN-served static file at build time
+    routingCacheControlWins?: boolean
+  },
   response: Response,
   explicitStatus?: number,
 ): Response {
@@ -144,8 +153,11 @@ export function applyResolutionToResponse(
   if (resolution.resolvedHeaders) {
     for (const [key, value] of resolution.resolvedHeaders.entries()) {
       const normalizedKey = key.toLowerCase()
-      if (normalizedKey === 'cache-control' && hasExplicitCacheControl) {
-        continue
+      if (normalizedKey === 'cache-control') {
+        if (hasExplicitCacheControl && !routingCacheControlWins) {
+          continue
+        }
+        headers.delete('cdn-cache-control')
       }
       if (normalizedKey === 'location' && resolution.redirect) {
         headers.set(key, resolution.redirect.url.toString())

@@ -182,6 +182,9 @@ export async function runNextRouting(
   // origin sent: `applyResolutionToResponse` keeps an origin cache-control (a CDN-served static
   // file carries the one we configured for it at build time), middleware asking for another one is
   // the whole point of `NextResponse.next({ headers: { 'cache-control': … } })`.
+  // TODO(adapter): for a response the server handler produced, it already applied middleware's
+  // cache-control (routing wins, translated for the CDN); re-applying it here only puts the raw value
+  // back on the browser header. Telling function from CDN responses apart here needs a reliable signal.
   const withMiddlewareResponseHeaders = (response: Response) => {
     if (!middlewareResponseHeaders) {
       return response
