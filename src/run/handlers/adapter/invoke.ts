@@ -16,30 +16,6 @@ import { withActiveSpan } from '../tracer.cjs'
 import { type InvokeHandlerArg, manifest } from './manifest.js'
 import type { InvokeOptions, Produced, ProduceRequest } from './types.js'
 
-/**
- * What invocation calls back into in the layers above it: Next's mid-render callbacks and the 500
- * page for a render that failed before its headers. The entry sets them at startup; importing them
- * here would be circular.
- * TODO(adapter): code smell, a module-level singleton set as a startup side effect. render404 and
- * revalidate belong to the request (closures carried in ProduceRequest), and a failure before headers
- * could come back as a Produced for dispatch to turn into the 500 page.
- */
-type InvokeCallbacks = {
-  render404: NonNullable<RequestMeta['render404']>
-  revalidate: NonNullable<RequestMeta['revalidate']>
-  renderErrorPage: (status: 500, request: Omit<ProduceRequest, 'resolution'>) => Promise<Produced>
-}
-let callbacks: InvokeCallbacks | undefined
-export function configureInvoke(value: InvokeCallbacks) {
-  callbacks = value
-}
-function getCallbacks(): InvokeCallbacks {
-  if (!callbacks) {
-    throw new Error('configureInvoke was not called')
-  }
-  return callbacks
-}
-
 type NodeHandlerFn = (
   req: IncomingMessage,
   res: ServerResponse,
@@ -91,7 +67,15 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
 
 export async function invokeHandler(
   { id, entrypoint, runtime, sourcePage }: InvokeHandlerArg,
-  { tracer, request, requestContext, resolution, span, invokeStatus }: ProduceRequest,
+  {
+    tracer,
+    request,
+    requestContext,
+    resolution,
+    span,
+    invokeStatus,
+    nextCallbacks,
+  }: ProduceRequest,
   { invocationId, raw, resume, postponed, onCacheEntry }: InvokeOptions = {},
 ): Promise<Produced> {
   span?.setAttribute('matched.sourcePage', sourcePage)
@@ -150,8 +134,8 @@ export async function invokeHandler(
         waitUntil: requestContext.trackBackgroundWork,
         requestMeta: {
           ...(invocation?.requestMeta ?? { initURL: request.url }),
-          render404: getCallbacks().render404,
-          revalidate: getCallbacks().revalidate,
+          render404: nextCallbacks.render404,
+          revalidate: nextCallbacks.revalidate,
           minimalMode: true,
           ...((resume ?? postponed) && { postponed: resume?.postponed ?? postponed }),
           ...(onCacheEntry && {
@@ -184,7 +168,10 @@ export async function invokeHandler(
 
       if (failedBeforeHeaders && !invokeStatus) {
         invokeSpan?.setAttribute('http.status_code', 500)
-        return getCallbacks().renderErrorPage(500, { request, requestContext, tracer, span })
+        return {
+          kind: 'failed' as const,
+          response: new Response('Internal Server Error', { status: 500 }),
+        }
       }
 
       invokeSpan?.setAttribute('http.status_code', response.status)

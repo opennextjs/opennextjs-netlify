@@ -1,6 +1,7 @@
 // The contracts between the adapter's layers: what producers get, what drives an invocation, and
 // what a produced response tells finalization.
 import type { Span } from '@opentelemetry/api'
+import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
 import type { ResolveRoutesResult } from '../../../adapter-runtime-shared/next-routing.js'
 import type { PrerenderGroupBlob } from '../../../shared/blob-types.cjs'
@@ -8,16 +9,21 @@ import type { RequestContext } from '../request-context.cjs'
 import type { getTracer } from '../tracer.cjs'
 
 /**
- * The part of the request context the adapter uses: background work, and the request Next's
- * mid-render callbacks (`render404`, `revalidate`) belong to. Logging, tracing and request-scoped
- * memoization reach the rest through `getRequestContext()` on their own. The other fields are how
- * standalone's cache handler tells the response what it found; here the response and `Produced`
- * carry that, and this type keeps it that way.
+ * The part of the request context the adapter uses: background work. Logging, tracing and
+ * request-scoped memoization reach the rest through `getRequestContext()` on their own. The other
+ * fields are how standalone's cache handler tells the response what it found; here the response and
+ * `Produced` carry that, and this type keeps it that way.
  */
 export type AdapterRequestContext = Pick<
   RequestContext,
-  'trackBackgroundWork' | 'backgroundWorkPromise' | 'originalRequest' | 'originalContext'
+  'trackBackgroundWork' | 'backgroundWorkPromise'
 >
+
+// Next's mid-render callbacks (`requestMeta`), built for each request (createNextCallbacks)
+export type NextCallbacks = {
+  render404: NonNullable<RequestMeta['render404']>
+  revalidate: NonNullable<RequestMeta['revalidate']>
+}
 
 // a request as the layers producing its response see it
 export type ProduceRequest = {
@@ -28,6 +34,7 @@ export type ProduceRequest = {
   span?: Span
   // set when rendering the error page for this status (like Next's router does with res.statusCode)
   invokeStatus?: number
+  nextCallbacks: NextCallbacks
 }
 
 // what the layer driving an invocation adds: the prerender store regenerating a group, PPR resuming
@@ -75,3 +82,6 @@ export type Produced =
   | { kind: 'error'; status: 404 | 500; produced: Produced }
   // complete as is
   | { kind: 'final'; response: Response }
+  // a render that failed before its headers: dispatch answers with the 500 page, `response` is the
+  // plain 500 for whoever doesn't (a regeneration, which then doesn't store it)
+  | { kind: 'failed'; response: Response }

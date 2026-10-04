@@ -208,14 +208,22 @@ export async function produceTarget(
       prerender.onDemand,
     )
     if (served) {
-      return served
+      return answerFailure(served, args)
     }
   }
-  return produceOutput(
-    output,
+  return answerFailure(
+    await produceOutput(
+      output,
+      args,
+      postponedFrom && { postponed: await getPrerenderGroupPostponed(postponedFrom, args) },
+    ),
     args,
-    postponedFrom && { postponed: await getPrerenderGroupPostponed(postponedFrom, args) },
   )
+}
+
+// a render that failed before its headers gets the 500 page, like Next's router renders it
+function answerFailure(produced: Produced, args: ProduceRequest): Promise<Produced> | Produced {
+  return produced.kind === 'failed' ? renderErrorPage(500, args) : produced
 }
 
 /**
@@ -229,7 +237,7 @@ export async function produceTarget(
  */
 export async function renderErrorPage(
   status: 404 | 500,
-  { request, requestContext, tracer, span }: Omit<ProduceRequest, 'resolution'>,
+  { request, requestContext, tracer, span, nextCallbacks }: Omit<ProduceRequest, 'resolution'>,
 ): Promise<Produced> {
   const url = new URL(request.url)
   const candidates: string[] = []
@@ -260,6 +268,7 @@ export async function renderErrorPage(
     tracer,
     span,
     invokeStatus: status,
+    nextCallbacks,
   }
   // a prerendered error page is served like a request for it: in minimal mode Next only renders
   // the static shell of a PPR page, the rest comes from resuming the group's postponed state

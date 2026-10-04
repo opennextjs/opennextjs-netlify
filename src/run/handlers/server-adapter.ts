@@ -1,8 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Buffer } from 'node:buffer'
 
-import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
-
 import {
   answerWithoutCompute,
   applyResolutionToResponse,
@@ -28,12 +26,11 @@ import {
   renderErrorPage,
 } from './adapter/dispatch.js'
 import { finalize } from './adapter/finalize.js'
-import { configureInvoke } from './adapter/invoke.js'
 import { basePath, manifest } from './adapter/manifest.js'
 import { servePrerenderGroup } from './adapter/prerender-store.js'
-import type { AdapterRequestContext, ProduceRequest } from './adapter/types.js'
+import type { AdapterRequestContext, NextCallbacks, ProduceRequest } from './adapter/types.js'
 import { NetlifyAdapterCacheHandler } from './cache-adapter.cjs'
-import { getLogger, getRequestContext } from './request-context.cjs'
+import { getLogger } from './request-context.cjs'
 import { getTracer, withActiveSpan } from './tracer.cjs'
 import { configureFetchCacheHandler, configureUseCacheHandlers } from './use-cache-handler.js'
 
@@ -67,41 +64,6 @@ if (!('AsyncLocalStorage' in globalThis)) {
   globals.AsyncLocalStorage = AsyncLocalStorage
 }
 
-// passed via requestMeta so Next.js renders our custom 404 page for `notFound: true` / `notFound()`
-// instead of its bare "This page could not be found" fallback
-const render404: NonNullable<RequestMeta['render404']> = async (
-  req,
-  res,
-  _parsedUrl,
-  setHeaders,
-) => {
-  const requestContext: AdapterRequestContext | undefined = getRequestContext()
-  if (!requestContext?.originalRequest) {
-    throw new Error('render404 called outside of request context')
-  }
-  // Next calls this mid-render and takes the page into its own response, so it is final here
-  const response = await finalize(
-    await renderErrorPage(404, {
-      request: requestContext.originalRequest,
-      requestContext,
-      tracer: getTracer(),
-    }),
-    requestContext.originalRequest,
-  )
-  if (!res.headersSent) {
-    res.statusCode = 404
-    for (const [name, value] of response.headers) {
-      if (
-        name === 'content-type' ||
-        (setHeaders && !['content-length', 'transfer-encoding'].includes(name))
-      ) {
-        res.setHeader(name, value)
-      }
-    }
-  }
-  res.end(Buffer.from(await response.arrayBuffer()))
-}
-
 /**
  * `res.revalidate()`: Next hands over a path and the headers carrying the bypass token. Routing and
  * dispatch find the prerender group (the path may be dynamic or rewritten), then the prerender store
@@ -110,6 +72,7 @@ const render404: NonNullable<RequestMeta['render404']> = async (
 async function revalidateOnDemand(
   request: Request,
   requestContext: AdapterRequestContext,
+  nextCallbacks: NextCallbacks,
 ): Promise<void> {
   const headers = stripInternalRequestHeaders(new Headers(request.headers))
   const resolution = await resolve(
@@ -127,62 +90,68 @@ async function revalidateOnDemand(
   await servePrerenderGroup(
     variant,
     group,
-    { request, requestContext, resolution, tracer: getTracer() },
+    { request, requestContext, resolution, tracer: getTracer(), nextCallbacks },
     onDemand,
   )
 }
 
-// passed via requestMeta so pages router `res.revalidate()` goes through this handler instead of network
-const revalidate: NonNullable<RequestMeta['revalidate']> = async (args) => {
-  const { urlPath, headers: revalidateHeaders } = args
-  const requestContext: AdapterRequestContext | undefined = getRequestContext()
-  if (!requestContext) {
-    throw new Error('revalidate called outside of request context')
-  }
-
-  if (!requestContext.originalRequest) {
-    throw new Error('original request not set in request context')
-  }
-
-  if (!requestContext.originalContext) {
-    throw new Error('original context not set in request context')
-  }
-
-  const normalizeRevalidateHeaders = new Headers()
-  for (const [headerName, headerValueOrValues] of Object.entries(revalidateHeaders)) {
-    const headerValues = Array.isArray(headerValueOrValues)
-      ? headerValueOrValues
-      : [headerValueOrValues]
-    for (const headerValue of headerValues) {
-      normalizeRevalidateHeaders.append(headerName, headerValue)
-    }
-  }
-
-  const revalidateRequest = new Request(
-    new URL(`${manifest.config.basePath}${urlPath}`, requestContext.originalRequest.url),
-    {
-      headers: normalizeRevalidateHeaders,
+/**
+ * Next's mid-render callbacks for this request, passed to route modules via requestMeta: `render404`
+ * renders our custom 404 page for `notFound: true` / `notFound()` instead of Next's bare fallback,
+ * `revalidate` handles Pages Router `res.revalidate()` here instead of over the network.
+ */
+function createNextCallbacks(
+  request: Request,
+  requestContext: AdapterRequestContext,
+): NextCallbacks {
+  const tracer = getTracer()
+  const nextCallbacks: NextCallbacks = {
+    render404: async (req, res, _parsedUrl, setHeaders) => {
+      // Next takes the page into its own response mid-render, so it is final here
+      const response = await finalize(
+        await renderErrorPage(404, { request, requestContext, tracer, nextCallbacks }),
+        request,
+      )
+      if (!res.headersSent) {
+        res.statusCode = 404
+        for (const [name, value] of response.headers) {
+          if (
+            name === 'content-type' ||
+            (setHeaders && !['content-length', 'transfer-encoding'].includes(name))
+          ) {
+            res.setHeader(name, value)
+          }
+        }
+      }
+      res.end(Buffer.from(await response.arrayBuffer()))
     },
-  )
-
-  const revalidatePromise = revalidateOnDemand(revalidateRequest, requestContext)
-  requestContext.trackBackgroundWork(revalidatePromise)
-  return revalidatePromise
-    .catch((revalidateError) => {
-      console.error('Revalidation failed', revalidateError)
-    })
-    .then(() => {
-      // no-op
-    })
+    revalidate: async ({ urlPath, headers }) => {
+      const revalidateHeaders = new Headers()
+      for (const [name, valueOrValues] of Object.entries(headers)) {
+        for (const value of Array.isArray(valueOrValues) ? valueOrValues : [valueOrValues]) {
+          revalidateHeaders.append(name, value)
+        }
+      }
+      const revalidateRequest = new Request(
+        new URL(`${manifest.config.basePath}${urlPath}`, request.url),
+        { headers: revalidateHeaders },
+      )
+      const revalidatePromise = revalidateOnDemand(revalidateRequest, requestContext, nextCallbacks)
+      requestContext.trackBackgroundWork(revalidatePromise)
+      await revalidatePromise.catch((revalidateError) => {
+        console.error('Revalidation failed', revalidateError)
+      })
+    },
+  }
+  return nextCallbacks
 }
-
-configureInvoke({ render404, revalidate, renderErrorPage })
 
 export default async function ServerHandler(
   request: Request,
   requestContext: AdapterRequestContext,
 ) {
   const tracer = getTracer()
+  const nextCallbacks = createNextCallbacks(request, requestContext)
 
   return await withActiveSpan(tracer, 'adapter route resolution', async (span) => {
     const url = new URL(request.url)
@@ -252,7 +221,13 @@ export default async function ServerHandler(
       if (target.kind === 'error') {
         span?.setAttribute('matched.noOutput', true)
         return finalize(
-          await renderErrorPage(target.status, { request, requestContext, tracer, span }),
+          await renderErrorPage(target.status, {
+            request,
+            requestContext,
+            tracer,
+            span,
+            nextCallbacks,
+          }),
           request,
           (response) => applyResolutionToProduced(response, target.status),
         )
@@ -287,6 +262,7 @@ export default async function ServerHandler(
         resolution,
         tracer,
         span,
+        nextCallbacks,
       }
 
       const produced = await produceTarget(target, handlerArgs)
@@ -334,7 +310,7 @@ export default async function ServerHandler(
     // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
     // which would require setting correct netlify-vary header.
     return finalize(
-      await renderErrorPage(404, { request, requestContext, tracer, span }),
+      await renderErrorPage(404, { request, requestContext, tracer, span, nextCallbacks }),
       request,
       (response) => applyResolutionToProduced(response, 404),
     )
