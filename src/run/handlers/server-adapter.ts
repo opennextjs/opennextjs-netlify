@@ -105,7 +105,8 @@ type AdapterRequestContext = Pick<
   'trackBackgroundWork' | 'backgroundWorkPromise' | 'originalRequest' | 'originalContext'
 >
 
-type CommonHandlerArg = {
+// a request as the layers producing its response see it
+type ProduceRequest = {
   request: Request
   requestContext: AdapterRequestContext
   resolution: ResolveRoutesResult
@@ -113,6 +114,10 @@ type CommonHandlerArg = {
   span?: Span
   // set when rendering the error page for this status (like Next's router does with res.statusCode)
   invokeStatus?: number
+}
+
+// what the layer driving an invocation adds: the prerender store regenerating a group, PPR resuming
+type InvokeOptions = {
   // shared by the invocations regenerating one prerender group, so Next renders it once
   invocationId?: string
   // Next's response as is, without our CDN headers (to store it)
@@ -181,9 +186,13 @@ const outputsByPathname = new Map<string, RoutedOutput>()
 const computeOutputsById = new Map<string, InvokeHandlerArg>()
 const basePath = manifest.config.basePath || ''
 
-function produceOutput(routed: RoutedOutput, args: CommonHandlerArg): Promise<Produced> {
+function produceOutput(
+  routed: RoutedOutput,
+  args: ProduceRequest,
+  options?: InvokeOptions,
+): Promise<Produced> {
   return routed.kind === 'compute'
-    ? invokeHandler(routed.output, args)
+    ? invokeHandler(routed.output, args, options)
     : serverStaticFile(routed.file, args)
 }
 
@@ -423,7 +432,7 @@ async function regeneratePrerenderGroup(
   group: Required<PrerenderGroup>,
   params: URLSearchParams,
   // `onDemandToken`: the regeneration is `res.revalidate()`, which Next reports as on-demand
-  { onDemandToken, ...args }: CommonHandlerArg & { onDemandToken?: string },
+  { onDemandToken, ...args }: ProduceRequest & { onDemandToken?: string },
 ): Promise<PrerenderGroupBlob> {
   const invocationId = randomUUID()
   // `allowQuery` (the group key) leaves out params the output pathname already fixes
@@ -444,7 +453,7 @@ async function regeneratePrerenderGroup(
   let entryHtml: string | undefined
   // a PPR shell is what Next caches, as the adapter PPR docs persist it: the response of a minimal
   // mode render isn't only the shell (in test mode it starts with the PPR boundary sentinel)
-  const captureEntry: CommonHandlerArg['onCacheEntry'] = (entry) => {
+  const captureEntry: InvokeOptions['onCacheEntry'] = (entry) => {
     if (entry.value?.kind === 'APP_PAGE') {
       const { postponed: entryPostponed, html } = entry.value
       postponed = entryPostponed
@@ -467,14 +476,15 @@ async function regeneratePrerenderGroup(
       headers: onDemandToken ? { 'x-prerender-revalidate': onDemandToken } : {},
     })
     const response = await finalize(
-      await invokeHandler(output, {
-        ...args,
-        request: memberRequest,
-        resolution: {},
-        invocationId,
-        raw: true,
-        ...(member === group.entry && { onCacheEntry: captureEntry }),
-      }),
+      await invokeHandler(
+        output,
+        { ...args, request: memberRequest, resolution: {} },
+        {
+          invocationId,
+          raw: true,
+          ...(member === group.entry && { onCacheEntry: captureEntry }),
+        },
+      ),
       memberRequest,
     )
     const body = Buffer.from(await response.arrayBuffer())
@@ -515,7 +525,7 @@ type OnDemandRevalidate = { onlyGenerated: boolean }
 
 async function getPrerenderGroupPostponed(
   group: Required<PrerenderGroup>,
-  { resolution }: CommonHandlerArg,
+  { resolution }: ProduceRequest,
 ): Promise<string | undefined> {
   const params = getPrerenderGroupQuery(
     group.entry,
@@ -542,7 +552,7 @@ async function getPrerenderGroupPostponed(
 async function servePrerenderGroup(
   variant: PrerenderOutput,
   group: Required<PrerenderGroup>,
-  args: CommonHandlerArg,
+  args: ProduceRequest,
   onDemand?: OnDemandRevalidate,
 ): Promise<Produced | undefined> {
   const { request, requestContext, resolution } = args
@@ -702,7 +712,7 @@ async function resumePrerender(
     postponed: string
     stored?: PrerenderGroupBlob['variants'][string]
   },
-  args: CommonHandlerArg,
+  args: ProduceRequest,
 ): Promise<Produced | undefined> {
   const { request } = args
   const { rsc } = manifest
@@ -714,7 +724,7 @@ async function resumePrerender(
   }
   const resume = { postponed, headers: entry.resumeHeaders }
   if (isRSCRequest) {
-    return invokeHandler(output, { ...args, resume })
+    return invokeHandler(output, args, { resume })
   }
   if (!stored) {
     return
@@ -729,10 +739,7 @@ async function resumePrerender(
           async start(controller) {
             controller.enqueue(shell)
             try {
-              const resumed = await finalize(
-                await invokeHandler(output, { ...args, resume }),
-                request,
-              )
+              const resumed = await finalize(await invokeHandler(output, args, { resume }), request)
               if (resumed.body) {
                 const reader = resumed.body.getReader()
                 for (;;) {
@@ -1009,7 +1016,7 @@ function dispatch(
 
 async function produceTarget(
   { output, prerender, postponedFrom }: Extract<Target, { kind: 'output' }>,
-  args: CommonHandlerArg,
+  args: ProduceRequest,
 ): Promise<Produced> {
   if (prerender) {
     const served = await servePrerenderGroup(
@@ -1022,10 +1029,11 @@ async function produceTarget(
       return served
     }
   }
-  if (postponedFrom) {
-    args.postponed = await getPrerenderGroupPostponed(postponedFrom, args)
-  }
-  return produceOutput(output, args)
+  return produceOutput(
+    output,
+    args,
+    postponedFrom && { postponed: await getPrerenderGroupPostponed(postponedFrom, args) },
+  )
 }
 
 /**
@@ -1039,7 +1047,7 @@ async function produceTarget(
  */
 async function renderErrorPage(
   status: 404 | 500,
-  { request, requestContext, tracer, span }: Omit<CommonHandlerArg, 'resolution'>,
+  { request, requestContext, tracer, span }: Omit<ProduceRequest, 'resolution'>,
 ): Promise<Produced> {
   const url = new URL(request.url)
   const candidates: string[] = []
@@ -1063,7 +1071,7 @@ async function renderErrorPage(
     }
   }
 
-  const errorArgs: CommonHandlerArg = {
+  const errorArgs: ProduceRequest = {
     request: new Request(request.url, { headers: request.headers }),
     requestContext,
     resolution: {},
@@ -1222,7 +1230,7 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
 
 async function serverStaticFile(
   { filePath, pathname }: StaticFileHandlerArg,
-  { request }: CommonHandlerArg,
+  { request }: ProduceRequest,
 ): Promise<Produced> {
   // only static HTML pages live in blobs (copyStaticContent), every other static output is on the
   // CDN (copyStaticAssets). A request for the file itself never reaches the function then, so
@@ -1289,19 +1297,8 @@ function isPlainNotFoundRequest(url: URL): boolean {
 
 async function invokeHandler(
   { id, entrypoint, runtime, sourcePage }: InvokeHandlerArg,
-  {
-    tracer,
-    request,
-    requestContext,
-    resolution,
-    span,
-    invokeStatus,
-    invocationId,
-    raw,
-    resume,
-    postponed,
-    onCacheEntry,
-  }: CommonHandlerArg,
+  { tracer, request, requestContext, resolution, span, invokeStatus }: ProduceRequest,
+  { invocationId, raw, resume, postponed, onCacheEntry }: InvokeOptions = {},
 ): Promise<Produced> {
   span?.setAttribute('matched.sourcePage', sourcePage)
   span?.setAttribute('matched.runtime', runtime)
@@ -1613,7 +1610,7 @@ export default async function ServerHandler(
         handlerHeaders.delete('x-nextjs-data')
       }
 
-      const handlerArgs: CommonHandlerArg = {
+      const handlerArgs: ProduceRequest = {
         request: new Request(publicUrl, {
           method: request.method,
           headers: handlerHeaders,
