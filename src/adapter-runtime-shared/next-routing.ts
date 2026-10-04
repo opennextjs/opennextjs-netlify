@@ -10,7 +10,13 @@ export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
  */
 export type RoutingConfig = Pick<
   ResolveRoutesParams,
-  'buildId' | 'basePath' | 'pathnames' | 'trailingSlash' | 'skipMiddlewareUrlNormalize' | 'i18n' | 'routes'
+  | 'buildId'
+  | 'basePath'
+  | 'pathnames'
+  | 'trailingSlash'
+  | 'skipMiddlewareUrlNormalize'
+  | 'i18n'
+  | 'routes'
 >
 
 // Next's router-server drops these from every incoming request before doing anything with it

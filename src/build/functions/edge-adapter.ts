@@ -330,9 +330,7 @@ export async function getRoutingConfig(ctx: PluginContextAdapter): Promise<Routi
 /**
  * Output pathnames with their output type, for route resolution.
  */
-function collectPathnames(
-  adapterOutput: AdapterBuildCompleteContext,
-): RoutingConfig['pathnames'] {
+function collectPathnames(adapterOutput: AdapterBuildCompleteContext): RoutingConfig['pathnames'] {
   const { outputs } = adapterOutput
   return [
     ...outputs.pages,
