@@ -93,9 +93,21 @@ if (!('AsyncLocalStorage' in globalThis)) {
   globals.AsyncLocalStorage = AsyncLocalStorage
 }
 
+/**
+ * The part of the request context this module uses: background work, and the request Next's
+ * mid-render callbacks (`render404`, `revalidate`) belong to. Logging, tracing and request-scoped
+ * memoization reach the rest through `getRequestContext()` on their own. The other fields are how
+ * standalone's cache handler tells the response what it found; here the response and `Produced`
+ * carry that, and this type keeps it that way.
+ */
+type AdapterRequestContext = Pick<
+  RequestContext,
+  'trackBackgroundWork' | 'backgroundWorkPromise' | 'originalRequest' | 'originalContext'
+>
+
 type CommonHandlerArg = {
   request: Request
-  requestContext: RequestContext
+  requestContext: AdapterRequestContext
   resolution: ResolveRoutesResult
   tracer: ReturnType<typeof getTracer>
   span?: Span
@@ -976,7 +988,7 @@ const render404: NonNullable<RequestMeta['render404']> = async (
   _parsedUrl,
   setHeaders,
 ) => {
-  const requestContext = getRequestContext()
+  const requestContext: AdapterRequestContext | undefined = getRequestContext()
   if (!requestContext?.originalRequest) {
     throw new Error('render404 called outside of request context')
   }
@@ -1006,7 +1018,7 @@ const render404: NonNullable<RequestMeta['render404']> = async (
 // passed via requestMeta so pages router `res.revalidate()` goes through this handler instead of network
 const revalidate: NonNullable<RequestMeta['revalidate']> = async (args) => {
   const { urlPath, headers: revalidateHeaders } = args
-  const requestContext = getRequestContext()
+  const requestContext: AdapterRequestContext | undefined = getRequestContext()
   if (!requestContext) {
     throw new Error('revalidate called outside of request context')
   }
@@ -1381,7 +1393,10 @@ function deserializeResolution(serialized: string): ResolveRoutesResult {
   return resolution
 }
 
-export default async function ServerHandler(request: Request, requestContext: RequestContext) {
+export default async function ServerHandler(
+  request: Request,
+  requestContext: AdapterRequestContext,
+) {
   const tracer = getTracer()
 
   return await withActiveSpan(tracer, 'adapter route resolution', async (span) => {

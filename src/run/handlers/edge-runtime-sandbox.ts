@@ -117,7 +117,7 @@ export async function invokeEdgeRuntimeOutput({
 }: {
   outputId: string
   request: Request
-  requestContext: RequestContext
+  requestContext: Pick<RequestContext, 'trackBackgroundWork'>
   manifest: AdapterManifest
   query?: Record<string, string | string[]>
   routeParams?: Record<string, string | string[] | undefined>
