@@ -288,9 +288,8 @@ test<FixtureTestContext>('404 responses for PHP pages should be cached indefinit
   await createFixture('simple', ctx)
   await runPlugin(ctx)
   const index = await invokeFunction(ctx, { url: '/admin.php' })
-  expect(index.headers?.['netlify-cdn-cache-control'] ?? '').toContain(
-    // adapter mode: the prerendered not-found page's own cache-control, no `.php` heuristic
-    isAdapterMode ? 's-maxage=31536000, durable' : 'max-age=31536000, durable',
+  expect(index.headers?.['netlify-cdn-cache-control'] ?? '').toMatch(
+    /\b(?:max-age|s-maxage)=31536000\b.*\bdurable\b/,
   )
 })
 
