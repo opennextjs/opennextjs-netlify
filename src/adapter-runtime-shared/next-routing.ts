@@ -1,6 +1,8 @@
 import { resolveRoutes } from '@next/routing'
 import type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
 
+import { proxyExternalRewrite } from './proxy-external-rewrite.js'
+
 export { responseToMiddlewareResult } from '@next/routing'
 export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
 
@@ -174,4 +176,53 @@ export function applyResolutionToResponse(
   })
 
   return finalResponse
+}
+
+/**
+ * What routing answers on its own, without invoking an output: redirects (explicit, or a 3xx with a
+ * `location` from routing rules or middleware), external rewrites and a middleware response with a
+ * body. `outgoingRequest` builds what an external rewrite proxies: the request without Next's
+ * internal headers, with middleware's request header overrides. A function so the body is only
+ * attached when it is proxied.
+ */
+export async function answerWithoutCompute(
+  resolution: ResolveRoutesResult,
+  {
+    request,
+    outgoingRequest,
+    basePath,
+    middlewareResponse,
+  }: {
+    request: Request
+    outgoingRequest: () => Request
+    basePath: string
+    middlewareResponse?: Response
+  },
+): Promise<Response | undefined> {
+  const apply = applyResolutionToResponse.bind(null, { request, resolution, basePath })
+
+  // TODO(adapter): redirects can be cached forever, but the routing rules involved may depend on
+  // headers or other request properties, which would need the right `netlify-vary`
+  if (resolution.redirect) {
+    const { url, status } = resolution.redirect
+    return apply(new Response(null, { status, headers: { location: url.toString() } }))
+  }
+
+  if (resolution.externalRewrite) {
+    try {
+      return apply(await proxyExternalRewrite(resolution.externalRewrite, outgoingRequest()))
+    } catch (error) {
+      console.error('external rewrite fetch error', error)
+      return new Response('Bad Gateway', { status: 502 })
+    }
+  }
+
+  if (resolution.middlewareResponded && middlewareResponse) {
+    return apply(middlewareResponse)
+  }
+
+  const { status, resolvedHeaders } = resolution
+  if (status && status >= 300 && status < 400 && resolvedHeaders?.get('location')) {
+    return apply(new Response(null, { status }), status)
+  }
 }

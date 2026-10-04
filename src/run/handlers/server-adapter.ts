@@ -9,6 +9,7 @@ import type { Span } from '@opentelemetry/api'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
 import {
+  answerWithoutCompute,
   applyResolutionToResponse,
   isUnmatchedNextDataRequest,
   resolve,
@@ -972,12 +973,6 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   return handler
 }
 
-function isRedirectResolution(resolution: ResolveRoutesResult): boolean {
-  if (!resolution.status) return false
-  if (resolution.status < 300 || resolution.status >= 400) return false
-  return Boolean(resolution.resolvedHeaders?.get('location'))
-}
-
 async function serverStaticFile(
   { filePath, pathname }: StaticFileHandlerArg,
   { request }: CommonHandlerArg,
@@ -1318,41 +1313,20 @@ export default async function ServerHandler(request: Request, requestContext: Re
       basePath,
     })
 
-    if (resolution.redirect) {
-      // Handle explicit redirect
-      const { url: redirectUrl, status } = resolution.redirect
-      // TODO(adapter): this can be cached forever
-      // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
-      // which would require setting correct netlify-vary header.
-      return applyResolutionToThisResponse(
-        new Response(null, {
-          status,
-          headers: { location: redirectUrl.toString() },
+    const answered = await answerWithoutCompute(resolution, {
+      request,
+      basePath,
+      outgoingRequest: () =>
+        new Request(request.url, {
+          method: request.method,
+          headers: requestHeaders,
+          body: request.body,
+          // @ts-expect-error duplex is needed for streaming bodies
+          duplex: 'half',
         }),
-      )
-    }
-
-    // Handle external rewrite
-    if (resolution.externalRewrite) {
-      try {
-        return applyResolutionToThisResponse(
-          await proxyExternalRewrite(resolution.externalRewrite, request),
-        )
-      } catch (error) {
-        console.error('external rewrite fetch error', error)
-        getLogger().withError(error).error('external rewrite fetch error')
-        return new Response('Bad Gateway', { status: 502 })
-      }
-    }
-
-    if (isRedirectResolution(resolution)) {
-      // TODO(adapter): this can be cached forever
-      // but we would need to collect routing rules that were involved and inspect them as rules might rely on headers or other request properties,
-      // which would require setting correct netlify-vary header.
-      return applyResolutionToThisResponse(
-        new Response(null, { status: resolution.status }),
-        resolution.status,
-      )
+    })
+    if (answered) {
+      return answered
     }
 
     // Handle matched route

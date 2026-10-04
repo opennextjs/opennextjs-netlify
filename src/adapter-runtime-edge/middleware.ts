@@ -19,6 +19,7 @@ import {
   type RequestMeta,
 } from '../../edge-runtime/lib/private-request-meta.ts'
 import {
+  answerWithoutCompute,
   applyResolutionToResponse,
   getInvocationUrl,
   isUnmatchedNextDataRequest,
@@ -27,7 +28,6 @@ import {
   stripInternalRequestHeaders,
 } from '../adapter-runtime-shared/next-routing.js'
 import type { ResolveRoutesResult, RoutingConfig } from '../adapter-runtime-shared/next-routing.js'
-import { proxyExternalRewrite } from '../adapter-runtime-shared/proxy-external-rewrite.js'
 // import { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
 
 const REWRITE_HEADERS = new Set(['x-nextjs-rewritten-path', 'x-nextjs-rewritten-query'])
@@ -207,53 +207,21 @@ export async function runNextRouting(
     basePath: routingConfig.basePath,
   })
 
-  // Handle redirect — return directly from edge, no lambda needed
-  if (resolution.redirect) {
-    const { status } = resolution.redirect
-    return applyResolutionToThisResponse(new Response(null, { status }))
-  }
-
-  // Handle external rewrite — fetch directly from edge
-  if (resolution.externalRewrite) {
-    try {
-      // request headers set by middleware (`NextResponse.rewrite(url, { request: { headers } })`)
-      const externalRequest =
-        middlewareRequestHeaders || originBody !== request.body
-          ? new Request(request, {
-              headers: middlewareRequestHeaders ?? routingHeaders,
-              body: originBody,
-              // @ts-expect-error duplex is needed for streaming bodies
-              duplex: 'half',
-            })
-          : request
-      return applyResolutionToThisResponse(
-        await proxyExternalRewrite(resolution.externalRewrite, externalRequest),
-      )
-    } catch (error) {
-      console.error('external rewrite fetch error', error)
-      return new Response('Bad Gateway', { status: 502 })
-    }
-  }
-
-  // Handle middleware that sent a body response (e.g. NextResponse.json())
-  if (resolution.middlewareResponded && middlewareResponse) {
-    return applyResolutionToThisResponse(middlewareResponse)
-  }
-
-  // Check for redirect via resolved headers (e.g. location header set by routing rules)
-  if (resolution.status && resolution.status >= 300 && resolution.status < 400) {
-    const location = resolution.resolvedHeaders?.get('location')
-    if (location) {
-      const headers = new Headers()
-      if (resolution.resolvedHeaders) {
-        for (const [key, value] of resolution.resolvedHeaders.entries()) {
-          headers.set(key, value)
-        }
-      }
-      return applyResolutionToThisResponse(
-        new Response(null, { status: resolution.status, headers }),
-      )
-    }
+  const answered = await answerWithoutCompute(resolution, {
+    request,
+    basePath: routingConfig.basePath,
+    middlewareResponse,
+    // request headers set by middleware (`NextResponse.rewrite(url, { request: { headers } })`)
+    outgoingRequest: () =>
+      new Request(request, {
+        headers: middlewareRequestHeaders ?? routingHeaders,
+        body: originBody,
+        // @ts-expect-error duplex is needed for streaming bodies
+        duplex: 'half',
+      }),
+  })
+  if (answered) {
+    return answered
   }
 
   // Next applies the middleware response headers to the final response, and they win over what the
