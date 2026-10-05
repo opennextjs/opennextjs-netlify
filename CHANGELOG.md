@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.16.2](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.1...v5.16.2) (2026-10-05)
+
+
+### Bug Fixes
+
+* seed route group cache correctly for new cache key signature ([#3588](https://github.com/opennextjs/opennextjs-netlify/issues/3588)) ([1b716a1](https://github.com/opennextjs/opennextjs-netlify/commit/1b716a136a03338347f9a0b24f3ad75bda85520b))
+
+
+### Performance Improvements
+
+* don't prefetch revalidation marker on pages router ([#3586](https://github.com/opennextjs/opennextjs-netlify/issues/3586)) ([cb9c368](https://github.com/opennextjs/opennextjs-netlify/commit/cb9c3688a1a77e19c264a61bc9d15ad9f3e14375))
+* index revalidated tags so requests stop reading one manifest per tag ([#3584](https://github.com/opennextjs/opennextjs-netlify/issues/3584)) ([995e55b](https://github.com/opennextjs/opennextjs-netlify/commit/995e55b9e14586e65c476c83fe3f4846870f3279))
+
 ## [5.16.1](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.0...v5.16.1) (2026-09-30)
 
 
