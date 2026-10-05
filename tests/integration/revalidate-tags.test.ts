@@ -3,13 +3,20 @@ import { getLogger } from 'lambda-local'
 import { v4 } from 'uuid'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
-import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
+import {
+  createFixture,
+  invokeFunction,
+  invokeSandboxedFunction,
+  runPlugin,
+} from '../utils/fixture.js'
 import {
   encodeBlobKeyForRoute,
   generateRandomObjectID,
   getBlobServerGets,
   startMockBlobStore,
+  trackBlobServerGetsForKey,
 } from '../utils/helpers.js'
+import { TAG_REVALIDATION_MARKER_KEY } from '../../src/run/handlers/tags-handler.cjs'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 function isTagManifest(key: string) {
@@ -60,6 +67,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
   ).not.toBeNull()
 
   ctx.blobServerOnRequestSpy.mockClear()
+  const markerGets = trackBlobServerGetsForKey(ctx, TAG_REVALIDATION_MARKER_KEY)
 
   // test the function call
   const post1 = await invokeFunction(ctx, { url: '/static-fetch-1' })
@@ -80,6 +88,7 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     getBlobServerGets(ctx, isTagManifest),
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
+  expect(markerGets(), 'no revalidation happened yet, so the marker is read').toBe(1)
   ctx.blobServerOnRequestSpy.mockClear()
 
   const revalidate = await invokeFunction(ctx, { url: '/api/on-demand-revalidate/tag' })
@@ -168,4 +177,38 @@ test<FixtureTestContext>('should revalidate a route by tag', async (ctx) => {
     `expected tag manifests to be retrieved at most once per tag`,
   ).toBeDistinct()
   ctx.blobServerOnRequestSpy.mockClear()
+
+  expect(
+    markerGets(),
+    'this process wrote the marker when revalidating, so it should not read it afterwards',
+  ).toBe(1)
+})
+
+test<FixtureTestContext>('should read the tag revalidation marker only once per process after another process revalidated a tag', async (ctx) => {
+  await createFixture('server-components', ctx)
+  await runPlugin(ctx)
+
+  const markerGets = trackBlobServerGetsForKey(ctx, TAG_REVALIDATION_MARKER_KEY)
+
+  await invokeFunction(ctx, { url: '/static-fetch-1' })
+  expect(markerGets(), 'no revalidation happened yet, so the marker is read').toBe(1)
+
+  // revalidate in a separate process, so this process can only learn about the marker by reading it
+  const revalidate = await invokeSandboxedFunction(ctx, { url: '/api/on-demand-revalidate/tag' })
+  expect(revalidate.statusCode).toBe(200)
+  await new Promise<void>((resolve) => setTimeout(resolve, 100))
+  const markerGetsBeforeRequestsAfterRevalidation = markerGets()
+
+  const post2 = await invokeFunction(ctx, { url: '/static-fetch-1' })
+  expect(post2.headers['cache-status'], 'a cache miss on the on demand revalidated page').toBe(
+    '"Next.js"; fwd=miss',
+  )
+  await new Promise<void>((resolve) => setTimeout(resolve, 100))
+  await invokeFunction(ctx, { url: '/static-fetch-1' })
+  await invokeFunction(ctx, { url: '/static-fetch-1' })
+
+  expect(
+    markerGets() - markerGetsBeforeRequestsAfterRevalidation,
+    'the marker is read once, after that the process knows it exists',
+  ).toBe(1)
 })
