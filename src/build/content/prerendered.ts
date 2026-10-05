@@ -399,13 +399,14 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
                 verifyNetlifyForms(ctx, value.html)
               }
 
+              const baseSourceRoute = prerenderManifestRoute.srcRoute ?? route
               const blobKey = getSeedBlobKey({
                 route,
                 kind: cacheKind,
                 sourceRoute:
-                  appModuleSourceRoutes.get(prerenderManifestRoute.srcRoute ?? route) ??
-                  prerenderManifestRoute.srcRoute ??
-                  stripLocalePrefix(route, locales),
+                  cacheKind === 'PAGES'
+                    ? (prerenderManifestRoute.srcRoute ?? stripLocalePrefix(route, locales))
+                    : (appModuleSourceRoutes.get(baseSourceRoute) ?? baseSourceRoute),
                 useRouteCacheKey,
               })
 
@@ -448,7 +449,7 @@ export const copyPrerenderedContent = async (ctx: PluginContext): Promise<void> 
             const blobKey = getSeedBlobKey({
               route,
               kind: 'APP_PAGE',
-              sourceRoute: appModuleSourceRoutes.get(route) ?? stripLocalePrefix(route, locales),
+              sourceRoute: appModuleSourceRoutes.get(route) ?? route,
               useRouteCacheKey,
             })
 
