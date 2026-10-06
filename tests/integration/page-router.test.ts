@@ -124,7 +124,10 @@ test.skipIf(platform === 'win32')<FixtureTestContext>(
       url: '/static/fully-static',
     })
 
-    expect(response.headers?.['netlify-cdn-cache-control']).toBe('max-age=31536000, durable')
+    expect(response.headers?.['netlify-cdn-cache-control']).toBe(
+      // adapter mode: served as a deploy file, which the CDN keeps until the next deploy
+      isAdapterMode ? undefined : 'max-age=31536000, durable',
+    )
     expect(response.headers?.['cache-control']).toBe('public, max-age=0, must-revalidate')
   },
 )
@@ -360,10 +363,8 @@ describe('404 page caching', () => {
       notExistingPage.headers['netlify-cdn-cache-control'],
       'should be cached permanently',
     ).toBe(
-      // adapter mode: the static 404.html's own headers, no CACHE_404_PAGE heuristic
-      isAdapterMode
-        ? 'max-age=31536000, durable'
-        : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
+      // adapter mode: served as a deploy file, which the CDN keeps until the next deploy
+      isAdapterMode ? undefined : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
     )
   })
 

@@ -550,7 +550,12 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const response = await page.goto(new URL('static/fully-static', pageRouter.url).href)
     const headers = response?.headers() || {}
 
-    expect(headers['debug-netlify-cdn-cache-control']).toBe('max-age=31536000, durable')
+    if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+      // served as a deploy file, which the CDN keeps until the next deploy
+      expect(headers['debug-x-nf-function-type']).toBeUndefined()
+    } else {
+      expect(headers['debug-netlify-cdn-cache-control']).toBe('max-age=31536000, durable')
+    }
     expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
   })
 

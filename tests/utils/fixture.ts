@@ -445,9 +445,7 @@ async function serveFromCdn(ctx: FixtureTestContext, url: URL): Promise<Response
       status,
       headers: {
         'content-type': CONTENT_TYPES[parse(file).ext] ?? 'application/octet-stream',
-        // what Netlify sends for deploy files: revalidated by browsers, kept by the CDN until the next deploy
         'cache-control': 'public, max-age=0, must-revalidate',
-        'netlify-cdn-cache-control': 'max-age=31536000, durable',
       },
     })
   }
