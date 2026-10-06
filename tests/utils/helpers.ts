@@ -121,6 +121,20 @@ export function countOfBlobServerGetsForKey(ctx: FixtureTestContext, key: string
 }
 
 /**
+ * Counts blob gets for a key from now until the end of the test, unaffected by
+ * `ctx.blobServerOnRequestSpy.mockClear()` calls in between
+ */
+export function trackBlobServerGetsForKey(ctx: FixtureTestContext, key: string) {
+  const requests = vi.fn()
+  ctx.blobServerOnRequestSpy.mockImplementation(requests)
+  return () =>
+    countOfBlobServerGetsForKey(
+      { blobServerOnRequestSpy: requests } as unknown as FixtureTestContext,
+      key,
+    )
+}
+
+/**
  * Converts a string to base64 blob key
  */
 export const encodeBlobKey = (key: string) => Buffer.from(key).toString('base64url')

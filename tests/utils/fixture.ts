@@ -126,6 +126,9 @@ export const createFixture = async (fixture: string, ctx: FixtureTestContext) =>
     globalThis[Symbol.for('@netlify/adapter-test-reset')]()
   }
 
+  // each test gets a fresh deploy store, so a tag revalidation marker seen by a previous test doesn't apply
+  delete globalThis[Symbol.for('nf-tag-revalidation-marker-seen')]
+
   // require hook leaves modified "require" and "require.resolve" modified - we restore here to original
   // https://github.com/vercel/next.js/blob/812c26ab8741f68fbd6e2fe095510e0f03eac4c5/packages/next/src/server/require-hook.ts
   mod.prototype.require = originalRequire
