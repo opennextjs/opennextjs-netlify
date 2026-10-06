@@ -1,4 +1,5 @@
 // Static outputs reached through the function (routing landed on one): proxied from the CDN.
+import { encodeRouteBrackets } from '../../../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../../../adapter-runtime-shared/proxy-external-rewrite.js'
 
 import type { StaticFileHandlerArg } from './manifest.js'
@@ -15,7 +16,10 @@ export async function serverStaticFile(
     // the CDN doesn't have it either (see copyStaticAssets), don't loop through it
     return { kind: 'final', response: new Response('Not Found', { status: 404 }) }
   }
-  const response = await proxyExternalRewrite(new URL(pathname, request.url), request)
+  const response = await proxyExternalRewrite(
+    new URL(encodeRouteBrackets(pathname), request.url),
+    request,
+  )
   // Next appends this to any response to a flight request, Pages Router included, "to avoid
   // caching issues when navigating between pages and app" (`base-server` `setVaryHeader`)
   if (request.headers.has('rsc') && response.headers.get('content-type')?.startsWith('text/html')) {
