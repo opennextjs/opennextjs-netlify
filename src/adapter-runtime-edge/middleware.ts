@@ -174,6 +174,11 @@ export async function runNextRouting(
       if (key.toLowerCase().startsWith('x-middleware-')) {
         continue
       }
+      // iteration yields each cookie on its own, so `set` would keep only the last one
+      if (key.toLowerCase() === 'set-cookie') {
+        headers.append(key, value)
+        continue
+      }
       // a later rewrite (an interception route, say) replaces the middleware's rewrite headers, as
       // Next's router does
       const resolvedValue = REWRITE_HEADERS.has(key.toLowerCase())
@@ -202,7 +207,8 @@ export async function runNextRouting(
       }),
   })
   if (answered) {
-    return withMiddlewareResponseHeaders(answered)
+    // a response middleware returned already carries its headers
+    return resolution.middlewareResponded ? answered : withMiddlewareResponseHeaders(answered)
   }
 
   if (
