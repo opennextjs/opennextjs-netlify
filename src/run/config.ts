@@ -63,7 +63,10 @@ export type AdapterManifest = Pick<AdapterBuildCompleteContext, 'buildId'> & {
         // PPR: headers of the request resuming a postponed render (`next-resume: 1`)
         resumeHeaders?: Record<string, string>
       })[]
-    staticFiles: Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'>[]
+    staticFiles: (Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'> & {
+      // the file's path on the CDN (copyStaticAssets), `/about.html` for `/about`
+      publishedPath: string
+    })[]
   }
   // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)
   relativeAppDir: string

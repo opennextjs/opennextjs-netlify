@@ -68,7 +68,7 @@ export function getInvocationUrl(request: Request, resolution: ResolveRoutesResu
     return url
   }
   const { pathname, query } = resolution.invocationTarget
-  url.pathname = encodeRouteBrackets(pathname)
+  url.pathname = pathname
   url.search = ''
   for (const [key, valueOrValues] of Object.entries(query)) {
     for (const value of Array.isArray(valueOrValues) ? valueOrValues : [valueOrValues]) {
@@ -79,7 +79,8 @@ export function getInvocationUrl(request: Request, resolution: ResolveRoutesResu
 }
 
 // URL keeps `[`/`]` raw, but the CDN only finds a static file by its encoded name and answers the
-// raw form with a 301 to it, which would reach the client with the route's placeholder in it
+// raw form with a 301 to it. Only for requesting a static output's file: a forwarded rewrite target
+// must not match one, or the CDN's canonical redirect reaches the client.
 export function encodeRouteBrackets(pathname: string): string {
   return pathname.replaceAll('[', '%5B').replaceAll(']', '%5D')
 }

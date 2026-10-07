@@ -17,6 +17,7 @@ import type { Context } from '@netlify/edge-functions'
 import {
   REQUEST_META_HEADER,
   type RequestMeta,
+  STATIC_OUTPUT_FETCH_HEADER,
 } from '../../edge-runtime/lib/private-request-meta.ts'
 import {
   answerWithoutCompute,
@@ -59,6 +60,10 @@ export async function runNextRouting(
   routingConfig: RoutingConfig,
   middlewareConfig: MiddlewareConfig,
 ): Promise<Response | undefined> {
+  if (request.headers.has(STATIC_OUTPUT_FETCH_HEADER)) {
+    return
+  }
+
   const url = new URL(request.url)
   let middlewareResponse: Response | undefined
   // headers middleware set on its own response, e.g. `NextResponse.next({ headers })`

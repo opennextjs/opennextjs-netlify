@@ -13,6 +13,7 @@ import type { PluginContextAdapter } from '../plugin-context.js'
 
 import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
 import { isFallbackShell, isGroupEntry } from './prerendered.js'
+import { getPublishedPath } from './static.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
@@ -61,6 +62,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) => ({
           pathname,
           filePath,
+          publishedPath: getPublishedPath(pathname, filePath, ctx.adapterOutput.config),
         })),
       },
       buildId: ctx.adapterOutput.buildId,
