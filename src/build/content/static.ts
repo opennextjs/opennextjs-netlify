@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative } from 'node:path'
@@ -181,19 +182,28 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
 }
 
 // HTML is published under a name the CDN serves for the route (`/about` from `about.html`, or
-// `about/index.html` with trailingSlash); other static outputs keep their pathname (`robots.txt`)
-function getPublishedPath(
+// `about/index.html` with trailingSlash); other static outputs keep their pathname (`robots.txt`).
+// The CDN answers any other spelling of a file's path with a 301 to its canonical, lowercased one,
+// so a page whose pathname it would rewrite (uppercase, `[param]`, non-ASCII) is published under a
+// name only the function requests (by the manifest's publishedPath): a request for the route itself
+// then finds no file and reaches routing instead of the CDN's redirect.
+export function getPublishedPath(
   pathname: string,
   filePath: string,
-  { basePath, trailingSlash }: { basePath?: string; trailingSlash?: boolean },
+  { trailingSlash }: { trailingSlash?: boolean },
 ): string {
   if (!filePath.endsWith('.html')) {
     return pathname
   }
-  if (pathname === (basePath || '/') || pathname === `${basePath}/`) {
-    return `${basePath}/index.html`
+  if (/[^a-z\d/._~-]/.test(pathname)) {
+    return `/_netlify-next-pages/${createHash('sha256').update(pathname).digest('hex').slice(0, 16)}.html`
   }
-  return trailingSlash ? `${pathname.replace(/\/$/, '')}/index.html` : `${pathname}.html`
+  // an index page's output is `<dir>/index`, the route it serves is `<dir>`
+  const route = pathname.replace(/\/(index)?$/, '')
+  if (route === '') {
+    return '/index.html'
+  }
+  return trailingSlash ? `${route}/index.html` : `${route}.html`
 }
 
 function isStatusPagePathname(
