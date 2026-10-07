@@ -285,9 +285,14 @@ export async function runNextRouting(
     // @ts-expect-error duplex is needed for streaming bodies
     duplex: 'half',
   })
-  // context.next() forwards to the origin (server handler or CDN)
+  // context.next() forwards to the origin (server handler or CDN). We only change headers of what it
+  // returns, so the origin may answer a conditional request with a 304, unless routing sets the
+  // status (a 404 page), which would replace the 304.
+  const response = await context.next(forwardRequest, {
+    sendConditionalRequest: resolution.status === undefined,
+  })
   return withMiddlewareResponseHeaders(
-    applyResolutionToThisResponse(withFlightVary(request, await context.next(forwardRequest))),
+    applyResolutionToThisResponse(withFlightVary(request, response)),
   )
 }
 
