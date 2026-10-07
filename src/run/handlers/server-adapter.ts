@@ -115,8 +115,11 @@ function createNextCallbacks(
       if (!res.headersSent) {
         res.statusCode = 404
         for (const [name, value] of response.headers) {
+          // the body is written as is, so the headers describing its bytes go with it (a static page
+          // proxied from the CDN comes back compressed)
           if (
             name === 'content-type' ||
+            name === 'content-encoding' ||
             (setHeaders && !['content-length', 'transfer-encoding'].includes(name))
           ) {
             res.setHeader(name, value)
