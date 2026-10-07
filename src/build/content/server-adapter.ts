@@ -13,6 +13,7 @@ import type { PluginContextAdapter } from '../plugin-context.js'
 
 import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
 import { isFallbackShell, isGroupEntry } from './prerendered.js'
+import { isStatusPagePathname } from './static.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
@@ -32,15 +33,6 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
   await tracer.withActiveSpan('copyNextServerCodeFromAdapter', async () => {
     await mkdir(ctx.serverHandlerDir, { recursive: true })
 
-    // static error pages renderErrorPage may serve, shipped with the function (see serverStaticFile)
-    const basePath = ctx.adapterOutput.config.basePath ?? ''
-    const locales = ctx.adapterOutput.config.i18n?.locales ?? []
-    const errorPagePathnames = new Set(
-      ['', ...locales.map((locale) => `/${locale}`)].flatMap((prefix) => [
-        `${basePath}${prefix}/404`,
-        `${basePath}${prefix}/500`,
-      ]),
-    )
     const toRepoRelative = (filePath: string) =>
       isAbsolute(filePath) ? relative(ctx.adapterOutput.repoRoot, filePath) : filePath
 
@@ -71,7 +63,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
           resumeHeaders: output.pprChain?.headers,
         })),
         staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) =>
-          errorPagePathnames.has(pathname)
+          isStatusPagePathname(pathname, ctx.adapterOutput.config)
             ? { pathname, filePath: toRepoRelative(filePath), bundled: true as const }
             : { pathname, filePath },
         ),
@@ -131,7 +123,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
     }
 
     for (const { pathname, filePath } of ctx.adapterOutput.outputs.staticFiles) {
-      if (errorPagePathnames.has(pathname)) {
+      if (isStatusPagePathname(pathname, ctx.adapterOutput.config)) {
         allAssets.set(
           toRepoRelative(filePath),
           join(ctx.adapterOutput.repoRoot, toRepoRelative(filePath)),

@@ -6,7 +6,7 @@ import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
 import type { RoutingConfig } from '../../adapter-runtime-shared/next-routing.js'
-import { getPublishedPath } from '../content/static.js'
+import { getPublishedPath, isStatusPagePathname } from '../content/static.js'
 import { EDGE_HANDLER_NAME, PluginContextAdapter } from '../plugin-context.js'
 
 import { writeEdgeManifest } from './edge.js'
@@ -330,7 +330,11 @@ export async function getRoutingConfig(ctx: PluginContextAdapter): Promise<Routi
     publishedPaths: Object.fromEntries(
       outputs.staticFiles
         .map(({ pathname, filePath }) => [pathname, getPublishedPath(pathname, filePath, config)])
-        .filter(([pathname, publishedPath]) => publishedPath !== pathname),
+        // a direct request for the 404/500 page gets its status from a forced rule on its pathname
+        .filter(
+          ([pathname, publishedPath]) =>
+            publishedPath !== pathname && !isStatusPagePathname(pathname, config),
+        ),
     ),
   }
 }

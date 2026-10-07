@@ -206,7 +206,7 @@ export function getPublishedPath(
   return trailingSlash ? `${route}/index.html` : `${route}.html`
 }
 
-function isStatusPagePathname(
+export function isStatusPagePathname(
   pathname: string,
   { basePath = '', i18n }: { basePath?: string; i18n?: { locales: readonly string[] } | null },
 ): boolean {
