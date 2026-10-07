@@ -60,6 +60,8 @@ export type AdapterManifest = Pick<AdapterBuildCompleteContext, 'buildId'> & {
         isGroupEntry: boolean
         // a static shell to serve while the path is not generated (`fallback: true`)
         fallbackShell: boolean
+        // the PPR fallback shell gets upgraded to the requested path in the background
+        partialFallback?: boolean
         // PPR: headers of the request resuming a postponed render (`next-resume: 1`)
         resumeHeaders?: Record<string, string>
       })[]

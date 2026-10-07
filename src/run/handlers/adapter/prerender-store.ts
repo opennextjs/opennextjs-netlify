@@ -281,8 +281,8 @@ export async function servePrerenderGroup(
       'prerenderFallback.get',
     )
     const shellVariant = shell?.variants[variant.pathname]
-    const isPartialFallback = shellVariant && shell?.postponed !== undefined
-    if (isPartialFallback) {
+    const isPprShell = shellVariant && shell?.postponed !== undefined
+    if (isPprShell && group.entry.partialFallback) {
       // PPR partial fallback: upgrade the shell to the path's own group in the background, a
       // segment prefetch served the shell's segment included (the router retries it)
       requestContext.trackBackgroundWork(
@@ -293,7 +293,7 @@ export async function servePrerenderGroup(
         ),
       )
     }
-    if (isPartialFallback && variant === group.entry && group.entry.resumeHeaders) {
+    if (isPprShell && variant === group.entry && group.entry.resumeHeaders) {
       // resume the shell for this request
       return resumePrerender(
         { variant, entry: group.entry, postponed: shell.postponed as string, stored: shellVariant },
@@ -307,6 +307,18 @@ export async function servePrerenderGroup(
       )
       return { kind: 'shell', response }
     }
+  }
+
+  if (
+    !blob &&
+    !onDemand &&
+    group.entry.fallbackShell &&
+    !group.entry.partialFallback &&
+    computeOutputsById.get(group.entry.parentOutputId)?.router === 'app'
+  ) {
+    // like `next start`: without `partialFallback` nothing is generated for a path not prerendered,
+    // the route's shell serves its HTML and everything else (its RSC, a bot) is rendered as is
+    return undefined
   }
 
   // a PPR group's `.rsc` has no body of its own (its output's fallback has no file): it's a resume

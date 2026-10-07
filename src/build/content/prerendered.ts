@@ -540,15 +540,20 @@ export const isGroupEntry = (output: PrerenderOutput, ctx: PluginContextAdapter)
 
 /**
  * A route's fallback served while a path is generated: the Pages Router `fallback: true` shell, or
- * a PPR partial fallback shell (resumed per request and upgraded to the path in the background).
+ * a PPR fallback shell (resumed per request; upgraded to the path in the background only when Next
+ * marks it `partialFallback`, otherwise every path not prerendered keeps getting the shell, as under
+ * `next start`).
  */
 export const isFallbackShell = (output: PrerenderOutput, ctx: PluginContextAdapter) =>
   Boolean(output.fallback?.filePath) &&
   (output.fallback?.postponedState
-    ? Boolean(output.config.partialFallback)
+    ? true
     : output.routeType === undefined
       ? isGroupEntry(output, ctx) && Boolean(output.config.allowQuery?.length)
-      : output.routeType === 'fallback' &&
+      : // a `shell` is the reusable response for a route's paths not prerendered (a client
+        // component reading `use(params)` leaves nothing to resume)
+        (output.routeType === 'fallback' ||
+          (output.routeType === 'shell' && Boolean(output.config.allowQuery?.length))) &&
         output.response === 'initial' &&
         output.compute === 'static')
 

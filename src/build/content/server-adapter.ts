@@ -60,6 +60,7 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
           bypassToken: output.config.bypassToken,
           isGroupEntry: isGroupEntry(output, ctx),
           fallbackShell: isFallbackShell(output, ctx),
+          partialFallback: output.config.partialFallback,
           resumeHeaders: output.pprChain?.headers,
         })),
         staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) =>
