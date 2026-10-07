@@ -348,13 +348,17 @@ export const setCacheControlHeaders = (
  * stale-while-revalidate), unless the response already says what the CDN should do. Returns whether
  * it did.
  */
-export function setCdnCacheControlFromNext(headers: Headers, request: Request): boolean {
+export function setCdnCacheControlFromNext(
+  headers: Headers,
+  request: Request,
+  nextCache: string | null = headers.get('x-nextjs-cache'),
+): boolean {
   const cacheControl = headers.get('cache-control')
 
   if (
     cacheControl !== null &&
     ['GET', 'HEAD'].includes(request.method) &&
-    (headers.has('x-nextjs-cache') ||
+    (nextCache !== null ||
       (!headers.has('cdn-cache-control') && !headers.has('netlify-cdn-cache-control')))
   ) {
     // handle CDN Cache Control on ISR and App Router page responses
@@ -370,7 +374,7 @@ export function setCdnCacheControlFromNext(headers: Headers, request: Request): 
 
     const cdnCacheControl =
       // if we are serving already stale response, instruct edge to not attempt to cache that response
-      headers.get('x-nextjs-cache') === 'STALE'
+      nextCache === 'STALE'
         ? 'public, max-age=0, must-revalidate, durable'
         : [
             ...getHeaderValueArray(cacheControlForCdnFromNext).map((value) =>

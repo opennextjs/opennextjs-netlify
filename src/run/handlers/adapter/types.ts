@@ -63,6 +63,8 @@ export type CacheInputs = {
   tags?: string[]
   // when the stored response was generated, the CDN counts its age from there
   lastModified?: number
+  // how the prerender store served it: a stale response must not be cached as fresh
+  nextCache?: 'HIT' | 'STALE' | 'MISS'
 }
 
 /**

@@ -307,6 +307,7 @@ export async function servePrerenderGroup(
             tags: shellVariant.headers['x-next-cache-tags']
               ? undefined
               : shell.tags.map(encodeCacheTag),
+            nextCache: 'HIT' as const,
           }
         : undefined
     if (isPprShell && variant === group.entry && group.entry.resumeHeaders) {
@@ -380,6 +381,7 @@ export async function servePrerenderGroup(
         cache: {
           lastModified: nextCache === 'MISS' ? undefined : blob.lastModified,
           tags: stored.headers['x-next-cache-tags'] ? undefined : blob.tags.map(encodeCacheTag),
+          nextCache,
         },
       },
       args,
@@ -393,13 +395,13 @@ export async function servePrerenderGroup(
     request.method === 'HEAD' ? null : Buffer.from(stored.body, 'base64'),
     { status: stored.status, headers: stored.headers },
   )
-  response.headers.set('x-nextjs-cache', nextCache)
   return {
     kind: 'next',
     response,
     cache: {
       lastModified: nextCache === 'MISS' ? undefined : blob.lastModified,
       tags: stored.headers['x-next-cache-tags'] ? undefined : blob.tags.map(encodeCacheTag),
+      nextCache,
     },
   }
 }

@@ -20,11 +20,11 @@ function applyCacheHeaders(response: Response, request: Request, cache: CacheInp
   const tags = nextCacheTags ? nextCacheTags.split(/,|%2c/gi).map(encodeCacheTag) : cache.tags
   headers.delete('x-next-cache-tags')
 
-  const nextCache = headers.get('x-nextjs-cache')
+  const nextCache = cache.nextCache ?? null
   if ((nextCache === 'HIT' || nextCache === 'STALE') && cache.lastModified) {
     setDateFromLastModified(headers, cache.lastModified)
   }
-  setCdnCacheControlFromNext(headers, request)
+  setCdnCacheControlFromNext(headers, request, nextCache)
   if (tags && (headers.has('cache-control') || headers.has('netlify-cdn-cache-control'))) {
     headers.set('netlify-cache-tag', tags.join(','))
   }
