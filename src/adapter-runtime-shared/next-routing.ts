@@ -81,6 +81,12 @@ export function getInvocationUrl(
     (resolution.resolvedPathname && publishedPaths[resolution.resolvedPathname]) || pathname
   url.search = ''
   for (const [key, valueOrValues] of Object.entries(query)) {
+    // Next's route params (`nxtP*`/`nxtI*`, from a dynamic route's destination) reach the server
+    // handler in the resolution. In the URL the platform would append them to a relative redirect
+    // `Location` the origin returns, as it does with the whole forwarded query.
+    if (key.startsWith('nxtP') || key.startsWith('nxtI')) {
+      continue
+    }
     for (const value of Array.isArray(valueOrValues) ? valueOrValues : [valueOrValues]) {
       url.searchParams.append(key, value)
     }
