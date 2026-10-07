@@ -1,5 +1,6 @@
 // L7: turns a produced response into the platform response (CDN cache control, cache tags,
 // Netlify-Vary, Cache-Status), see docs/request-layers.md.
+import { PPR_SHELL_HEADER } from '../../../../edge-runtime/lib/private-request-meta.ts'
 import {
   setCacheStatusHeader,
   setCdnCacheControlFromNext,
@@ -27,7 +28,13 @@ function applyCacheHeaders(response: Response, request: Request, cache: CacheInp
   if (tags && (headers.has('cache-control') || headers.has('netlify-cdn-cache-control'))) {
     headers.set('netlify-cache-tag', tags.join(','))
   }
-  setVaryHeaders(headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2])
+  setVaryHeaders(
+    headers,
+    request,
+    manifest.config as Parameters<typeof setVaryHeaders>[2],
+    // the routing edge function asking for a PPR page's shell is cached apart
+    [PPR_SHELL_HEADER],
+  )
   setCacheStatusHeader(headers, nextCache)
 }
 

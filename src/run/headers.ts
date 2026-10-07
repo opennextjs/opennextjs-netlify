@@ -137,6 +137,7 @@ export const setVaryHeaders = (
   headers: Headers,
   request: Request,
   { basePath, i18n }: Pick<NextConfigComplete, 'basePath' | 'i18n'>,
+  extraHeaders: string[] = [],
 ) => {
   const netlifyVaryValues: NetlifyVaryValues = {
     header: [
@@ -151,8 +152,7 @@ export const setVaryHeaders = (
       'Next-Url',
       // and exact header that actually instruct Next.js to produce RSC response
       'RSC',
-      // the routing edge function asking for a PPR page's shell (see `PPR_SHELL_HEADER`)
-      'x-next-ppr-shell',
+      ...extraHeaders,
     ],
     language: [],
     cookie: ['__prerender_bypass', '__next_preview_data'],

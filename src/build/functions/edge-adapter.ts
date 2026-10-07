@@ -329,12 +329,16 @@ export async function getRoutingConfig(ctx: PluginContextAdapter): Promise<Routi
       ...publicPathnames.map((pathname) => ({ pathname, type: 'STATIC_FILE' as const })),
     ],
     ppr: Object.fromEntries(
-      outputs.prerenders
-        .filter((output) => output.pprChain && isGroupEntry(output, ctx))
-        .map((output) => [
-          output.pathname,
-          { resumeHeaders: output.pprChain!.headers, bypassFor: output.config.bypassFor },
-        ]),
+      outputs.prerenders.flatMap((output) =>
+        output.pprChain && isGroupEntry(output, ctx)
+          ? [
+              [
+                output.pathname,
+                { resumeHeaders: output.pprChain.headers, bypassFor: output.config.bypassFor },
+              ],
+            ]
+          : [],
+      ),
     ),
     publishedPaths: Object.fromEntries(
       outputs.staticFiles
