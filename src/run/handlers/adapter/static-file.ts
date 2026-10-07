@@ -2,7 +2,10 @@
 import { readFile } from 'node:fs/promises'
 import { resolve as resolvePath } from 'node:path'
 
-import { encodeRouteBrackets } from '../../../adapter-runtime-shared/next-routing.js'
+import {
+  encodeRouteBrackets,
+  withFlightVary,
+} from '../../../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../../../adapter-runtime-shared/proxy-external-rewrite.js'
 
 import { handlerRootDir } from './invoke.js'
@@ -38,14 +41,6 @@ export async function serverStaticFile(
     new URL(encodeRouteBrackets(publishedPath), request.url),
     request,
   )
-  // Next appends this to any response to a flight request, Pages Router included, "to avoid
-  // caching issues when navigating between pages and app" (`base-server` `setVaryHeader`)
-  if (request.headers.has('rsc') && response.headers.get('content-type')?.startsWith('text/html')) {
-    response.headers.set(
-      'vary',
-      'rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch',
-    )
-  }
   // a static output can't change within a deploy, so the proxied copy is cached like the file
-  return { kind: 'static-page', response, fullyStatic: true }
+  return { kind: 'static-page', response: withFlightVary(request, response), fullyStatic: true }
 }

@@ -27,6 +27,7 @@ import {
   responseToMiddlewareResult,
   serializeResolution,
   stripInternalRequestHeaders,
+  withFlightVary,
 } from '../adapter-runtime-shared/next-routing.js'
 import type { RoutingConfig } from '../adapter-runtime-shared/next-routing.js'
 // import { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
@@ -258,6 +259,6 @@ export async function runNextRouting(
   )
   // context.next() forwards to the origin (server handler or CDN)
   return withMiddlewareResponseHeaders(
-    applyResolutionToThisResponse(await context.next(forwardRequest)),
+    applyResolutionToThisResponse(withFlightVary(request, await context.next(forwardRequest))),
   )
 }

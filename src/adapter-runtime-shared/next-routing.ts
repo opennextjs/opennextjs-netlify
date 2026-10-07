@@ -94,6 +94,31 @@ export function getInvocationUrl(
   return url
 }
 
+/**
+ * A static page's HTML answering a flight request (CDN-served Pages HTML) gets the `Vary` Next appends
+ * to any response to one, Pages Router included, "to avoid caching issues when navigating between
+ * pages and app" (`base-server` `setVaryHeader`). Rendered responses already carry it.
+ */
+export function withFlightVary(request: Request, response: Response): Response {
+  if (
+    request.headers.has('rsc') &&
+    response.headers.get('content-type')?.startsWith('text/html') &&
+    !/\brsc\b/i.test(response.headers.get('vary') ?? '')
+  ) {
+    const headers = new Headers(response.headers)
+    headers.set(
+      'vary',
+      'rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch',
+    )
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
+  }
+  return response
+}
+
 // URL keeps `[`/`]` raw, but the CDN only finds a static file by its encoded name and answers the
 // raw form with a 301 to it. Only for requesting a static output's file: a forwarded rewrite target
 // must not match one, or the CDN's canonical redirect reaches the client.
