@@ -1,6 +1,10 @@
 // L5: composes a stored PPR shell with a resumed render, see docs/request-layers.md.
 import { Buffer } from 'node:buffer'
 
+import {
+  POSTPONED_LENGTH_HEADER,
+  PPR_SHELL_HEADER,
+} from '../../../../edge-runtime/lib/private-request-meta.ts'
 import type { PrerenderGroupBlob } from '../../../shared/blob-types.cjs'
 import { getLogger } from '../request-context.cjs'
 
@@ -20,11 +24,15 @@ export async function resumePrerender(
     entry,
     postponed,
     stored,
+    cache,
   }: {
     variant: PrerenderOutput
     entry: PrerenderOutput
     postponed: string
     stored?: PrerenderGroupBlob['variants'][string]
+    // how the shell the routing edge function asks for is cached (a stored group, or a route's shell
+    // that is never upgraded); without it, it's revalidated on every request
+    cache?: Extract<Produced, { kind: 'next' }>['cache']
   },
   args: ProduceRequest,
 ): Promise<Produced | undefined> {
@@ -42,6 +50,17 @@ export async function resumePrerender(
   }
   if (!stored) {
     return
+  }
+  if (request.headers.has(PPR_SHELL_HEADER)) {
+    // the routing edge function composes the page: it gets the postponed state and the shell, and
+    // resumes itself, so this is cached like the shell would be
+    const state = Buffer.from(postponed)
+    const response = new Response(
+      request.method === 'HEAD' ? null : Buffer.concat([state, Buffer.from(stored.body, 'base64')]),
+      { status: stored.status, headers: stored.headers },
+    )
+    response.headers.set(POSTPONED_LENGTH_HEADER, String(state.byteLength))
+    return cache ? { kind: 'next', response, cache } : { kind: 'shell', response }
   }
 
   // the shell goes out right away, the resumed part streams after it once Next produces it

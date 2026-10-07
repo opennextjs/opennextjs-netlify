@@ -1,6 +1,9 @@
 // L3: what a resolved request is for (an output, its prerender group, an error page, or an answer
 // dispatch gives itself) and producing it, see docs/request-layers.md.
-import type { ResolveRoutesResult } from '../../../adapter-runtime-shared/next-routing.js'
+import {
+  matchesHas,
+  type ResolveRoutesResult,
+} from '../../../adapter-runtime-shared/next-routing.js'
 
 import { invokeHandler } from './invoke.js'
 import {
@@ -32,31 +35,6 @@ export function produceOutput(
   return routed.kind === 'compute'
     ? invokeHandler(routed.output, args, options)
     : serverStaticFile(routed.file, args)
-}
-
-function matchesHas(
-  has: NonNullable<PrerenderOutput['bypassFor']>[number],
-  request: Request,
-  url: URL,
-): boolean {
-  let value: string | null | undefined
-  switch (has.type) {
-    case 'header':
-      value = request.headers.get(has.key)
-      break
-    case 'query':
-      value = url.searchParams.get(has.key)
-      break
-    case 'host':
-      value = url.hostname
-      break
-    default:
-      value = getCookie(request, has.key)
-  }
-  if (value === null || value === undefined) {
-    return false
-  }
-  return has.value === undefined || new RegExp(`^${has.value}$`).test(value)
 }
 
 function getCookie(request: Request, name: string): string | undefined {

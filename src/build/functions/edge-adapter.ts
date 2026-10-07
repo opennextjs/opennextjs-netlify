@@ -6,6 +6,7 @@ import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
 import type { RoutingConfig } from '../../adapter-runtime-shared/next-routing.js'
+import { isGroupEntry } from '../content/prerendered.js'
 import { getPublishedPath, isStatusPagePathname } from '../content/static.js'
 import { EDGE_HANDLER_NAME, PluginContextAdapter } from '../plugin-context.js'
 
@@ -327,6 +328,14 @@ export async function getRoutingConfig(ctx: PluginContextAdapter): Promise<Routi
       ...collectPathnames(ctx.adapterOutput),
       ...publicPathnames.map((pathname) => ({ pathname, type: 'STATIC_FILE' as const })),
     ],
+    ppr: Object.fromEntries(
+      outputs.prerenders
+        .filter((output) => output.pprChain && isGroupEntry(output, ctx))
+        .map((output) => [
+          output.pathname,
+          { resumeHeaders: output.pprChain!.headers, bypassFor: output.config.bypassFor },
+        ]),
+    ),
     publishedPaths: Object.fromEntries(
       outputs.staticFiles
         .map(({ pathname, filePath }) => [pathname, getPublishedPath(pathname, filePath, config)])

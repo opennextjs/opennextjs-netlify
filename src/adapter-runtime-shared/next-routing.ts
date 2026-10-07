@@ -6,6 +6,10 @@ import { proxyExternalRewrite } from './proxy-external-rewrite.js'
 export { responseToMiddlewareResult } from '@next/routing'
 export type { ResolveRoutesParams, ResolveRoutesResult } from '@next/routing'
 
+export type HasCondition =
+  | { type: 'header' | 'cookie' | 'query'; key: string; value?: string }
+  | { type: 'host'; key?: undefined; value: string }
+
 /**
  * What `resolveRoutes` takes from the build. Produced once (getRoutingConfig) for both the routing
  * edge function and the server handler, so they resolve the same way.
@@ -22,6 +26,39 @@ export type RoutingConfig = Pick<
 > & {
   // static outputs whose file is published under another name than their pathname (getPublishedPath)
   publishedPaths: Record<string, string>
+  // PPR pages by prerender pathname: the headers resuming one, and the requests Next renders
+  // instead of answering from the prerender (`bypassFor`)
+  ppr: Record<string, { resumeHeaders: Record<string, string>; bypassFor?: HasCondition[] }>
+}
+
+function getCookie(request: Request, name: string): string | undefined {
+  for (const cookie of (request.headers.get('cookie') ?? '').split(';')) {
+    const [key, ...value] = cookie.trim().split('=')
+    if (key === name) {
+      return value.join('=')
+    }
+  }
+}
+
+export function matchesHas(has: HasCondition, request: Request, url: URL): boolean {
+  let value: string | null | undefined
+  switch (has.type) {
+    case 'header':
+      value = request.headers.get(has.key)
+      break
+    case 'query':
+      value = url.searchParams.get(has.key)
+      break
+    case 'host':
+      value = url.hostname
+      break
+    default:
+      value = getCookie(request, has.key)
+  }
+  if (value === null || value === undefined) {
+    return false
+  }
+  return has.value === undefined || new RegExp(`^${has.value}$`).test(value)
 }
 
 // Next's router-server drops these from every incoming request before doing anything with it

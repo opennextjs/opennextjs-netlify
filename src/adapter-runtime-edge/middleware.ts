@@ -15,6 +15,8 @@
 import type { Context } from '@netlify/edge-functions'
 
 import {
+  POSTPONED_LENGTH_HEADER,
+  PPR_SHELL_HEADER,
   REQUEST_META_HEADER,
   type RequestMeta,
 } from '../../edge-runtime/lib/private-request-meta.ts'
@@ -23,6 +25,7 @@ import {
   applyResolutionToResponse,
   getInvocationUrl,
   isUnmatchedNextDataRequest,
+  matchesHas,
   resolve,
   responseToMiddlewareResult,
   serializeResolution,
@@ -73,6 +76,7 @@ export async function runNextRouting(
   // only this function may set the private meta header, a client must not be able to pre-populate
   // it (nor middleware copy it into its request header overrides)
   request.headers.delete(REQUEST_META_HEADER)
+  request.headers.delete(PPR_SHELL_HEADER)
 
   const routingHeaders = stripInternalRequestHeaders(new Headers(request.headers))
   // A request body can only be read once, and both middleware and the origin need it. Tee it when
@@ -247,18 +251,133 @@ export async function runNextRouting(
     forwardHeaders.set(REQUEST_META_HEADER, JSON.stringify(meta))
   }
 
-  const forwardRequest = new Request(
-    getInvocationUrl(request, resolution, routingConfig.publishedPaths),
-    {
-      method: request.method,
-      headers: forwardHeaders,
-      body: originBody,
-      // @ts-expect-error duplex is needed for streaming bodies
-      duplex: 'half',
-    },
-  )
+  const invocationUrl = getInvocationUrl(request, resolution, routingConfig.publishedPaths)
+  const ppr = resolution.resolvedPathname
+    ? routingConfig.ppr[resolution.resolvedPathname]
+    : undefined
+  if (
+    ppr &&
+    ['GET', 'HEAD'].includes(request.method) &&
+    !request.headers.has('rsc') &&
+    !(ppr.bypassFor ?? []).some((has) => matchesHas(has, request, url))
+  ) {
+    forwardHeaders.set(PPR_SHELL_HEADER, '1')
+    const shell = await context.next(
+      new Request(invocationUrl, { method: request.method, headers: forwardHeaders }),
+    )
+    forwardHeaders.delete(PPR_SHELL_HEADER)
+    const composed = await composePPR(shell, request, (postponed) =>
+      context.next(
+        new Request(invocationUrl, {
+          method: 'POST',
+          headers: { ...Object.fromEntries(forwardHeaders), ...ppr.resumeHeaders },
+          body: postponed,
+        }),
+      ),
+    )
+    return withMiddlewareResponseHeaders(applyResolutionToThisResponse(composed))
+  }
+
+  const forwardRequest = new Request(invocationUrl, {
+    method: request.method,
+    headers: forwardHeaders,
+    body: originBody,
+    // @ts-expect-error duplex is needed for streaming bodies
+    duplex: 'half',
+  })
   // context.next() forwards to the origin (server handler or CDN)
   return withMiddlewareResponseHeaders(
     applyResolutionToThisResponse(withFlightVary(request, await context.next(forwardRequest))),
   )
+}
+
+/**
+ * PPR at the edge: the shell response (cached by the CDN like the page's shell) starts with the
+ * postponed state, its length in `POSTPONED_LENGTH_HEADER`. The shell goes to the client right away
+ * and the resumed render streams after it. Anything else (a page that turned out not to postpone)
+ * is passed through as is.
+ */
+async function composePPR(
+  shell: Response,
+  request: Request,
+  resume: (postponed: Uint8Array<ArrayBuffer>) => Promise<Response>,
+): Promise<Response> {
+  const length = Number(shell.headers.get(POSTPONED_LENGTH_HEADER))
+  if (!shell.body || !shell.headers.has(POSTPONED_LENGTH_HEADER) || !Number.isInteger(length)) {
+    return shell
+  }
+  const headers = new Headers(shell.headers)
+  headers.delete(POSTPONED_LENGTH_HEADER)
+  headers.delete('content-length')
+  // the page is per request, only its shell is cached
+  headers.set('cache-control', 'private, no-cache, no-store, max-age=0, must-revalidate')
+  if (request.method === 'HEAD') {
+    await shell.body.cancel()
+    return new Response(null, { status: shell.status, headers })
+  }
+
+  const reader = shell.body.getReader()
+  let buffered: Uint8Array<ArrayBuffer> = new Uint8Array(0)
+  while (buffered.byteLength < length) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+    const next = new Uint8Array(buffered.byteLength + value.byteLength)
+    next.set(buffered)
+    next.set(value, buffered.byteLength)
+    buffered = next
+  }
+  const postponed = buffered.slice(0, length)
+  const shellChunks = [buffered.slice(length)]
+  if (request.headers.has('x-nf-debug-logging')) {
+    // where the shell ends and the resumed render starts: the whole (cached) shell is read before
+    // responding, so its length can go in a header
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) {
+        break
+      }
+      shellChunks.push(value)
+    }
+    headers.set(
+      'x-next-ppr-shell-bytes',
+      String(shellChunks.reduce((total, chunk) => total + chunk.byteLength, 0)),
+    )
+  }
+
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      for (const chunk of shellChunks) {
+        if (chunk.byteLength !== 0) {
+          controller.enqueue(chunk)
+        }
+      }
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) {
+          break
+        }
+        controller.enqueue(value)
+      }
+      try {
+        const resumed = await resume(postponed)
+        if (resumed.body) {
+          const resumedReader = resumed.body.getReader()
+          for (;;) {
+            const { done, value } = await resumedReader.read()
+            if (done) {
+              break
+            }
+            controller.enqueue(value)
+          }
+        }
+      } catch (error) {
+        // the shell is already out, so the page can only end short
+        console.error('PPR resume error', error)
+      }
+      controller.close()
+    },
+  })
+  return new Response(body, { status: shell.status, headers })
 }

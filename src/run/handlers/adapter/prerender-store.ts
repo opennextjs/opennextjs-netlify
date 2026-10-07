@@ -348,7 +348,16 @@ export async function servePrerenderGroup(
 
   if (blob.postponed !== undefined && group.entry.resumeHeaders) {
     const resumed = await resumePrerender(
-      { variant, entry: group.entry, postponed: blob.postponed, stored },
+      {
+        variant,
+        entry: group.entry,
+        postponed: blob.postponed,
+        stored,
+        cache: {
+          lastModified: nextCache === 'MISS' ? undefined : blob.lastModified,
+          tags: stored.headers['x-next-cache-tags'] ? undefined : blob.tags.map(encodeCacheTag),
+        },
+      },
       args,
     )
     if (resumed) {
