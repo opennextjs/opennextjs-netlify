@@ -293,10 +293,32 @@ export async function servePrerenderGroup(
         ),
       )
     }
+    // An App Router shell without `partialFallback` is the final answer for this path (nothing is
+    // generated for it), so it's cached like a stored response. Only a shell that never goes stale
+    // for now: nothing regenerates a route's fallback shell yet.
+    const shellCache =
+      shell &&
+      shellVariant &&
+      shell.revalidate === false &&
+      !group.entry.partialFallback &&
+      computeOutputsById.get(group.entry.parentOutputId)?.router === 'app'
+        ? {
+            lastModified: shell.lastModified,
+            tags: shellVariant.headers['x-next-cache-tags']
+              ? undefined
+              : shell.tags.map(encodeCacheTag),
+          }
+        : undefined
     if (isPprShell && variant === group.entry && group.entry.resumeHeaders) {
       // resume the shell for this request
       return resumePrerender(
-        { variant, entry: group.entry, postponed: shell.postponed as string, stored: shellVariant },
+        {
+          variant,
+          entry: group.entry,
+          postponed: shell.postponed as string,
+          stored: shellVariant,
+          cache: shellCache,
+        },
         args,
       )
     }
@@ -305,7 +327,9 @@ export async function servePrerenderGroup(
         request.method === 'HEAD' ? null : Buffer.from(shellVariant.body, 'base64'),
         { status: shellVariant.status, headers: shellVariant.headers },
       )
-      return { kind: 'shell', response }
+      return shellCache
+        ? { kind: 'next', response, cache: shellCache }
+        : { kind: 'shell', response }
     }
   }
 
