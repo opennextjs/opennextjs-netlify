@@ -19,6 +19,8 @@ export type InvokeHandlerArg = {
   entrypoint: string
   runtime: 'nodejs' | 'edge'
   sourcePage: string
+  // Next checks tags for app router entries only, a pages router entry is stale by its revalidate alone
+  router: 'pages' | 'app'
 }
 
 export type StaticFileHandlerArg = {
@@ -55,23 +57,24 @@ const ssgSourcePages = new Set(
 export const ssgPathnames = new Set<string>()
 
 // outputs that invoke compute (the runtime manifest is minimized, output types come from the list)
-for (const outputs of [
-  manifest.outputs.pages,
-  manifest.outputs.pagesApi,
-  manifest.outputs.appPages,
-  manifest.outputs.appRoutes,
-]) {
+for (const [outputs, router] of [
+  [manifest.outputs.pages, 'pages'],
+  [manifest.outputs.pagesApi, 'pages'],
+  [manifest.outputs.appPages, 'app'],
+  [manifest.outputs.appRoutes, 'app'],
+] as const) {
   for (const output of outputs) {
-    registerComputeOutput(output)
+    registerComputeOutput(output, router)
   }
 }
 
-function registerComputeOutput(output: AdapterManifestComputeOutput) {
+function registerComputeOutput(output: AdapterManifestComputeOutput, router: 'pages' | 'app') {
   const computeOutput = {
     id: output.id,
     entrypoint: output.filePath,
     runtime: output.runtime,
     sourcePage: output.sourcePage,
+    router,
   }
   computeOutputsById.set(output.id, computeOutput)
   outputsByPathname.set(output.pathname, { kind: 'compute', output: computeOutput })

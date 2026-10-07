@@ -224,6 +224,10 @@ export async function servePrerenderGroup(
     paramsString ? `${group.entry.pathname}?${paramsString}` : group.entry.pathname,
   )
   const store = getMemoizedKeyValueStoreBackedByRegionalBlobStore({ consistency: 'strong' })
+  // TODO(adapter): the tag revalidation marker is read only after the entry, where standalone
+  // prefetches it alongside (`prefetchTagRevalidationMarker`). The group's output `router` is known
+  // before any blob read, so app router groups could start the marker read here (fetch entries in
+  // cache-adapter.cts likewise).
   let blob = await store.get<PrerenderGroupBlob>(groupKey, 'prerenderGroup.get')
   let nextCache: 'HIT' | 'STALE' | 'MISS' = 'HIT'
 
@@ -243,7 +247,10 @@ export async function servePrerenderGroup(
     nextCache = 'MISS'
   } else if (blob) {
     const age = (Date.now() - blob.lastModified) / 1000
-    const tags = await isAnyTagStaleOrExpired(blob.tags, blob.lastModified)
+    const tags =
+      computeOutputsById.get(group.entry.parentOutputId)?.router === 'pages'
+        ? { stale: false, expired: false }
+        : await isAnyTagStaleOrExpired(blob.tags, blob.lastModified)
     const expired = tags.expired || (blob.expire !== undefined && age > blob.expire)
     const stale = tags.stale || (blob.revalidate !== false && age > blob.revalidate)
     if (expired || (stale && isBackgroundRevalidationRequest(request))) {
