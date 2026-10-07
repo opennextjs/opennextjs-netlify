@@ -2,6 +2,14 @@ import { expect } from '@playwright/test'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 
+// Adapter mode: the routing edge function runs before the CDN cache. It adds the default locale, so
+// the implicit and explicit locale paths share one CDN entry, and it drops the client's
+// `x-nextjs-data` (Next derives it from the URL), so the data a fallback page fetched by itself
+// shares an entry with the test's data request. A request right after either is served from it.
+const SERVED_FROM_SHARED_CDN_ENTRY = /"Netlify (Edge"; hit|Durable"; hit)/m
+// the fallback shell isn't cached, the explicit locale request then hits Next's cache instead
+const SHARED_CDN_ENTRY_OR_NEXT_HIT = /"Netlify (Edge"; hit|Durable"; hit)|"Next.js"; hit/m
+
 export function waitFor(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis))
 }
@@ -191,7 +199,10 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
               // we will invoke function and see Next cache hit status \
               // in the response because it was prerendered at build time
               // or regenerated in previous attempt to run this test
-              'cache-status': [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
+              'cache-status':
+                process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && useFallback
+                  ? [SHARED_CDN_ENTRY_OR_NEXT_HIT]
+                  : [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
             },
             headersNotMatchedMessage:
               'First request to tested page (data) should be a miss or stale on the Edge and hit in Next.js',
@@ -776,7 +787,9 @@ test.describe('Page Router with basePath and i18n', () => {
                 // just CDN node in earlier step
                 // we will invoke function and see Next cache hit status \
                 // in the response because it was set by previous request that didn't have locale in pathname
-                'cache-status': [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
+                'cache-status': process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+                  ? [useFallback ? SHARED_CDN_ENTRY_OR_NEXT_HIT : SERVED_FROM_SHARED_CDN_ENTRY]
+                  : [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
               },
               headersNotMatchedMessage:
                 'First request to tested page (explicit locale html) should be a miss or stale on the Edge and hit in Next.js',
@@ -823,7 +836,10 @@ test.describe('Page Router with basePath and i18n', () => {
                 // we will invoke function and see Next cache hit status \
                 // in the response because it was prerendered at build time
                 // or regenerated in previous attempt to run this test
-                'cache-status': [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
+                'cache-status':
+                  process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && useFallback
+                    ? [SHARED_CDN_ENTRY_OR_NEXT_HIT]
+                    : [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
               },
               headersNotMatchedMessage:
                 'First request to tested page (data) should be a miss or stale on the Edge and hit in Next.js',
@@ -984,7 +1000,9 @@ test.describe('Page Router with basePath and i18n', () => {
                 // warmed up with fresh response, but CDN cache just knows that previously
                 // cached response is stale, so we are hitting our function that serve
                 // already cached response
-                'cache-status': [/"Next.js"; hit/m, /"Netlify Edge"; fwd=(miss|stale)/m],
+                'cache-status': process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+                  ? [SERVED_FROM_SHARED_CDN_ENTRY]
+                  : [/"Next.js"; hit/m, /"Netlify Edge"; fwd=(miss|stale)/m],
               },
               headersNotMatchedMessage:
                 'Third request to tested page (explicit locale html) should be a miss or stale on the Edge and hit in Next.js after on-demand revalidation',
@@ -1080,7 +1098,9 @@ test.describe('Page Router with basePath and i18n', () => {
                 // warmed up with fresh response, but CDN cache just knows that previously
                 // cached response is stale, so we are hitting our function that serve
                 // already cached response
-                'cache-status': [/"Next.js"; hit/m, /"Netlify Edge"; fwd=(miss|stale)/m],
+                'cache-status': process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+                  ? [SERVED_FROM_SHARED_CDN_ENTRY]
+                  : [/"Next.js"; hit/m, /"Netlify Edge"; fwd=(miss|stale)/m],
               },
               headersNotMatchedMessage:
                 'Fourth request to tested page (explicit locale html) should be a miss or stale on the Edge and hit in Next.js after on-demand revalidation',
@@ -1202,7 +1222,10 @@ test.describe('Page Router with basePath and i18n', () => {
                 // we will invoke function and see Next cache hit status \
                 // in the response because it was prerendered at build time
                 // or regenerated in previous attempt to run this test
-                'cache-status': [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
+                'cache-status':
+                  process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && useFallback
+                    ? [SHARED_CDN_ENTRY_OR_NEXT_HIT]
+                    : [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
               },
               headersNotMatchedMessage:
                 'First request to tested page (data) should be a miss or stale on the Edge and hit in Next.js',
