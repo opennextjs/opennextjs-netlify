@@ -10,6 +10,7 @@ import {
   type PrerenderGroup,
   prerenderGroups,
   type PrerenderOutput,
+  prerendersByPathname,
   readOnlyPathnames,
   type RoutedOutput,
   ssgPathnames,
@@ -67,17 +68,6 @@ function getCookie(request: Request, name: string): string | undefined {
   }
 }
 
-// like Next's getIsPossibleServerAction (server/lib/server-action-request-meta.ts)
-function isPossibleServerAction(request: Request): boolean {
-  const contentType = request.headers.get('content-type')
-  return (
-    request.method === 'POST' &&
-    (request.headers.has('next-action') ||
-      contentType === 'application/x-www-form-urlencoded' ||
-      Boolean(contentType?.startsWith('multipart/form-data')))
-  )
-}
-
 function shouldBypassPrerender(output: PrerenderOutput, request: Request, url: URL): boolean {
   if (!['GET', 'HEAD'].includes(request.method)) {
     return true
@@ -126,12 +116,14 @@ export function dispatch(
   // `Allow: GET, HEAD` and 405s every other method on a static output, and base-server does the
   // same for an SSG page. Route modules carry neither check, so it lands on the host (adapter-k8s
   // gates its static serves the same way). Server actions and postponed resumes legitimately
-  // POST to a page URL — and a form-submitted action carries no `next-action` header, only a
-  // form content-type, so check it the same way base-server does.
+  // POST to a page URL: the prerender's `bypassFor` lists the requests Next renders instead
+  // (actions by their header or form content-type).
   if (
     !['GET', 'HEAD'].includes(request.method) &&
     readOnlyPathnames.has(pathname) &&
-    !isPossibleServerAction(request) &&
+    !(prerendersByPathname.get(pathname)?.bypassFor ?? []).some((has) =>
+      matchesHas(has, request, url),
+    ) &&
     !request.headers.has('next-resume')
   ) {
     return {
