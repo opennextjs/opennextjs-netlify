@@ -44,7 +44,7 @@ function preferDefault(mod: unknown): unknown {
 
 // PLUGIN_DIR is the app dir inside the handler (where `.netlify` lives), output filePaths are relative
 // to the handler root
-const handlerRootDir = resolvePath(
+export const handlerRootDir = resolvePath(
   PLUGIN_DIR,
   ...manifest.relativeAppDir
     .split('/')

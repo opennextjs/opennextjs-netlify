@@ -26,7 +26,7 @@ export type InvokeHandlerArg = {
 export type StaticFileHandlerArg = {
   filePath: string
   pathname: string
-  publishedPath: string
+  bundled?: true
 }
 
 // what a routable pathname leads to: a compute output to invoke, or a static file to serve
@@ -121,11 +121,7 @@ for (const output of manifest.outputs.prerenders) {
 for (const pathname of manifest.publicPathnames) {
   outputsByPathname.set(pathname, {
     kind: 'static',
-    file: {
-      filePath: `public${pathname.slice(basePath.length)}`,
-      pathname,
-      publishedPath: pathname,
-    },
+    file: { filePath: `public${pathname.slice(basePath.length)}`, pathname },
   })
 }
 
@@ -136,7 +132,7 @@ for (const output of manifest.outputs.staticFiles) {
     file: {
       filePath: output.filePath,
       pathname: output.pathname,
-      publishedPath: output.publishedPath,
+      bundled: output.bundled,
     },
   })
 }

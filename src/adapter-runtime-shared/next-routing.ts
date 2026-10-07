@@ -19,7 +19,10 @@ export type RoutingConfig = Pick<
   | 'skipMiddlewareUrlNormalize'
   | 'i18n'
   | 'routes'
->
+> & {
+  // static outputs whose file is published under another name than their pathname (getPublishedPath)
+  publishedPaths: Record<string, string>
+}
 
 // Next's router-server drops these from every incoming request before doing anything with it
 // (`filterInternalHeaders`): they are how Next's own tiers talk to each other, so honouring them
@@ -62,13 +65,20 @@ export function stripInternalRequestHeaders(headers: Headers): Headers {
  * rewrites (routing rules or middleware), which is also what the CDN caches by. The route module
  * gets the requested URL as `req.url` separately, see the private meta header.
  */
-export function getInvocationUrl(request: Request, resolution: ResolveRoutesResult): URL {
+export function getInvocationUrl(
+  request: Request,
+  resolution: ResolveRoutesResult,
+  publishedPaths: RoutingConfig['publishedPaths'],
+): URL {
   const url = new URL(request.url)
   if (!resolution.invocationTarget) {
     return url
   }
   const { pathname, query } = resolution.invocationTarget
-  url.pathname = pathname
+  // a static output by the name its file is published under: the route's pathname would get the
+  // CDN's own URL normalization (pretty URLs, lowercasing, encoding), answered with a redirect
+  url.pathname =
+    (resolution.resolvedPathname && publishedPaths[resolution.resolvedPathname]) || pathname
   url.search = ''
   for (const [key, valueOrValues] of Object.entries(query)) {
     for (const value of Array.isArray(valueOrValues) ? valueOrValues : [valueOrValues]) {

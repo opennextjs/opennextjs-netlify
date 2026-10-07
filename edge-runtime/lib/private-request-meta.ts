@@ -17,12 +17,3 @@ export type RequestMeta = {
 }
 
 export const REQUEST_META_HEADER = 'x-next-request-meta'
-
-/**
- * Set by the server handler on its own request for a static output it serves from the CDN (routing
- * already ran for the original request): the routing edge function passes such a request through
- * untouched instead of routing it, and running middleware, a second time.
- * TODO(adapter): a client can set it too and skip routing (and middleware) for a static file; bind
- * it to something a client can't know, like the request meta's request id.
- */
-export const STATIC_OUTPUT_FETCH_HEADER = 'x-next-static-output-fetch'

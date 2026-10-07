@@ -1,6 +1,6 @@
 import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, join, relative } from 'node:path'
+import { dirname, isAbsolute, join, relative } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
 import { trace } from '@opentelemetry/api'
@@ -13,7 +13,6 @@ import type { PluginContextAdapter } from '../plugin-context.js'
 
 import { copyEdgeRuntimeOutputs } from './edge-runtime-sandbox.js'
 import { isFallbackShell, isGroupEntry } from './prerendered.js'
-import { getPublishedPath } from './static.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
@@ -32,6 +31,18 @@ const computeOutput = (output: AdapterManifestComputeOutput): AdapterManifestCom
 export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): Promise<void> => {
   await tracer.withActiveSpan('copyNextServerCodeFromAdapter', async () => {
     await mkdir(ctx.serverHandlerDir, { recursive: true })
+
+    // static error pages renderErrorPage may serve, shipped with the function (see serverStaticFile)
+    const basePath = ctx.adapterOutput.config.basePath ?? ''
+    const locales = ctx.adapterOutput.config.i18n?.locales ?? []
+    const errorPagePathnames = new Set(
+      ['', ...locales.map((locale) => `/${locale}`)].flatMap((prefix) => [
+        `${basePath}${prefix}/404`,
+        `${basePath}${prefix}/500`,
+      ]),
+    )
+    const toRepoRelative = (filePath: string) =>
+      isAbsolute(filePath) ? relative(ctx.adapterOutput.repoRoot, filePath) : filePath
 
     // Write the adapter manifest (routing + output metadata) for runtime use.
     // filePaths are already relative (rewritten in the adapter's onBuildComplete).
@@ -59,11 +70,11 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
           fallbackShell: isFallbackShell(output, ctx),
           resumeHeaders: output.pprChain?.headers,
         })),
-        staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) => ({
-          pathname,
-          filePath,
-          publishedPath: getPublishedPath(pathname, filePath, ctx.adapterOutput.config),
-        })),
+        staticFiles: ctx.adapterOutput.outputs.staticFiles.map(({ pathname, filePath }) =>
+          errorPagePathnames.has(pathname)
+            ? { pathname, filePath: toRepoRelative(filePath), bundled: true as const }
+            : { pathname, filePath },
+        ),
       },
       buildId: ctx.adapterOutput.buildId,
       config: {
@@ -116,6 +127,15 @@ export const copyNextServerCodeFromAdapter = async (ctx: PluginContextAdapter): 
         for (const absPath of Object.values(output.wasmAssets ?? {})) {
           allAssets.set(relative(ctx.adapterOutput.repoRoot, absPath), absPath)
         }
+      }
+    }
+
+    for (const { pathname, filePath } of ctx.adapterOutput.outputs.staticFiles) {
+      if (errorPagePathnames.has(pathname)) {
+        allAssets.set(
+          toRepoRelative(filePath),
+          join(ctx.adapterOutput.repoRoot, toRepoRelative(filePath)),
+        )
       }
     }
 

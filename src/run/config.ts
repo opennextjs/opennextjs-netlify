@@ -64,8 +64,9 @@ export type AdapterManifest = Pick<AdapterBuildCompleteContext, 'buildId'> & {
         resumeHeaders?: Record<string, string>
       })[]
     staticFiles: (Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'> & {
-      // the file's path on the CDN (copyStaticAssets), `/about.html` for `/about`
-      publishedPath: string
+      // shipped with the function (an error page renderErrorPage serves), read from disk instead of
+      // fetched from the CDN, which would route the request again
+      bundled?: true
     })[]
   }
   // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)

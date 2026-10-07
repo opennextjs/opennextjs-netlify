@@ -17,7 +17,6 @@ import type { Context } from '@netlify/edge-functions'
 import {
   REQUEST_META_HEADER,
   type RequestMeta,
-  STATIC_OUTPUT_FETCH_HEADER,
 } from '../../edge-runtime/lib/private-request-meta.ts'
 import {
   answerWithoutCompute,
@@ -60,10 +59,6 @@ export async function runNextRouting(
   routingConfig: RoutingConfig,
   middlewareConfig: MiddlewareConfig,
 ): Promise<Response | undefined> {
-  if (request.headers.has(STATIC_OUTPUT_FETCH_HEADER)) {
-    return
-  }
-
   const url = new URL(request.url)
   let middlewareResponse: Response | undefined
   // headers middleware set on its own response, e.g. `NextResponse.next({ headers })`
@@ -246,13 +241,16 @@ export async function runNextRouting(
     forwardHeaders.set(REQUEST_META_HEADER, JSON.stringify(meta))
   }
 
-  const forwardRequest = new Request(getInvocationUrl(request, resolution), {
-    method: request.method,
-    headers: forwardHeaders,
-    body: originBody,
-    // @ts-expect-error duplex is needed for streaming bodies
-    duplex: 'half',
-  })
+  const forwardRequest = new Request(
+    getInvocationUrl(request, resolution, routingConfig.publishedPaths),
+    {
+      method: request.method,
+      headers: forwardHeaders,
+      body: originBody,
+      // @ts-expect-error duplex is needed for streaming bodies
+      duplex: 'half',
+    },
+  )
   // context.next() forwards to the origin (server handler or CDN)
   return withMiddlewareResponseHeaders(
     applyResolutionToThisResponse(await context.next(forwardRequest)),

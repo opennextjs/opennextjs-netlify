@@ -1,29 +1,42 @@
 // Static outputs reached through the function (routing landed on one): proxied from the CDN.
-import { STATIC_OUTPUT_FETCH_HEADER } from '../../../../edge-runtime/lib/private-request-meta.ts'
+import { readFile } from 'node:fs/promises'
+import { resolve as resolvePath } from 'node:path'
+
 import { encodeRouteBrackets } from '../../../adapter-runtime-shared/next-routing.js'
 import { proxyExternalRewrite } from '../../../adapter-runtime-shared/proxy-external-rewrite.js'
 
-import type { StaticFileHandlerArg } from './manifest.js'
+import { handlerRootDir } from './invoke.js'
+import { manifest, type StaticFileHandlerArg } from './manifest.js'
 import type { Produced, ProduceRequest } from './types.js'
 
 export async function serverStaticFile(
-  { pathname, publishedPath }: StaticFileHandlerArg,
+  { filePath, pathname, bundled }: StaticFileHandlerArg,
   { request }: ProduceRequest,
 ): Promise<Produced> {
-  // Every static output is on the CDN (copyStaticAssets). A request for the file itself never
-  // reaches the function, so getting here means routing landed on it (a rewrite, the default
-  // locale, an error page): fetch it from the CDN.
+  // an error page compute renders mid-request: fetching it from the CDN would go through routing
+  // (the routing edge function) again
+  if (bundled) {
+    return {
+      kind: 'static-page',
+      response: new Response(await readFile(resolvePath(handlerRootDir, filePath)), {
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+      fullyStatic: true,
+    }
+  }
+  // Every static output is on the CDN (copyStaticAssets), and the routing edge function forwards a
+  // request routed to one there. Getting here means the function routed the request itself (nothing
+  // in front of it, like the integration tests' emulated CDN): fetch it from the CDN.
   if (new URL(request.url).pathname === pathname) {
     // the CDN doesn't have it either (see copyStaticAssets), don't loop through it
     return { kind: 'final', response: new Response('Not Found', { status: 404 }) }
   }
   // by its published file name, which the CDN serves as is: the route's pathname gets the CDN's own
   // URL normalization (pretty URLs, encoding), answered with a redirect instead of the file
-  const headers = new Headers(request.headers)
-  headers.set(STATIC_OUTPUT_FETCH_HEADER, '1')
+  const publishedPath = manifest.routingConfig.publishedPaths[pathname] ?? pathname
   const response = await proxyExternalRewrite(
     new URL(encodeRouteBrackets(publishedPath), request.url),
-    new Request(request.url, { method: request.method, headers }),
+    request,
   )
   // Next appends this to any response to a flight request, Pages Router included, "to avoid
   // caching issues when navigating between pages and app" (`base-server` `setVaryHeader`)

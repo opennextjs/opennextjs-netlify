@@ -6,6 +6,7 @@ import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
 import type { RoutingConfig } from '../../adapter-runtime-shared/next-routing.js'
+import { getPublishedPath } from '../content/static.js'
 import { EDGE_HANDLER_NAME, PluginContextAdapter } from '../plugin-context.js'
 
 import { writeEdgeManifest } from './edge.js'
@@ -17,21 +18,16 @@ const ADAPTER_MIDDLEWARE_FUNCTION_NAME = 'adapter-middleware'
 /**
  * Build edge handlers for adapter mode.
  *
- * When middleware exists, we create a single edge function that handles
- * **both** routing (`resolveRoutes`) and middleware invocation. This means
- * redirects/rewrites resolve at the edge, static asset requests go directly
- * to CDN, and only compute-requiring requests reach the server handler.
+ * A single edge function in front of every request handles routing (`resolveRoutes`) and, when the
+ * app has it, middleware invocation. Routing has to run before the CDN looks for a file, or the
+ * CDN's own URL normalization (pretty URLs, trailing slashes) answers first. Redirects and rewrites
+ * resolve at the edge, static outputs are forwarded to the CDN, and only compute-requiring requests
+ * reach the server handler.
  */
 export const createEdgeHandlersFromAdapter = async (ctx: PluginContextAdapter): Promise<void> => {
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const adapterOutput = ctx.adapterOutput!
   const middlewareOutput = adapterOutput.outputs.middleware
-
-  if (!middlewareOutput) {
-    // Future: could still create a routing-only edge function here
-    // when user opts into edge routing without middleware.
-    return
-  }
 
   const handlerName = getAdapterHandlerName()
   const handlerDirectory = join(ctx.edgeFunctionsDir, handlerName)
@@ -48,24 +44,26 @@ export const createEdgeHandlersFromAdapter = async (ctx: PluginContextAdapter): 
     ),
   )
 
-  // Copy edge-runtime shim files and cjs.ts needed for middleware bundling
-  const edgeRuntimeDir = join(ctx.pluginDir, 'edge-runtime')
-  const handlerEdgeRuntimeDir = join(handlerDirectory, 'edge-runtime')
-  await mkdir(join(handlerEdgeRuntimeDir, 'shim'), { recursive: true })
-  await mkdir(join(handlerEdgeRuntimeDir, 'lib'), { recursive: true })
-  await Promise.all([
-    cp(join(edgeRuntimeDir, 'shim/edge.js'), join(handlerEdgeRuntimeDir, 'shim/edge.js')),
-    cp(join(edgeRuntimeDir, 'shim/node.js'), join(handlerEdgeRuntimeDir, 'shim/node.js')),
-    cp(join(edgeRuntimeDir, 'lib/cjs.ts'), join(handlerEdgeRuntimeDir, 'lib/cjs.ts')),
-  ])
+  if (middlewareOutput) {
+    // Copy edge-runtime shim files and cjs.ts needed for middleware bundling
+    const edgeRuntimeDir = join(ctx.pluginDir, 'edge-runtime')
+    const handlerEdgeRuntimeDir = join(handlerDirectory, 'edge-runtime')
+    await mkdir(join(handlerEdgeRuntimeDir, 'shim'), { recursive: true })
+    await mkdir(join(handlerEdgeRuntimeDir, 'lib'), { recursive: true })
+    await Promise.all([
+      cp(join(edgeRuntimeDir, 'shim/edge.js'), join(handlerEdgeRuntimeDir, 'shim/edge.js')),
+      cp(join(edgeRuntimeDir, 'shim/node.js'), join(handlerEdgeRuntimeDir, 'shim/node.js')),
+      cp(join(edgeRuntimeDir, 'lib/cjs.ts'), join(handlerEdgeRuntimeDir, 'lib/cjs.ts')),
+    ])
 
-  // Bundle the middleware handler
-  await (middlewareOutput.runtime === 'edge'
-    ? copyEdgeMiddlewareDependenciesFromAdapter(ctx, middlewareOutput, handlerDirectory)
-    : copyNodeMiddlewareDependenciesFromAdapter(ctx, middlewareOutput, handlerDirectory))
+    // Bundle the middleware handler
+    await (middlewareOutput.runtime === 'edge'
+      ? copyEdgeMiddlewareDependenciesFromAdapter(ctx, middlewareOutput, handlerDirectory)
+      : copyNodeMiddlewareDependenciesFromAdapter(ctx, middlewareOutput, handlerDirectory))
+  }
 
   // Write the routing edge function entry file
-  await writeRoutingEdgeFunctionEntry(ctx, middlewareOutput, handlerDirectory)
+  await writeRoutingEdgeFunctionEntry(ctx, Boolean(middlewareOutput), handlerDirectory)
 
   // Write edge manifest — match all requests
   const manifest: Manifest = {
@@ -269,7 +267,7 @@ async function copyNodeMiddlewareDependenciesFromAdapter(
  */
 async function writeRoutingEdgeFunctionEntry(
   ctx: PluginContextAdapter,
-  middlewareOutput: MiddlewareOutput,
+  hasMiddleware: boolean,
   handlerDirectory: string,
 ): Promise<void> {
   const handlerName = getAdapterHandlerName()
@@ -289,7 +287,9 @@ async function writeRoutingEdgeFunctionEntry(
 
     let middlewareHandlerPromise = undefined
 
-    const middlewareConfig = {
+    const middlewareConfig = ${
+      hasMiddleware
+        ? `{
       enabled: true,
       load: () => {
         if (!middlewareHandlerPromise) {
@@ -297,6 +297,9 @@ async function writeRoutingEdgeFunctionEntry(
         }
         return middlewareHandlerPromise
       }
+    }`
+        : // the bundler follows the import even when it would never run
+          `{ enabled: false }`
     };
 
     export default (req, context) => runNextRouting(req, context, routingConfig, middlewareConfig);
@@ -306,7 +309,7 @@ async function writeRoutingEdgeFunctionEntry(
 }
 
 export async function getRoutingConfig(ctx: PluginContextAdapter): Promise<RoutingConfig> {
-  const { buildId, config, routing } = ctx.adapterOutput
+  const { buildId, config, outputs, routing } = ctx.adapterOutput
   // `public/` files are not adapter outputs, routing treats them like static files
   const publicPathnames = await ctx.getPublicPathnames()
   return {
@@ -324,6 +327,11 @@ export async function getRoutingConfig(ctx: PluginContextAdapter): Promise<Routi
       ...collectPathnames(ctx.adapterOutput),
       ...publicPathnames.map((pathname) => ({ pathname, type: 'STATIC_FILE' as const })),
     ],
+    publishedPaths: Object.fromEntries(
+      outputs.staticFiles
+        .map(({ pathname, filePath }) => [pathname, getPublishedPath(pathname, filePath, config)])
+        .filter(([pathname, publishedPath]) => publishedPath !== pathname),
+    ),
   }
 }
 
