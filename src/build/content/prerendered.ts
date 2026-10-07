@@ -546,16 +546,16 @@ export const isGroupEntry = (output: PrerenderOutput, ctx: PluginContextAdapter)
  */
 export const isFallbackShell = (output: PrerenderOutput, ctx: PluginContextAdapter) =>
   Boolean(output.fallback?.filePath) &&
-  (output.fallback?.postponedState
-    ? true
-    : output.routeType === undefined
-      ? isGroupEntry(output, ctx) && Boolean(output.config.allowQuery?.length)
-      : // a `shell` is the reusable response for a route's paths not prerendered (a client
-        // component reading `use(params)` leaves nothing to resume)
-        (output.routeType === 'fallback' ||
-          (output.routeType === 'shell' && Boolean(output.config.allowQuery?.length))) &&
-        output.response === 'initial' &&
-        output.compute === 'static')
+  (output.routeType === undefined
+    ? output.fallback?.postponedState
+      ? Boolean(output.config.partialFallback)
+      : isGroupEntry(output, ctx) && Boolean(output.config.allowQuery?.length)
+    : // a route's reusable response for its paths not prerendered (a concrete path is a `page`); a
+      // `shell` with nothing to resume is a client page reading `use(params)`
+      (output.routeType === 'fallback' ||
+        (output.routeType === 'shell' && Boolean(output.config.allowQuery?.length))) &&
+      output.response === 'initial' &&
+      (output.compute === 'static' || output.compute === 'resuming'))
 
 /**
  * Seed one blob per prerender group from the adapter output fallbacks (groups with params, like
