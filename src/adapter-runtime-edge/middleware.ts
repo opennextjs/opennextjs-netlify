@@ -226,6 +226,11 @@ export async function runNextRouting(
 
   // Clone the request, potentially adjusting URL for rewrites
   const forwardHeaders = new Headers(middlewareRequestHeaders ?? routingHeaders)
+  // A compressed origin response is decompressed in the isolate, and that decoder hands on one
+  // 4096-byte buffer per input chunk, holding back the rest of a streamed flush (a page's shell or
+  // `loading.js` would arrive with the end of the response). The platform compresses what the edge
+  // function returns for the client.
+  forwardHeaders.set('accept-encoding', 'identity')
   // The forwarded URL is the rewrite target (so the CDN can cache by it); the server handler needs
   // the URL the client requested because that's what Next's route modules expect as `req.url`, and
   // the resolution so it doesn't route a second time. Both ride in the private meta header, which
