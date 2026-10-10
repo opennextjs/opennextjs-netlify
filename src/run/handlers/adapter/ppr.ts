@@ -11,7 +11,7 @@ import { getLogger } from '../request-context.cjs'
 import { finalize } from './finalize.js'
 import { invokeHandler } from './invoke.js'
 import { computeOutputsById, manifest, type PrerenderOutput } from './manifest.js'
-import type { Produced, ProduceRequest } from './types.js'
+import type { Produced, ProduceRequest, StoredCache } from './types.js'
 
 /**
  * PPR: the stored shell is only the start of the page, the rest comes from resuming its postponed
@@ -32,7 +32,7 @@ export async function resumePrerender(
     stored?: PrerenderGroupBlob['variants'][string]
     // how the shell the routing edge function asks for is cached (a stored group, or a route's shell
     // that is never upgraded); without it, it's revalidated on every request
-    cache?: Extract<Produced, { kind: 'next' }>['cache']
+    cache?: StoredCache
   },
   args: ProduceRequest,
 ): Promise<Produced | undefined> {
@@ -60,7 +60,7 @@ export async function resumePrerender(
       { status: stored.status, headers: stored.headers },
     )
     response.headers.set(POSTPONED_LENGTH_HEADER, String(state.byteLength))
-    return cache ? { kind: 'next', response, cache } : { kind: 'shell', response }
+    return cache ? { kind: 'stored', response, cache } : { kind: 'shell', response }
   }
 
   // the shell goes out right away, the resumed part streams after it once Next produces it

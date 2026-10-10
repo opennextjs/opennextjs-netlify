@@ -187,7 +187,7 @@ export async function produceTarget(
       // nothing served means the output renders the request
       span?.setAttributes({
         'prerender.served': result?.kind ?? 'none',
-        'next.cache': result?.kind === 'next' ? result.cache?.nextCache : undefined,
+        'next.cache': result?.kind === 'stored' ? result.cache.nextCache : undefined,
       })
       return result
     })

@@ -14,7 +14,7 @@ import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from '../../storage
 import { getLogger, isBackgroundRevalidationRequest } from '../request-context.cjs'
 import { encodeCacheTag, isAnyTagStaleOrExpired, purgeEdgeCache } from '../tags-handler.cjs'
 
-import { finalize } from './finalize.js'
+import { finalize, getNextCacheTags } from './finalize.js'
 import { invokeHandler } from './invoke.js'
 import {
   basePath,
@@ -24,7 +24,7 @@ import {
   type PrerenderOutput,
 } from './manifest.js'
 import { resumePrerender } from './ppr.js'
-import type { InvokeOptions, Produced, ProduceRequest } from './types.js'
+import type { InvokeOptions, Produced, ProduceRequest, StoredCache } from './types.js'
 
 // like Next's isBot (shared/lib/router/utils/is-bot.ts): the app's `htmlLimitedBots`, which the
 // config carries as a regex source, and Googlebot, which renders JavaScript
@@ -161,7 +161,8 @@ async function regeneratePrerenderGroup(
   const cacheControl = parseNextCacheControl(entryHeaders['cache-control'])
   const blob: PrerenderGroupBlob = {
     lastModified: Date.now(),
-    revalidate: cacheControl?.revalidate ?? false,
+    // 0: not stored, served as Next's own response says
+    revalidate: cacheControl?.revalidate ?? 0,
     expire: cacheControl?.expire,
     tags: getPrerenderGroupTags(
       interpolatePrerenderPathname(group.entry.pathname, params),
@@ -176,6 +177,21 @@ async function regeneratePrerenderGroup(
     await store.set(groupKey, blob, 'prerenderGroup.set')
   }
   return blob
+}
+
+function getStoredCache(
+  blob: PrerenderGroupBlob,
+  stored: PrerenderGroupBlob['variants'][string],
+  nextCache: StoredCache['nextCache'],
+): StoredCache {
+  const nextCacheTags = stored.headers['x-next-cache-tags']
+  return {
+    revalidate: blob.revalidate,
+    expire: blob.expire,
+    tags: nextCacheTags ? getNextCacheTags(nextCacheTags) : blob.tags.map(encodeCacheTag),
+    lastModified: nextCache === 'MISS' ? undefined : blob.lastModified,
+    nextCache,
+  }
 }
 
 // `x-prerender-revalidate: <bypassToken>` (Pages Router `res.revalidate()`): regenerate now, and
@@ -302,13 +318,7 @@ export async function servePrerenderGroup(
       shell.revalidate === false &&
       !group.entry.partialFallback &&
       computeOutputsById.get(group.entry.parentOutputId)?.router === 'app'
-        ? {
-            lastModified: shell.lastModified,
-            tags: shellVariant.headers['x-next-cache-tags']
-              ? undefined
-              : shell.tags.map(encodeCacheTag),
-            nextCache: 'HIT' as const,
-          }
+        ? getStoredCache(shell, shellVariant, 'HIT')
         : undefined
     if (isPprShell && variant === group.entry && group.entry.resumeHeaders) {
       // resume the shell for this request
@@ -329,7 +339,7 @@ export async function servePrerenderGroup(
         { status: shellVariant.status, headers: shellVariant.headers },
       )
       return shellCache
-        ? { kind: 'next', response, cache: shellCache }
+        ? { kind: 'stored', response, cache: shellCache }
         : { kind: 'shell', response }
     }
   }
@@ -378,11 +388,7 @@ export async function servePrerenderGroup(
         entry: group.entry,
         postponed: blob.postponed,
         stored,
-        cache: {
-          lastModified: nextCache === 'MISS' ? undefined : blob.lastModified,
-          tags: stored.headers['x-next-cache-tags'] ? undefined : blob.tags.map(encodeCacheTag),
-          nextCache,
-        },
+        cache: getStoredCache(blob, stored, nextCache),
       },
       args,
     )
@@ -396,12 +402,8 @@ export async function servePrerenderGroup(
     { status: stored.status, headers: stored.headers },
   )
   return {
-    kind: 'next',
+    kind: 'stored',
     response,
-    cache: {
-      lastModified: nextCache === 'MISS' ? undefined : blob.lastModified,
-      tags: stored.headers['x-next-cache-tags'] ? undefined : blob.tags.map(encodeCacheTag),
-      nextCache,
-    },
+    cache: getStoredCache(blob, stored, nextCache),
   }
 }

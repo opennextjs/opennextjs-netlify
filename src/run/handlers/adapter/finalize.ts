@@ -1,32 +1,26 @@
 // L7: turns a produced response into the platform response (CDN cache control, cache tags,
 // Netlify-Vary, Cache-Status), see docs/request-layers.md.
 import { PPR_SHELL_HEADER } from '../../../../edge-runtime/lib/private-request-meta.ts'
-import {
-  setCacheStatusHeader,
-  setCdnCacheControlFromNext,
-  setDateFromLastModified,
-  setVaryHeaders,
-} from '../../headers.js'
+import { setCacheStatusHeader, setCdnCacheControlFromNext, setVaryHeaders } from '../../headers.js'
 import { encodeCacheTag } from '../tags-handler.cjs'
 
 import { manifest } from './manifest.js'
-import type { CacheInputs, Produced } from './types.js'
+import type { Produced, StoredCache } from './types.js'
 
-function applyCacheHeaders(response: Response, request: Request, cache: CacheInputs = {}) {
+// in minimal mode Next leaves the tags on the response instead of going through the cache handler.
+// Split like the cache handler and the purge do, `%2c` included
+export function getNextCacheTags(value: string): string[] {
+  return value.split(/,|%2c/gi).map(encodeCacheTag)
+}
+
+function applyCacheHeaders(response: Response, request: Request) {
   const { headers } = response
-  // in minimal mode Next leaves the tags on the response instead of going through the cache handler
   const nextCacheTags = headers.get('x-next-cache-tags')
-  // split like the cache handler and the purge do, `%2c` included
-  const tags = nextCacheTags ? nextCacheTags.split(/,|%2c/gi).map(encodeCacheTag) : cache.tags
   headers.delete('x-next-cache-tags')
 
-  const nextCache = cache.nextCache ?? null
-  if ((nextCache === 'HIT' || nextCache === 'STALE') && cache.lastModified) {
-    setDateFromLastModified(headers, cache.lastModified)
-  }
-  setCdnCacheControlFromNext(headers, request, nextCache)
-  if (tags && (headers.has('cache-control') || headers.has('netlify-cdn-cache-control'))) {
-    headers.set('netlify-cache-tag', tags.join(','))
+  setCdnCacheControlFromNext(headers, request, null)
+  if (nextCacheTags && (headers.has('cache-control') || headers.has('netlify-cdn-cache-control'))) {
+    headers.set('netlify-cache-tag', getNextCacheTags(nextCacheTags).join(','))
   }
   setVaryHeaders(
     headers,
@@ -35,7 +29,40 @@ function applyCacheHeaders(response: Response, request: Request, cache: CacheInp
     // the routing edge function asking for a PPR page's shell is cached apart
     [PPR_SHELL_HEADER],
   )
-  setCacheStatusHeader(headers, nextCache)
+}
+
+// what Next's cache-control would say for this policy (`getCacheControlHeader`), for the CDN
+function getCdnCacheControl({ revalidate, expire, nextCache }: StoredCache): string {
+  // if we are serving already stale response, instruct edge to not attempt to cache that response
+  if (nextCache === 'STALE') {
+    return 'public, max-age=0, must-revalidate, durable'
+  }
+  const staleWhileRevalidate =
+    typeof revalidate === 'number' && expire !== undefined && revalidate < expire
+      ? `, stale-while-revalidate=${expire - revalidate}`
+      : ''
+  return `s-maxage=${revalidate === false ? 31536000 : revalidate}${staleWhileRevalidate}, durable`
+}
+
+function applyStoredCacheHeaders(response: Response, request: Request, cache: StoredCache) {
+  const { headers } = response
+  if (cache.revalidate === 0 || headers.has('cache-control')) {
+    // a render that couldn't be stored, or routing's `headers()` replacing the store's policy
+    setCdnCacheControlFromNext(headers, request, cache.nextCache)
+  } else {
+    headers.set('cache-control', 'public, max-age=0, must-revalidate')
+    headers.set('netlify-cdn-cache-control', getCdnCacheControl(cache))
+  }
+  if (headers.has('cache-control') || headers.has('netlify-cdn-cache-control')) {
+    headers.set('netlify-cache-tag', cache.tags.join(','))
+  }
+  if (cache.nextCache !== 'MISS' && cache.lastModified !== undefined) {
+    headers.set('date', new Date(cache.lastModified).toUTCString())
+  }
+  setVaryHeaders(headers, request, manifest.config as Parameters<typeof setVaryHeaders>[2], [
+    PPR_SHELL_HEADER,
+  ])
+  setCacheStatusHeader(headers, cache.nextCache)
 }
 
 /**
@@ -52,7 +79,19 @@ export async function finalize(
   switch (produced.kind) {
     case 'next': {
       const response = routed(produced.response)
-      applyCacheHeaders(response, request, produced.cache)
+      applyCacheHeaders(response, request)
+      return response
+    }
+    case 'stored': {
+      const { headers } = produced.response
+      if (produced.cache.revalidate !== 0) {
+        // the store's policy, not Next's; a Cache-Control routing adds below still wins
+        headers.delete('cache-control')
+        headers.delete('cdn-cache-control')
+      }
+      headers.delete('x-next-cache-tags')
+      const response = routed(produced.response)
+      applyStoredCacheHeaders(response, request, produced.cache)
       return response
     }
     case 'shell':

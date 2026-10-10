@@ -56,15 +56,18 @@ export type InvokeOptions = {
 }
 
 /**
- * What a stored prerender group knows about the response it serves, for its cache headers. A
- * rendered response says it itself (`x-next-cache-tags`, `cache-control`).
+ * What the prerender store knows about a response it serves, for its cache headers. A rendered
+ * response says it itself (`x-next-cache-tags`, `cache-control`).
  */
-export type CacheInputs = {
-  tags?: string[]
-  // when the stored response was generated, the CDN counts its age from there
+export type StoredCache = {
+  // the group's policy; 0 is a render that couldn't be stored, cached as Next's own response says
+  revalidate: number | false
+  expire?: number
+  tags: string[]
+  // when the stored response was generated, the CDN counts its age from there (not on a MISS)
   lastModified?: number
   // how the prerender store served it: a stale response must not be cached as fresh
-  nextCache?: 'HIT' | 'STALE' | 'MISS'
+  nextCache: 'HIT' | 'STALE' | 'MISS'
 }
 
 /**
@@ -72,8 +75,10 @@ export type CacheInputs = {
  * (prerender groups, invocation, static files, error pages) leave the CDN headers to `finalize`.
  */
 export type Produced =
-  // Next's response, rendered or stored: its cache-control is translated for the CDN
-  | { kind: 'next'; response: Response; cache?: CacheInputs }
+  // Next's rendered response: its cache-control is translated for the CDN
+  | { kind: 'next'; response: Response }
+  // a stored response, cached as the store says
+  | { kind: 'stored'; response: Response; cache: StoredCache }
   // per request: a fallback shell is revalidated on every request, a PPR resume is never stored
   | { kind: 'shell' | 'resume'; response: Response }
   // stored static HTML, a fully static page is cached for a year
