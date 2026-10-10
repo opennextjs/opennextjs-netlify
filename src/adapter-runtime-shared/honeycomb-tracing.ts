@@ -29,16 +29,14 @@ const interop = async <T extends object>(module: Promise<T>): Promise<T> => {
   return ('default' in loaded ? loaded.default : loaded) as T
 }
 
-type BuildConfig = { apiKey?: string; attributes?: Attributes }
+type BuildConfig = { attributes?: Attributes }
 
 /**
  * Read at build time and baked into the edge function and the server handler: the e2e deploy
- * helpers set E2E_TEST_TYPE and E2E_FIXTURE on the `netlify deploy --build` they run, and a key
- * present at build enables tracing for that deploy alone (the site's env would enable every deploy).
+ * helpers set E2E_TEST_TYPE and E2E_FIXTURE on the `netlify deploy --build` they run.
  */
 export function getHoneycombBuildConfig(): BuildConfig {
   const {
-    HONEYCOMB_API_KEY,
     E2E_TEST_TYPE,
     E2E_FIXTURE,
     GITHUB_ACTIONS,
@@ -48,7 +46,6 @@ export function getHoneycombBuildConfig(): BuildConfig {
     GITHUB_RUN_ATTEMPT,
   } = process.env
   return {
-    apiKey: HONEYCOMB_API_KEY,
     attributes: E2E_TEST_TYPE
       ? {
           'e2e.test_type': E2E_TEST_TYPE,
@@ -65,8 +62,9 @@ export function getHoneycombBuildConfig(): BuildConfig {
 /** Call once at module scope, before anything asks for a tracer. */
 export async function setupHoneycombTracing(
   serviceName: string,
-  { apiKey = getEnv('HONEYCOMB_API_KEY'), attributes = {} }: BuildConfig = {},
+  { attributes = {} }: BuildConfig = {},
 ): Promise<void> {
+  const apiKey = getEnv('HONEYCOMB_API_KEY')
   if (!apiKey || state.tracing) {
     return
   }

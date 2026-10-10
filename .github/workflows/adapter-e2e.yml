@@ -399,8 +399,8 @@ jobs:
           # deploy` -> plugin child, where onPreBuild reads it. Empty rather than
           # "false" in standalone mode: src/index.ts checks truthiness.
           NETLIFY_NEXT_EXPERIMENTAL_ADAPTER: ${{ inputs.adapterMode && 'true' || '' }}
-          # Inherited by each fixture's build the same way, which bakes it into that deploy (see
-          # getHoneycombBuildConfig): the e2e site's own env would trace every run on it.
+          # Reaches e2e-deploy.sh the same way, which puts it on each deploy with `--env`: the e2e
+          # site's own env would trace every run on it.
           HONEYCOMB_API_KEY: ${{ inputs.honeycombTracing && secrets.HONEYCOMB_API_KEY || '' }}
           # The harness's "adapter test variant": tests and gates pick adapter expectations over the
           # legacy Vercel builder's. With a custom deploy script it has no other effect.
