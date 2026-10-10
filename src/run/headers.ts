@@ -17,7 +17,7 @@ import { getMemoizedKeyValueStoreBackedByRegionalBlobStore } from './storage/sto
  * is ignored, and the request is handled as one for the rewrite target, which is also what the CDN
  * caches it as.
  */
-const getRequestMeta = (request: Request): RequestMeta | undefined => {
+export const getRequestMeta = (request: Request): RequestMeta | undefined => {
   const header = request.headers.get(REQUEST_META_HEADER)
   const requestID = request.headers.get('x-nf-request-id')
   if (!header || !requestID) {
@@ -137,6 +137,7 @@ export const setVaryHeaders = (
   headers: Headers,
   request: Request,
   { basePath, i18n }: Pick<NextConfigComplete, 'basePath' | 'i18n'>,
+  extraHeaders: string[] = [],
 ) => {
   const netlifyVaryValues: NetlifyVaryValues = {
     header: [
@@ -151,6 +152,7 @@ export const setVaryHeaders = (
       'Next-Url',
       // and exact header that actually instruct Next.js to produce RSC response
       'RSC',
+      ...extraHeaders,
     ],
     language: [],
     cookie: ['__prerender_bypass', '__next_preview_data'],
@@ -245,6 +247,10 @@ export const adjustDateHeader = async ({
     return
   }
 
+  setDateFromLastModified(headers, lastModified)
+}
+
+export function setDateFromLastModified(headers: Headers, lastModified: number) {
   const lastModifiedDate = new Date(lastModified)
   // Show actual date of the function call in the date header
   headers.set('x-nextjs-date', headers.get('date') ?? lastModifiedDate.toUTCString())
@@ -263,6 +269,33 @@ function setCacheControlFromRequestContext(
       : `s-maxage=${revalidate || 31536000}, stale-while-revalidate=31536000, durable`
 
   headers.set('netlify-cdn-cache-control', cdnCacheControl)
+}
+
+export function notFoundHeuristics(
+  request: Request,
+  headers: Headers,
+  // what the cache handler reported for the page, for CACHE_404_PAGE
+  pageRevalidate: NetlifyCachedRouteValue['revalidate'] | undefined,
+) {
+  if (request.url.endsWith('.php')) {
+    // temporary CDN Cache Control handling for bot probes on PHP files
+    // https://linear.app/netlify/issue/FRB-1344/prevent-excessive-ssr-invocations-due-to-404-routes
+    headers.set('cache-control', 'public, max-age=0, must-revalidate')
+    headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
+    return true
+  }
+
+  if (
+    process.env.CACHE_404_PAGE &&
+    request.url.endsWith('/404') &&
+    ['GET', 'HEAD'].includes(request.method)
+  ) {
+    // handle CDN Cache Control on 404 Page responses
+    setCacheControlFromRequestContext(headers, pageRevalidate)
+    return true
+  }
+
+  return false
 }
 
 /**
@@ -285,32 +318,47 @@ export const setCacheControlHeaders = (
     return
   }
 
-  if (status === 404) {
-    if (request.url.endsWith('.php')) {
-      // temporary CDN Cache Control handling for bot probes on PHP files
-      // https://linear.app/netlify/issue/FRB-1344/prevent-excessive-ssr-invocations-due-to-404-routes
-      headers.set('cache-control', 'public, max-age=0, must-revalidate')
-      headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
-      return
-    }
-
-    if (
-      process.env.CACHE_404_PAGE &&
-      request.url.endsWith('/404') &&
-      ['GET', 'HEAD'].includes(request.method)
-    ) {
-      // handle CDN Cache Control on 404 Page responses
-      setCacheControlFromRequestContext(headers, requestContext.pageHandlerRevalidate)
-      return
-    }
+  if (
+    status === 404 &&
+    notFoundHeuristics(request, headers, requestContext.pageHandlerRevalidate)
+  ) {
+    return
   }
 
+  if (setCdnCacheControlFromNext(headers, request)) {
+    return
+  }
+
+  if (
+    headers.get('cache-control') === null &&
+    ['GET', 'HEAD'].includes(request.method) &&
+    !headers.has('cdn-cache-control') &&
+    !headers.has('netlify-cdn-cache-control') &&
+    requestContext.usedFsReadForNonFallback &&
+    !requestContext.didPagesRouterOnDemandRevalidate
+  ) {
+    // handle CDN Cache Control on static files
+    headers.set('cache-control', 'public, max-age=0, must-revalidate')
+    headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
+  }
+}
+
+/**
+ * Split Next's cache-control into the browser's and the CDN's (`durable`, a year of
+ * stale-while-revalidate), unless the response already says what the CDN should do. Returns whether
+ * it did.
+ */
+export function setCdnCacheControlFromNext(
+  headers: Headers,
+  request: Request,
+  nextCache: string | null = headers.get('x-nextjs-cache'),
+): boolean {
   const cacheControl = headers.get('cache-control')
 
   if (
     cacheControl !== null &&
     ['GET', 'HEAD'].includes(request.method) &&
-    (headers.has('x-nextjs-cache') ||
+    (nextCache !== null ||
       (!headers.has('cdn-cache-control') && !headers.has('netlify-cdn-cache-control')))
   ) {
     // handle CDN Cache Control on ISR and App Router page responses
@@ -326,7 +374,7 @@ export const setCacheControlHeaders = (
 
     const cdnCacheControl =
       // if we are serving already stale response, instruct edge to not attempt to cache that response
-      headers.get('x-nextjs-cache') === 'STALE'
+      nextCache === 'STALE'
         ? 'public, max-age=0, must-revalidate, durable'
         : [
             ...getHeaderValueArray(cacheControlForCdnFromNext).map((value) =>
@@ -339,21 +387,9 @@ export const setCacheControlHeaders = (
     // if cdn-cache-control is set by Next.js we need to remove it to avoid confusion, as we will be using netlify-cdn-cache-control
     headers.delete('cdn-cache-control')
     headers.set('netlify-cdn-cache-control', cdnCacheControl)
-    return
+    return true
   }
-
-  if (
-    cacheControl === null &&
-    ['GET', 'HEAD'].includes(request.method) &&
-    !headers.has('cdn-cache-control') &&
-    !headers.has('netlify-cdn-cache-control') &&
-    requestContext.usedFsReadForNonFallback &&
-    !requestContext.didPagesRouterOnDemandRevalidate
-  ) {
-    // handle CDN Cache Control on static files
-    headers.set('cache-control', 'public, max-age=0, must-revalidate')
-    headers.set('netlify-cdn-cache-control', `max-age=31536000, durable`)
-  }
+  return false
 }
 
 export const setCacheTagsHeaders = (headers: Headers, requestContext: RequestContext) => {

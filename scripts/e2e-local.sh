@@ -121,6 +121,10 @@ export NEXT_TEST_DEPLOY_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-deploy.sh"
 export NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-logs.sh"
 export NEXT_TEST_CLEANUP_SCRIPT_PATH="$ADAPTER_DIR/scripts/e2e-cleanup.sh"
 export IS_TURBOPACK_TEST=1
+# adapter-e2e.yml sets it in adapter mode: tests and gates then expect adapter behavior
+if [ -n "${NETLIFY_NEXT_EXPERIMENTAL_ADAPTER:-}" ]; then
+  export NEXT_ENABLE_ADAPTER=1
+fi
 export NEXT_E2E_TEST_TIMEOUT=240000
 export NEXT_TELEMETRY_DISABLED=1
 export NODE_OPTIONS="--import $ADAPTER_DIR/tools/fetch-retry.mjs"
@@ -148,7 +152,9 @@ export ADAPTER_DEBUG_LOGS=1
 # skip `pnpm pack` for testing as it's slow because of the large native
 # binary"). That covers crates/ and turbopack/crates/, and costs nothing since
 # the binary is already built.
-if ls "$NEXTJS_DIR/packages/next-swc/native/"*.node >/dev/null 2>&1; then
+# E2E_SKIP_LOCAL_SWC=1 when testing published next (NEXT_TEST_VERSION): a local binary built from
+# another revision breaks its build
+if [ "${E2E_SKIP_LOCAL_SWC:-0}" != 1 ] && ls "$NEXTJS_DIR/packages/next-swc/native/"*.node >/dev/null 2>&1; then
   export NEXT_TEST_NATIVE_DIR="$NEXTJS_DIR/packages/next-swc/native"
   echo "→ next-swc: local build ($(cd "$NEXTJS_DIR" && git rev-parse --short HEAD))" >&2
 else

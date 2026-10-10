@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 
 import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
@@ -12,6 +13,30 @@ import { PluginContext } from '../plugin-context.js'
 import { verifyNetlifyForms } from '../verification.js'
 
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
+
+// `@next/routing` keeps `matchRoute` internal, and for rules with no `has`/`missing`/destination/
+// status it is just the source regex plus placeholder substitution in the header key and value
+// (`$1` per path segment, `$name` for a named group in an internal rule's regex).
+const matchHeaderRoute = (
+  route: { sourceRegex: string; headers?: Record<string, string> },
+  pathname: string,
+): Record<string, string> | undefined => {
+  const matches = pathname.match(new RegExp(route.sourceRegex))
+  if (!matches) {
+    return undefined
+  }
+  // one pass, so a captured value that looks like a placeholder is not substituted again
+  const replace = (value: string) =>
+    value.replace(/\$([A-Za-z_]\w*|[1-9]\d*)/g, (placeholder, name: string) => {
+      const index = Number(name)
+      return Number.isInteger(index) && index > 0 && index < matches.length
+        ? (matches[index] ?? '')
+        : (matches.groups?.[name] ?? placeholder)
+    })
+  return Object.fromEntries(
+    Object.entries(route.headers ?? {}).map(([key, value]) => [replace(key), replace(value)]),
+  )
+}
 
 /**
  * Assemble the static content for being uploaded to the blob storage
@@ -35,10 +60,19 @@ export const copyStaticContent = async (ctx: PluginContext): Promise<void> => {
         paths
           .filter((path) => !path.endsWith('.json') && !paths.includes(`${path.slice(0, -5)}.json`))
           .map(async (path): Promise<void> => {
+            const isFallback = fallbacks.includes(path.slice(0, -5))
+            // adapter mode serves fallbacks from their prerender group (copyPrerenderGroups)
+            if (isFallback && ctx.hasAdapter()) {
+              return
+            }
+
             const html = await readFile(join(srcDir, path), 'utf-8')
             verifyNetlifyForms(ctx, html)
+            // adapter mode publishes static HTML to the CDN (copyStaticAssets)
+            if (ctx.hasAdapter()) {
+              return
+            }
 
-            const isFallback = fallbacks.includes(path.slice(0, -5))
             const isFullyStaticPage = !isFallback && fullyStaticPages.includes(path)
 
             await writeFile(
@@ -67,8 +101,76 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
           recursive: true,
         })
       }
-      if (existsSync(join(ctx.publishDir, 'static'))) {
-        await cp(join(ctx.publishDir, 'static'), join(ctx.staticDir, basePath, '_next/static'), {
+      const { adapterOutput, staticDir, netlifyConfig, publishDir } = ctx
+      if (adapterOutput) {
+        // the adapter output lists `<distDir>/static`, the static metadata routes (robots.txt,
+        // sitemap.xml, manifest.webmanifest, static opengraph-image...) as `<route>.body` files and
+        // the static Pages HTML (fully static pages, 404, 500) as `server/pages/*.html`; `public/` is
+        // not in it (copied above)
+        const { repoRoot, config, outputs, routing } = adapterOutput
+        // `headers()` from next.config: the routing tables apply them before middleware runs, but a
+        // file the CDN serves never reaches routing, so bake them into the deploy config. Rules with
+        // `has`/`missing` conditions or a status (the internal redirects) can't be evaluated here.
+        const headerRoutes = routing.beforeMiddleware.filter(
+          (route) =>
+            route.headers && !route.destination && !route.status && !route.has && !route.missing,
+        )
+        await Promise.all(
+          outputs.staticFiles.map(async (output) => {
+            // filePaths are repoRoot-relative once normalizeAdapterOutput ran, absolute before
+            const filePath = isAbsolute(output.filePath)
+              ? relative(repoRoot, output.filePath)
+              : output.filePath
+            const src = join(repoRoot, filePath)
+            const dest = join(staticDir, getPublishedPath(output.pathname, filePath, config))
+            if (isStatusPagePathname(output.pathname, config)) {
+              // the CDN serves a file with 200, a direct request for the 404/500 page gets its status
+              netlifyConfig.redirects.push({
+                from: output.pathname,
+                to: getPublishedPath(output.pathname, filePath, config),
+                status: Number(output.pathname.slice(-3)),
+                force: true,
+              })
+            }
+            await mkdir(dirname(dest), { recursive: true })
+            await cp(src, dest)
+            const configHeaders = Object.assign(
+              {},
+              ...headerRoutes.map((route) => matchHeaderRoute(route, output.pathname) ?? {}),
+            ) as Record<string, string>
+
+            if (!filePath.endsWith('.body')) {
+              if (Object.keys(configHeaders).length !== 0) {
+                netlifyConfig.headers.push({ for: output.pathname, values: configHeaders })
+              }
+              return
+            }
+            // the adapter output has no headers for STATIC_FILE outputs, Next's `.meta` sidecar has
+            // the ones the route handler set (the CDN would guess `.webmanifest` wrong). Internal
+            // `x-next-*` ones (cache tags) mean nothing for a file the CDN serves.
+            let headers: Record<string, string> = {}
+            try {
+              const meta = JSON.parse(
+                await readFile(`${src.slice(0, -'.body'.length)}.meta`, 'utf-8'),
+              ) as { headers?: Record<string, string> }
+              headers = meta.headers ?? {}
+            } catch {
+              // no sidecar: the CDN's extension-based content-type will have to do
+            }
+            const values = {
+              ...Object.fromEntries(
+                Object.entries(headers).filter(([name]) => !name.startsWith('x-next-')),
+              ),
+              // `headers()` wins over what the route handler set, like in Next
+              ...configHeaders,
+            }
+            if (Object.keys(values).length !== 0) {
+              netlifyConfig.headers.push({ for: output.pathname, values })
+            }
+          }),
+        )
+      } else if (existsSync(join(publishDir, 'static'))) {
+        await cp(join(publishDir, 'static'), join(staticDir, basePath, '_next/static'), {
           recursive: true,
         })
       }
@@ -77,6 +179,43 @@ export const copyStaticAssets = async (ctx: PluginContext): Promise<void> => {
       ctx.failBuild('Failed copying static assets', error)
     }
   })
+}
+
+// HTML is published under a name the CDN serves for the route (`/about` from `about.html`, or
+// `about/index.html` with trailingSlash); other static outputs keep their pathname (`robots.txt`).
+// The CDN answers any other spelling of a file's path with a 301 to its canonical, lowercased one,
+// so a page whose pathname it would rewrite (uppercase, `[param]`, non-ASCII) is published under a
+// name only the function requests (by the manifest's publishedPath): a request for the route itself
+// then finds no file and reaches routing instead of the CDN's redirect.
+export function getPublishedPath(
+  pathname: string,
+  filePath: string,
+  { trailingSlash }: { trailingSlash?: boolean },
+): string {
+  if (!filePath.endsWith('.html')) {
+    return pathname
+  }
+  if (/[^a-z\d/._~-]/.test(pathname)) {
+    return `/_netlify-next-pages/${createHash('sha256').update(pathname).digest('hex').slice(0, 16)}.html`
+  }
+  // an index page's output is `<dir>/index`, the route it serves is `<dir>`
+  const route = pathname.replace(/\/(index)?$/, '')
+  if (route === '') {
+    return '/index.html'
+  }
+  return trailingSlash ? `${route}/index.html` : `${route}.html`
+}
+
+export function isStatusPagePathname(
+  pathname: string,
+  { basePath = '', i18n }: { basePath?: string; i18n?: { locales: readonly string[] } | null },
+): boolean {
+  const pages = ['404', '500']
+  return pages.some(
+    (page) =>
+      pathname === `${basePath}/${page}` ||
+      (i18n?.locales ?? []).some((locale) => pathname === `${basePath}/${locale}/${page}`),
+  )
 }
 
 export const setHeadersConfig = async (ctx: PluginContext): Promise<void> => {

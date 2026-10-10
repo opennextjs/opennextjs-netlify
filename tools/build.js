@@ -1,5 +1,8 @@
+// @ts-check
+
 import { cp, readFile, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { builtinModules } from 'node:module'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { gzip } from 'node:zlib'
@@ -16,17 +19,46 @@ await rm(OUT_DIR, { force: true, recursive: true })
 
 const repoDirectory = dirname(resolve(fileURLToPath(import.meta.url), '..'))
 
-const entryPointsESM = await glob('src/**/*.ts', { ignore: ['**/*.test.ts'] })
+const adapterEdgeAndSharedEntryPointsGlob = 'src/adapter-runtime-*/**/*'
+const entryPointsESM = await glob('src/**/*.ts', {
+  ignore: ['**/*.test.ts', adapterEdgeAndSharedEntryPointsGlob],
+})
+
 const entryPointsCJS = await glob('src/**/*.cts')
+
+const adapterEdgeAndSharedRuntimeEntryPointsEsm = await glob(adapterEdgeAndSharedEntryPointsGlob, {
+  ignore: ['**/*.test.ts'],
+})
+
+// this shim is needed for cjs modules that are imported in ESM :(
+// explicitly use var as it might be already defined in some cases
+const bannerRequireShim = `
+var require = await (async () => {
+  var { createRequire } = await import("node:module");
+  return createRequire(import.meta.url);
+})();
+`
+
+// this shim is needed for some cjs modules that are imported in ESM :(
+// explicitly use var as it might be already defined in some cases
+const bannerDirnameShim = `
+var __filename = await (async () => {
+  const { fileURLToPath: __banner_fileURLToPath } = await import("node:url");
+  return __banner_fileURLToPath(import.meta.url);
+})();
+var __dirname = await (async () => {
+  const { dirname: __banner_dirname } = await import("node:path");
+  return __banner_dirname(__filename);
+})();
+`
 
 /**
  *
  * @param {string[]} entryPoints
- * @param {'esm' | 'cjs'} format
- * @param {boolean=} watch
+ * @param {Omit<import('esbuild').BuildOptions, 'entryPoints' | 'outdir' | 'outfile' | 'splitting'> & Required<Pick<import('esbuild').BuildOptions, 'format'>} bundleOptions
  * @returns
  */
-async function bundle(entryPoints, format, watch) {
+async function bundle(entryPoints, { plugins = [], ...bundleOptions }) {
   /** @type {import('esbuild').BuildOptions} */
   const options = {
     entryPoints,
@@ -34,10 +66,37 @@ async function bundle(entryPoints, format, watch) {
     bundle: true,
     platform: 'node',
     target: 'node18',
-    format,
-    external: ['next'], // don't try to bundle next
+    external: ['next', '@next/env'], // don't try to bundle next (adapter runtime resolves the app's @next/env)
     allowOverwrite: watch,
     plugins: [
+      ...plugins,
+      {
+        // Next internals bundled from next-with-adapters (the edge sandbox) require siblings by bare
+        // `next/...` specifiers; resolve those to the same pinned copy instead of the external `next`
+        name: 'pin-next-internals-imported-by-next-with-adapters',
+        setup(pluginBuild) {
+          pluginBuild.onResolve({ filter: /^next\// }, (args) => {
+            if (!args.importer.includes(`${sep}node_modules${sep}next-with-adapters${sep}`)) {
+              return
+            }
+            return pluginBuild.resolve(args.path.replace(/^next\//, 'next-with-adapters/'), {
+              kind: args.kind,
+              resolveDir: args.resolveDir,
+            })
+          })
+        },
+      },
+      {
+        // Deno (the routing edge function) only resolves Node builtins with the `node:` prefix, which
+        // bundled npm packages (OTel's) don't always use
+        name: 'prefix-node-builtins',
+        setup(pluginBuild) {
+          pluginBuild.onResolve(
+            { filter: new RegExp(`^(${builtinModules.join('|').replaceAll('/', '\\/')})$`) },
+            (args) => ({ path: `node:${args.path}`, external: true }),
+          )
+        },
+      },
       {
         // runtime modules are all entrypoints, so importing them should mark them as external
         // to avoid duplicating them in the bundle (which also can cause import path issues)
@@ -51,22 +110,12 @@ async function bundle(entryPoints, format, watch) {
         },
       },
     ],
+    ...bundleOptions,
   }
 
-  if (format === 'esm') {
+  if (bundleOptions.format === 'esm') {
     options.outdir = OUT_DIR
-    options.chunkNames = 'esm-chunks/[name]-[hash]'
     options.splitting = true
-    options.banner = {
-      // this shim is needed for cjs modules that are imported in ESM :(
-      // explicitly use var as it might be already defined in some cases
-      js: `
-      var require = await (async () => {
-        var { createRequire } = await import("node:module");
-        return createRequire(import.meta.url);
-      })();
-    `,
-    }
   } else {
     options.outfile = entryPoints[0].replace('src', OUT_DIR).replace('cts', 'cjs')
   }
@@ -112,13 +161,64 @@ async function generateHtmlRewriterWasmModule() {
   await writeFile(join(middlewareDir, 'html-rewriter-wasm.ts'), moduleContent)
 }
 
+// The Honeycomb tracing SDK registers its OTel globals through whichever `@opentelemetry/api` it
+// resolves, and `@netlify/otel`'s own (newer) copy rejects globals registered by an older minor:
+// bundle the tracing code against that copy rather than bumping the repo's
+/** @type {import('esbuild').Plugin} */
+const resolveOtelApiFromNetlifyOtel = {
+  name: 'resolve-otel-api-from-netlify-otel',
+  setup(pluginBuild) {
+    pluginBuild.onResolve({ filter: /^@opentelemetry\/api(\/|$)/ }, (args) =>
+      args.pluginData?.fromNetlifyOtel
+        ? undefined
+        : pluginBuild.resolve(args.path, {
+            kind: args.kind,
+            resolveDir: join(repoDirectory, 'node_modules/@netlify/otel'),
+            pluginData: { fromNetlifyOtel: true },
+          }),
+    )
+  },
+}
+
 const args = new Set(process.argv.slice(2))
 const watch = args.has('--watch') || args.has('-w')
 
 await Promise.all([
   vendorMiddlewareDenoModules().then(generateHtmlRewriterWasmModule),
-  bundle(entryPointsESM, 'esm', watch),
-  ...entryPointsCJS.map((entry) => bundle([entry], 'cjs', watch)),
+  bundle(entryPointsESM, {
+    format: 'esm',
+    chunkNames: 'esm-chunks/[name]-[hash]',
+    // dirname shim: Next's compiled deps bundled for the edge sandbox reference __dirname
+    banner: { js: `${bannerRequireShim}${bannerDirnameShim}` },
+  }),
+  ...entryPointsCJS.map((entry) => bundle([entry], { format: 'cjs' })),
+  bundle(adapterEdgeAndSharedRuntimeEntryPointsEsm, {
+    format: 'esm',
+    chunkNames: 'adapter-runtime-chunks/[name]-[hash]',
+    plugins: [resolveOtelApiFromNetlifyOtel],
+    banner: { js: `${bannerRequireShim}${bannerDirnameShim}` },
+  }),
+  // the routing edge function's copy of the Honeycomb tracing module, resolving npm packages like
+  // edge-bundler does (their browser builds): OTel's Node builds need what the edge denies
+  bundle(['src/adapter-runtime-shared/honeycomb-tracing.ts'], {
+    format: 'esm',
+    entryNames: 'adapter-runtime-edge/[name]',
+    chunkNames: 'adapter-runtime-chunks/honeycomb-[name]-[hash]',
+    mainFields: ['module', 'browser', 'main'],
+    plugins: [resolveOtelApiFromNetlifyOtel],
+    // and the Node globals edge-bundler's banner defines for npm packages
+    banner: {
+      js: `${bannerRequireShim}${bannerDirnameShim}
+import { Buffer as __nfBuffer } from 'node:buffer';
+import __nfProcess from 'node:process';
+import { setImmediate as __nfSetImmediate, clearImmediate as __nfClearImmediate } from 'node:timers';
+globalThis.Buffer ??= __nfBuffer;
+globalThis.process ??= __nfProcess;
+globalThis.setImmediate ??= __nfSetImmediate;
+globalThis.clearImmediate ??= __nfClearImmediate;
+`,
+    },
+  }),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
 ])
 

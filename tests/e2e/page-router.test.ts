@@ -2,6 +2,14 @@ import { expect } from '@playwright/test'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 import { test } from '../utils/playwright-helpers.js'
 
+// Adapter mode: the routing edge function runs before the CDN cache. It adds the default locale, so
+// the implicit and explicit locale paths share one CDN entry, and it drops the client's
+// `x-nextjs-data` (Next derives it from the URL), so the data a fallback page fetched by itself
+// shares an entry with the test's data request. A request right after either is served from it.
+const SERVED_FROM_SHARED_CDN_ENTRY = /"Netlify (Edge"; hit|Durable"; hit)/m
+// the fallback shell isn't cached, the explicit locale request then hits Next's cache instead
+const SHARED_CDN_ENTRY_OR_NEXT_HIT = /"Netlify (Edge"; hit|Durable"; hit)|"Next.js"; hit/m
+
 export function waitFor(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis))
 }
@@ -191,7 +199,10 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
               // we will invoke function and see Next cache hit status \
               // in the response because it was prerendered at build time
               // or regenerated in previous attempt to run this test
-              'cache-status': [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
+              'cache-status':
+                process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && useFallback
+                  ? [SHARED_CDN_ENTRY_OR_NEXT_HIT]
+                  : [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
             },
             headersNotMatchedMessage:
               'First request to tested page (data) should be a miss or stale on the Edge and hit in Next.js',
@@ -470,18 +481,27 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
 
     await expect(page.getByTestId('custom-404')).toHaveText('Custom 404 page')
 
-    // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
-    // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that
-    // it would not
-    const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
-    expect(headers['debug-netlify-cdn-cache-control']).toBe(
-      (shouldHavePrivateDirective ? 'private, ' : '') +
-        'no-cache, no-store, max-age=0, must-revalidate, durable',
-    )
-    expect(headers['cache-control']).toBe(
-      (shouldHavePrivateDirective ? 'private,' : '') +
-        'no-cache,no-store,max-age=0,must-revalidate',
-    )
+    if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+      // The 404 page is build output that only a deploy can change, so it is cached rather than
+      // re-rendered per request (see `cache 404s`).
+      expect(headers['debug-netlify-cdn-cache-control']).toMatch(
+        /(max-age|s-maxage)=31536000, durable/,
+      )
+      expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
+    } else {
+      // https://github.com/vercel/next.js/pull/69802 made changes to returned cache-control header,
+      // after that (14.2.10 and canary.147) 404 pages would have `private` directive, before that
+      // it would not
+      const shouldHavePrivateDirective = nextVersionSatisfies('^14.2.10 || >=15.0.0-canary.147')
+      expect(headers['debug-netlify-cdn-cache-control']).toBe(
+        (shouldHavePrivateDirective ? 'private, ' : '') +
+          'no-cache, no-store, max-age=0, must-revalidate, durable',
+      )
+      expect(headers['cache-control']).toBe(
+        (shouldHavePrivateDirective ? 'private,' : '') +
+          'no-cache,no-store,max-age=0,must-revalidate',
+      )
+    }
   })
 
   test('should serve 404 page when requesting non existing page (marked with notFound: true in getStaticProps)', async ({
@@ -541,7 +561,12 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     const response = await page.goto(new URL('static/fully-static', pageRouter.url).href)
     const headers = response?.headers() || {}
 
-    expect(headers['debug-netlify-cdn-cache-control']).toBe('max-age=31536000, durable')
+    if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+      // served as a deploy file, which the CDN keeps until the next deploy
+      expect(headers['debug-x-nf-function-type']).toBeUndefined()
+    } else {
+      expect(headers['debug-netlify-cdn-cache-control']).toBe('max-age=31536000, durable')
+    }
     expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
   })
 
@@ -762,7 +787,9 @@ test.describe('Page Router with basePath and i18n', () => {
                 // just CDN node in earlier step
                 // we will invoke function and see Next cache hit status \
                 // in the response because it was set by previous request that didn't have locale in pathname
-                'cache-status': [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
+                'cache-status': process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+                  ? [useFallback ? SHARED_CDN_ENTRY_OR_NEXT_HIT : SERVED_FROM_SHARED_CDN_ENTRY]
+                  : [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
               },
               headersNotMatchedMessage:
                 'First request to tested page (explicit locale html) should be a miss or stale on the Edge and hit in Next.js',
@@ -809,7 +836,10 @@ test.describe('Page Router with basePath and i18n', () => {
                 // we will invoke function and see Next cache hit status \
                 // in the response because it was prerendered at build time
                 // or regenerated in previous attempt to run this test
-                'cache-status': [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
+                'cache-status':
+                  process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && useFallback
+                    ? [SHARED_CDN_ENTRY_OR_NEXT_HIT]
+                    : [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
               },
               headersNotMatchedMessage:
                 'First request to tested page (data) should be a miss or stale on the Edge and hit in Next.js',
@@ -970,7 +1000,9 @@ test.describe('Page Router with basePath and i18n', () => {
                 // warmed up with fresh response, but CDN cache just knows that previously
                 // cached response is stale, so we are hitting our function that serve
                 // already cached response
-                'cache-status': [/"Next.js"; hit/m, /"Netlify Edge"; fwd=(miss|stale)/m],
+                'cache-status': process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+                  ? [SERVED_FROM_SHARED_CDN_ENTRY]
+                  : [/"Next.js"; hit/m, /"Netlify Edge"; fwd=(miss|stale)/m],
               },
               headersNotMatchedMessage:
                 'Third request to tested page (explicit locale html) should be a miss or stale on the Edge and hit in Next.js after on-demand revalidation',
@@ -1066,7 +1098,9 @@ test.describe('Page Router with basePath and i18n', () => {
                 // warmed up with fresh response, but CDN cache just knows that previously
                 // cached response is stale, so we are hitting our function that serve
                 // already cached response
-                'cache-status': [/"Next.js"; hit/m, /"Netlify Edge"; fwd=(miss|stale)/m],
+                'cache-status': process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER
+                  ? [SERVED_FROM_SHARED_CDN_ENTRY]
+                  : [/"Next.js"; hit/m, /"Netlify Edge"; fwd=(miss|stale)/m],
               },
               headersNotMatchedMessage:
                 'Fourth request to tested page (explicit locale html) should be a miss or stale on the Edge and hit in Next.js after on-demand revalidation',
@@ -1188,7 +1222,10 @@ test.describe('Page Router with basePath and i18n', () => {
                 // we will invoke function and see Next cache hit status \
                 // in the response because it was prerendered at build time
                 // or regenerated in previous attempt to run this test
-                'cache-status': [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
+                'cache-status':
+                  process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER && useFallback
+                    ? [SHARED_CDN_ENTRY_OR_NEXT_HIT]
+                    : [/"Netlify Edge"; fwd=(miss|stale)/m, /"Next.js"; hit/m],
               },
               headersNotMatchedMessage:
                 'First request to tested page (data) should be a miss or stale on the Edge and hit in Next.js',
@@ -1358,10 +1395,18 @@ test.describe('Page Router with basePath and i18n', () => {
 
     await expect(page.getByTestId('custom-404')).toHaveText('Custom 404 page for locale: en')
 
-    expect(headers['debug-netlify-cdn-cache-control']).toMatch(
-      /no-cache, no-store, max-age=0, must-revalidate, durable/m,
-    )
-    expect(headers['cache-control']).toMatch(/no-cache,no-store,max-age=0,must-revalidate/m)
+    if (process.env.NETLIFY_NEXT_EXPERIMENTAL_ADAPTER) {
+      // `/en/404` is a prerender, served from its prerender group like Vercel serves it: cached
+      // with the entry's own revalidate (none for a plain `getStaticProps`)
+      expect(headers['debug-netlify-cdn-cache-control']).toBe('s-maxage=31536000, durable')
+    } else {
+      // Next hardcodes `revalidate: 0` for a 404 page render without a `notFoundRevalidate` request
+      // meta, and standalone re-renders the prerendered `/en/404`
+      expect(headers['debug-netlify-cdn-cache-control']).toMatch(
+        /no-cache, no-store, max-age=0, must-revalidate, durable/m,
+      )
+      expect(headers['cache-control']).toMatch(/no-cache,no-store,max-age=0,must-revalidate/m)
+    }
   })
 
   test('requesting a non existing page route that needs to be fetched from the blob store like 404.html (notFound: true)', async ({

@@ -11,11 +11,13 @@ import {
 } from '../utils/fixture.js'
 import {
   countOfBlobServerGetsForKey,
-  decodeBlobKeyToRoute,
+  decodePageBlobKey,
   encodeBlobKeyForRoute,
   generateRandomObjectID,
   getBlobEntries,
+  pageBlobKey,
   startMockBlobStore,
+  isAdapterMode,
 } from '../utils/helpers.js'
 import {
   nextVersionSatisfies,
@@ -43,13 +45,38 @@ describe('page router', () => {
   test<FixtureTestContext>('page router with static revalidate', async (ctx) => {
     await createFixture('page-router', ctx)
     console.time('runPlugin')
+    // before the build writes the entries, so less than 5s since then means they're still fresh
+    const buildStart = Date.now()
     await runPlugin(ctx)
     console.timeEnd('runPlugin')
+    // Build output is fresh as of the build (see prerendered.ts): the first request is a hit, not a
+    // regeneration.
+    const fresh = await invokeFunction(ctx, { url: 'static/revalidate-automatic' })
+    expect(fresh.statusCode).toBe(200)
+    // the page revalidates after 5s, which a cold function start can take on its own in CI
+    if (Date.now() - buildStart < 5_000) {
+      expect(fresh.headers, 'prerendered page served fresh from the build').toEqual(
+        expect.objectContaining({
+          'cache-status': '"Next.js"; hit',
+          'netlify-cdn-cache-control': expect.stringMatching(
+            /(max-age|s-maxage)=5, stale-while-revalidate=/,
+          ),
+        }),
+      )
+    } else {
+      expect(fresh.headers['cache-status'], 'prerendered page served from the build').toMatch(
+        /^"Next\.js"; hit/,
+      )
+    }
+    ctx.blobServerOnRequestSpy.mockClear()
+
+    // let the build entries go stale (revalidate-slow has a 10s TTL): the flow below is stale → swr
+    await new Promise<void>((resolve) => setTimeout(resolve, 11_000))
     // check if the blob entries where successful set on the build plugin
-    // `decodeBlobKeyToRoute` maps a (possibly route-scoped) key back to its route. The long product
+    // `decodePageBlobKey` maps a (possibly route-scoped or prerender group) key back to its route. The long product
     // route's on-disk key is truncated and ends in a hash, so only its prefix survives — we match it
     // separately and assert the rest exactly.
-    const routes = (await getBlobEntries(ctx)).map(({ key }) => decodeBlobKeyToRoute(key))
+    const routes = (await getBlobEntries(ctx)).map(({ key }) => decodePageBlobKey(key))
     const longProductRoute = routes.find((route) => route.startsWith('/products/an-incr'))
     expect(longProductRoute).toBeDefined()
     expect(routes.filter((route) => route !== longProductRoute).sort()).toEqual([
@@ -57,14 +84,16 @@ describe('page router', () => {
       '/fallback-true/prerendered',
       '/products/prerendered',
       '/products/事前レンダリング,test',
+      // the adapter output has a prerender (404.html) for the `notFound: true` page
+      ...(isAdapterMode ? ['/static/not-found'] : []),
       '/static/revalidate-automatic',
       '/static/revalidate-manual',
       '/static/revalidate-slow',
       '/static/revalidate-slow-data',
-      '404.html',
-      '500.html',
-      'fallback-true/[slug].html',
-      'static/fully-static.html',
+      // adapter mode: static HTML is on the CDN, fallbacks in their prerender group
+      ...(isAdapterMode
+        ? []
+        : ['404.html', '500.html', 'fallback-true/[slug].html', 'static/fully-static.html']),
     ])
 
     // test the function call
@@ -72,8 +101,7 @@ describe('page router', () => {
     const call1Date = load(call1.body)('[data-testid="date-now"]').text()
     expect(call1.statusCode).toBe(200)
     expect(load(call1.body)('h1').text()).toBe('Show #71')
-    // Prerendered content is always cached as expired, so first invocation will
-    // be stale, while fresh is generated in background
+    // past `revalidate`, so the first invocation is stale while fresh is generated in background
     expect(call1.headers, 'a stale page served with swr').toEqual(
       expect.objectContaining({
         'cache-status': '"Next.js"; hit; fwd=stale',
@@ -217,18 +245,36 @@ describe('app router', () => {
     console.time('runPlugin')
     await runPlugin(ctx)
     console.timeEnd('runPlugin')
+    // Build output is fresh as of the build (see prerendered.ts): the first request is a hit, not a
+    // regeneration.
+    const fresh = await invokeFunction(ctx, { url: 'posts/1' })
+    expect(fresh.statusCode).toBe(200)
+    expect(fresh.headers, 'prerendered page served fresh from the build').toEqual(
+      expect.objectContaining({
+        'cache-status': '"Next.js"; hit',
+        'netlify-cdn-cache-control': expect.stringMatching(
+          /(max-age|s-maxage)=5, stale-while-revalidate=/,
+        ),
+      }),
+    )
+    ctx.blobServerOnRequestSpy.mockClear()
+
+    // let the build entry go stale: the flow below is stale → swr
+    await new Promise<void>((resolve) => setTimeout(resolve, 6_000))
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key)).sort()).toEqual(
+    expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
       [
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+        shouldHaveAppRouterNotFoundInPrerenderManifest() && !isAdapterMode
+          ? '/_not-found'
+          : undefined,
         '/index',
         '/posts/1',
         '/posts/2',
-        '404.html',
-        '500.html',
+        // adapter mode publishes static HTML to the CDN instead of blobs
+        ...(isAdapterMode ? [] : ['404.html', '500.html']),
       ].filter(Boolean),
     )
 
@@ -270,7 +316,13 @@ describe('app router', () => {
 
     expect(
       await ctx.blobStore.get(
-        encodeBlobKeyForRoute({ route: '/posts/3', kind: 'APP_PAGE', sourceRoute: '/posts/[id]' }),
+        isAdapterMode
+          ? pageBlobKey('/posts/3', '/posts/[id]?nxtPid=3')
+          : encodeBlobKeyForRoute({
+              route: '/posts/3',
+              kind: 'APP_PAGE',
+              sourceRoute: '/posts/[id]',
+            }),
       ),
     ).toBeNull()
     // this page is not pre-rendered and should result in a cache miss
@@ -288,7 +340,13 @@ describe('app router', () => {
     // after the dynamic call of `posts/3` it should be in cache, note this is after the timeout as the cache set happens async
     expect(
       await ctx.blobStore.get(
-        encodeBlobKeyForRoute({ route: '/posts/3', kind: 'APP_PAGE', sourceRoute: '/posts/[id]' }),
+        isAdapterMode
+          ? pageBlobKey('/posts/3', '/posts/[id]?nxtPid=3')
+          : encodeBlobKeyForRoute({
+              route: '/posts/3',
+              kind: 'APP_PAGE',
+              sourceRoute: '/posts/[id]',
+            }),
       ),
     ).not.toBeNull()
 
@@ -340,7 +398,7 @@ describe('app router', () => {
 
     const blobEntries = await getBlobEntries(ctx)
     // dynamic route that is not pre-rendered should NOT be in the blob store (this is to ensure that test setup is correct)
-    expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key))).not.toContain('/static-fetch/3')
+    expect(blobEntries.map(({ key }) => decodePageBlobKey(key))).not.toContain('/static-fetch/3')
 
     // there is no pre-rendered page for this route, so it should result in a cache miss and blocking render
     const call1 = await invokeSandboxedFunction(ctx, { url: '/static-fetch/3' })
@@ -381,11 +439,13 @@ describe('plugin', () => {
     await runPlugin(ctx)
     // check if the blob entries where successful set on the build plugin
     const blobEntries = await getBlobEntries(ctx)
-    expect(blobEntries.map(({ key }) => decodeBlobKeyToRoute(key)).sort()).toEqual(
+    expect(blobEntries.map(({ key }) => decodePageBlobKey(key)).sort()).toEqual(
       [
         shouldHaveAppRouterNotFoundInPrerenderManifest() ? undefined : '/404',
         shouldHaveAppRouterGlobalErrorInPrerenderManifest() ? '/_global-error' : undefined,
-        shouldHaveAppRouterNotFoundInPrerenderManifest() ? '/_not-found' : undefined,
+        shouldHaveAppRouterNotFoundInPrerenderManifest() && !isAdapterMode
+          ? '/_not-found'
+          : undefined,
         '/api/revalidate-handler',
         '/api/static/first',
         '/api/static/second',
@@ -398,8 +458,8 @@ describe('plugin', () => {
         '/static-fetch-3',
         '/static-fetch/1',
         '/static-fetch/2',
-        '404.html',
-        '500.html',
+        // adapter mode publishes static HTML to the CDN instead of blobs
+        ...(isAdapterMode ? [] : ['404.html', '500.html']),
       ].filter(Boolean),
     )
   })
@@ -409,10 +469,28 @@ describe('route', () => {
   test<FixtureTestContext>('route handler with cacheable response', async (ctx) => {
     await createFixture('server-components', ctx)
     await runPlugin(ctx)
+    // Build output is fresh as of the build (see prerendered.ts): the first request is a hit, not a
+    // regeneration.
+    const fresh = await invokeFunction(ctx, { url: '/api/revalidate-handler' })
+    expect(fresh.statusCode).toBe(200)
+    expect(fresh.headers, 'prerendered route served fresh from the build').toEqual(
+      expect.objectContaining({
+        'cache-status': '"Next.js"; hit',
+        'netlify-cdn-cache-control': expect.stringMatching(
+          /(max-age|s-maxage)=7, stale-while-revalidate=/,
+        ),
+      }),
+    )
+    ctx.blobServerOnRequestSpy.mockClear()
+
+    // let the build entry go stale: the flow below is stale → swr
+    await new Promise<void>((resolve) => setTimeout(resolve, 8_000))
 
     // check if the route got prerendered
     const blobEntry = await ctx.blobStore.get(
-      encodeBlobKeyForRoute({ route: '/api/revalidate-handler', kind: 'APP_ROUTE' }),
+      isAdapterMode
+        ? pageBlobKey('/api/revalidate-handler')
+        : encodeBlobKeyForRoute({ route: '/api/revalidate-handler', kind: 'APP_ROUTE' }),
       {
         type: 'json',
       },

@@ -10,6 +10,9 @@ import { createFixture, invokeFunction, runPlugin } from '../utils/fixture.js'
 import {
   encodeBlobKeyForRoute,
   generateRandomObjectID,
+  getPageHtml,
+  isAdapterMode,
+  pageBlobKey,
   startMockBlobStore,
   trackBlobServerGetsForKey,
 } from '../utils/helpers.js'
@@ -77,12 +80,16 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
   expect(staticPageInitial.statusCode).toBe(200)
   expect(staticPageInitial.headers?.['cache-status']).toMatch(/"Next.js"; hit/)
   const blobDataInitial = await ctx.blobStore.get(
-    encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
+    isAdapterMode
+      ? pageBlobKey('/static/revalidate-manual')
+      : encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
     {
       type: 'json',
     },
   )
-  const blobDateInitial = load(blobDataInitial.value.html).html('[data-testid="date-now"]')
+  const blobDateInitial = load(getPageHtml(blobDataInitial, '/static/revalidate-manual')).html(
+    '[data-testid="date-now"]',
+  )
 
   const revalidate = await invokeFunction(ctx, { url: '/api/revalidate' })
   expect(revalidate.statusCode).toBe(200)
@@ -90,13 +97,17 @@ test<FixtureTestContext>('Should revalidate path with On-demand Revalidation', a
   await new Promise<void>((resolve) => setTimeout(resolve, 100))
 
   const blobDataRevalidated = await ctx.blobStore.get(
-    encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
+    isAdapterMode
+      ? pageBlobKey('/static/revalidate-manual')
+      : encodeBlobKeyForRoute({ route: '/static/revalidate-manual', kind: 'PAGES' }),
     {
       type: 'json',
     },
   )
 
-  const blobDateRevalidated = load(blobDataRevalidated.value.html).html('[data-testid="date-now"]')
+  const blobDateRevalidated = load(
+    getPageHtml(blobDataRevalidated, '/static/revalidate-manual'),
+  ).html('[data-testid="date-now"]')
 
   // TODO: Blob data is updated on revalidate but page still producing previous data
   expect(blobDateInitial).not.toBe(blobDateRevalidated)
@@ -127,7 +138,10 @@ test.skipIf(platform === 'win32')<FixtureTestContext>(
       url: '/static/fully-static',
     })
 
-    expect(response.headers?.['netlify-cdn-cache-control']).toBe('max-age=31536000, durable')
+    expect(response.headers?.['netlify-cdn-cache-control']).toBe(
+      // adapter mode: served as a deploy file, which the CDN keeps until the next deploy
+      isAdapterMode ? undefined : 'max-age=31536000, durable',
+    )
     expect(response.headers?.['cache-control']).toBe('public, max-age=0, must-revalidate')
   },
 )
@@ -362,7 +376,10 @@ describe('404 page caching', () => {
     expect(
       notExistingPage.headers['netlify-cdn-cache-control'],
       'should be cached permanently',
-    ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
+    ).toBe(
+      // adapter mode: served as a deploy file, which the CDN keeps until the next deploy
+      isAdapterMode ? undefined : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
+    )
   })
 
   test<FixtureTestContext>('404 with getStaticProps without revalidate', async (ctx) => {
@@ -378,7 +395,12 @@ describe('404 page caching', () => {
     expect(
       notExistingPage.headers['netlify-cdn-cache-control'],
       'should be cached permanently',
-    ).toBe('s-maxage=31536000, stale-while-revalidate=31536000, durable')
+    ).toBe(
+      // adapter mode: the prerendered 404's own cache-control, no CACHE_404_PAGE heuristic
+      isAdapterMode
+        ? 's-maxage=31536000, durable'
+        : 's-maxage=31536000, stale-while-revalidate=31536000, durable',
+    )
   })
 
   test<FixtureTestContext>('404 with getStaticProps with revalidate', async (ctx) => {
@@ -401,6 +423,12 @@ describe('404 page caching', () => {
     expect(
       notExistingPage.headers['netlify-cdn-cache-control'],
       'should be cached for 404 page revalidate',
-    ).toBe('s-maxage=300, stale-while-revalidate=31536000, durable')
+    ).toBe(
+      // adapter mode: the prerendered 404's own cache-control (Next's expire), no CACHE_404_PAGE
+      // heuristic
+      isAdapterMode
+        ? 's-maxage=300, stale-while-revalidate=31535700, durable'
+        : 's-maxage=300, stale-while-revalidate=31536000, durable',
+    )
   })
 })

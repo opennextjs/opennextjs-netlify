@@ -37,6 +37,9 @@ export type RequestContext = {
   logger: SystemLogger
   requestID: string
   isCacheableAppPage?: boolean
+
+  originalRequest?: Request
+  originalContext?: Context
 }
 
 type RequestContextAsyncLocalStorage = AsyncLocalStorage<RequestContext>
@@ -53,16 +56,27 @@ function getFallbackRequestID() {
   return `#${requestNumber}`
 }
 
+/** The CDN revalidating a stale response in the background (stale-while-revalidate) */
+export function isBackgroundRevalidationRequest(request: Request): boolean {
+  return request.headers.get('netlify-invocation-source') === 'background-revalidation'
+}
+
 export function createRequestContext(request?: Request, context?: Context): RequestContext {
   const backgroundWorkPromises: Promise<unknown>[] = []
 
   const isDebugRequest =
     request?.headers.has('x-nf-debug-logging') || request?.headers.has('x-next-debug-logging')
 
-  const logger = systemLogger.withLogLevel(isDebugRequest ? LogLevel.Debug : LogLevel.Log)
+  const logger = systemLogger
+    .withLogLevel(isDebugRequest ? LogLevel.Debug : LogLevel.Log)
+    .withFields({
+      request_id: context?.requestId,
+      site_id: context?.site?.id,
+      deploy_id: context?.deploy?.id,
+      url: request?.url,
+    })
 
-  const isBackgroundRevalidation =
-    request?.headers.get('netlify-invocation-source') === 'background-revalidation'
+  const isBackgroundRevalidation = request ? isBackgroundRevalidationRequest(request) : false
 
   if (isBackgroundRevalidation) {
     logger.debug('[NetlifyNextRuntime] Background revalidation request')
@@ -83,6 +97,8 @@ export function createRequestContext(request?: Request, context?: Context): Requ
     },
     logger,
     requestID: request?.headers.get('x-nf-request-id') ?? getFallbackRequestID(),
+    originalRequest: request,
+    originalContext: context,
   }
 }
 

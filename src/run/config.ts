@@ -3,8 +3,12 @@ import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import type { NextConfigComplete } from 'next/dist/server/config-shared.js'
+import type { AdapterOutput } from 'next-with-adapters'
 
-import { PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
+import type { AdapterBuildCompleteContext } from '../adapter/adapter-output.js'
+import type { RoutingConfig } from '../adapter-runtime-shared/next-routing.js'
+
+import { ADAPTER_MANIFEST_FILE, PLUGIN_DIR, RUN_CONFIG_FILE } from './constants.js'
 import { setInMemoryCacheMaxSizeFromNextConfig } from './storage/storage.cjs'
 
 export type RunConfig = {
@@ -13,10 +17,82 @@ export type RunConfig = {
 }
 
 /**
+ * Fields of a compute output that route resolution needs. The raw adapter output additionally
+ * carries `assets`/`assetsHashes`, which are only used for build-time file copying and account for
+ * ~96% of its serialized size, so the manifest is projected down to this (see writeAdapterManifest).
+ */
+export type AdapterManifestComputeOutput = Pick<
+  AdapterOutput['PAGES'],
+  'id' | 'pathname' | 'sourcePage' | 'runtime' | 'filePath'
+>
+
+/**
+ * Subset of the adapter output that is needed at runtime for route resolution
+ */
+export type AdapterManifest = Pick<AdapterBuildCompleteContext, 'buildId'> & {
+  // the same config the routing edge function resolves with (getRoutingConfig)
+  routingConfig: RoutingConfig
+  rsc: AdapterBuildCompleteContext['routing']['rsc']
+  // the config fields the runtime reads, route modules read the full config from required-server-files.json
+  config: Pick<
+    AdapterBuildCompleteContext['config'],
+    | 'basePath'
+    | 'i18n'
+    | 'trailingSlash'
+    | 'assetPrefix'
+    | 'distDir'
+    | 'htmlLimitedBots'
+    | 'cacheMaxMemorySize'
+  > & {
+    experimental: Pick<AdapterBuildCompleteContext['config']['experimental'], 'caseSensitiveRoutes'>
+  }
+  outputs: {
+    pages: AdapterManifestComputeOutput[]
+    pagesApi: AdapterManifestComputeOutput[]
+    appPages: AdapterManifestComputeOutput[]
+    appRoutes: AdapterManifestComputeOutput[]
+    prerenders: (Pick<
+      AdapterOutput['PRERENDER'],
+      'id' | 'pathname' | 'parentOutputId' | 'route' | 'groupId'
+    > &
+      Pick<AdapterOutput['PRERENDER']['config'], 'allowQuery' | 'bypassFor' | 'bypassToken'> & {
+        // the group's HTML (or route handler) output, the one carrying `routeType`
+        isGroupEntry: boolean
+        // a static shell to serve while the path is not generated (`fallback: true`)
+        fallbackShell: boolean
+        // the PPR fallback shell gets upgraded to the requested path in the background
+        partialFallback?: boolean
+        // PPR: headers of the request resuming a postponed render (`next-resume: 1`)
+        resumeHeaders?: Record<string, string>
+      })[]
+    staticFiles: (Pick<AdapterOutput['STATIC_FILE'], 'pathname' | 'filePath'> & {
+      // shipped with the function (an error page renderErrorPage serves), read from disk instead of
+      // fetched from the CDN, which would route the request again
+      bundled?: true
+    })[]
+  }
+  // app dir inside the handler, relative to the handler root (outputs' filePaths are relative to that root)
+  relativeAppDir: string
+  // `public/` files: the CDN serves them, but routing needs to know they exist (see getPublicPathnames)
+  publicPathnames: string[]
+}
+
+/**
  * Get Next.js config from the build output
  */
 export const getRunConfig = async () => {
   return JSON.parse(await readFile(resolve(PLUGIN_DIR, RUN_CONFIG_FILE), 'utf-8')) as RunConfig
+}
+
+/**
+ * Get the adapter manifest written at build time.
+ * Uses the same PLUGIN_DIR resolution as getRunConfig() — both files are
+ * written to ctx.serverHandlerDir during the build.
+ */
+export const getAdapterManifest = async (): Promise<AdapterManifest> => {
+  return JSON.parse(
+    await readFile(resolve(PLUGIN_DIR, ADAPTER_MANIFEST_FILE), 'utf-8'),
+  ) as AdapterManifest
 }
 
 export type NextConfigForMultipleVersions = NextConfigComplete & {

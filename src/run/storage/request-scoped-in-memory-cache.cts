@@ -7,6 +7,7 @@ import {
   isHtmlBlob,
   isTagManifest,
   isTagRevalidationMarker,
+  isUseCacheBlob,
 } from '../../shared/blob-types.cjs'
 import { getRequestContext } from '../handlers/request-context.cjs'
 import { recordWarning } from '../handlers/tracer.cjs'
@@ -82,6 +83,14 @@ const estimateBlobKnownTypeSize = (
 
   if (isHtmlBlob(data)) {
     return baseSize + data.html.length
+  }
+
+  if (isUseCacheBlob(data)) {
+    return baseSize + data.value.length
+  }
+
+  if ('variants' in data) {
+    return baseSize + Object.values(data.variants).reduce((size, { body }) => size + body.length, 0)
   }
 
   if (data.value?.kind === 'FETCH') {

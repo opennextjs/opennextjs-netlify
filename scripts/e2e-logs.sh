@@ -25,9 +25,13 @@ set -euo pipefail
 #
 # The lesson generalises: don't restate what the harness already states. A second source
 # for the same fact is a second source that can be wrong.
+#
+# Colors and leading whitespace are stripped from the build log, like Vercel does for its build
+# logs, which tests asserting on build output are written against. Netlify indents every line of
+# it, and Next.js colors its code frames even with NO_COLOR set.
 if [ -f ".adapter-deploy.log" ]; then
   echo "=== .adapter-deploy.log ==="
-  cat ".adapter-deploy.log"
+  perl -pe 's/\e\[[0-9;]*m//g; s/^\s+(?=\S)//' ".adapter-deploy.log"
 fi
 
 if [ -f ".adapter-server.log" ]; then

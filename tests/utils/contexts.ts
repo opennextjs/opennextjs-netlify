@@ -13,8 +13,13 @@ export interface FixtureTestContext extends TestContext {
   blobServerOnRequestSpy: BlobsServer['onRequest']
   blobStore: ReturnType<typeof getStore>
   functionDist: string
+  functionCwd?: string
   edgeFunctionPort: number
   edgeFunctionOutput: WriteStream
+  cdn?: {
+    staticDir: string
+    redirects: { from: string; to: string; status?: number; force?: boolean }[]
+  }
   cleanup?: (() => Promise<void>)[]
   skipAutoCleanup?: boolean
 }

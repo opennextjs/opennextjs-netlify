@@ -107,7 +107,7 @@ export const createE2EFixture = async (fixture: string, config: E2EConfig = {}) 
 
     const deploySite = config.useBuildbot ? deploySiteWithBuildbot : deploySiteWithCLI
 
-    const result = await deploySite(isolatedFixtureRoot, config)
+    const result = await deploySite(isolatedFixtureRoot, config, fixture)
 
     console.log(`🌍 Deployed site is live: ${result.url}`)
     deployID = result.deployID
@@ -312,6 +312,7 @@ async function verifyFixture(isolatedFixtureRoot: string, { expectedCliVersion }
 export async function deploySiteWithCLI(
   isolatedFixtureRoot: string,
   { packagePath, cwd = '', siteId = SITE_ID }: E2EConfig,
+  fixture?: string,
 ): Promise<DeployResult> {
   console.log(`🚀 Building and deploying site...`)
 
@@ -323,8 +324,14 @@ export async function deploySiteWithCLI(
   }
 
   const siteDir = join(isolatedFixtureRoot, cwd)
-  await execaCommand(cmd, { cwd: siteDir, all: true }).pipeAll?.(join(siteDir, outputFile))
+  await execaCommand(cmd, {
+    cwd: siteDir,
+    all: true,
+    // tracing attributes, see getHoneycombBuildConfig
+    env: { E2E_TEST_TYPE: 'next-runtime', E2E_FIXTURE: fixture },
+  }).pipeAll?.(join(siteDir, outputFile))
   const output = await readFile(join(siteDir, outputFile), 'utf-8')
+  console.log(output)
 
   const { siteName, deployID } =
     new RegExp(

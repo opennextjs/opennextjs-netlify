@@ -14,6 +14,8 @@ import {
   encodeBlobKeyForTag,
   generateRandomObjectID,
   getBlobServerGets,
+  isAdapterMode,
+  pageBlobKey,
   startMockBlobStore,
   trackBlobServerGetsForKey,
 } from '../utils/helpers.js'
@@ -65,11 +67,13 @@ test<FixtureTestContext>('should revalidate a route by path', async (ctx) => {
 
   expect(
     await ctx.blobStore.get(
-      encodeBlobKeyForRoute({
-        route: '/static-fetch/1',
-        kind: 'APP_PAGE',
-        sourceRoute: '/static-fetch/[id]',
-      }),
+      isAdapterMode
+        ? pageBlobKey('/static-fetch/1')
+        : encodeBlobKeyForRoute({
+            route: '/static-fetch/1',
+            kind: 'APP_PAGE',
+            sourceRoute: '/static-fetch/[id]',
+          }),
     ),
   ).not.toBeNull()
   expect(await ctx.blobStore.get(encodeBlobKeyForTag('_N_T_/static-fetch/[id]/page'))).toBeNull()
