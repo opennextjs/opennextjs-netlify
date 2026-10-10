@@ -317,7 +317,12 @@ export async function deploySiteWithCLI(
   console.log(`🚀 Building and deploying site...`)
 
   const outputFile = 'deploy-output.txt'
-  let cmd = `npx netlify deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
+  // the repo's pinned CLI (npx in a temp dir would fetch the latest one), unless the fixture installs
+  // its own (cli-before-regional-blobs-support)
+  const netlify = existsSync(join(isolatedFixtureRoot, 'node_modules/.bin/netlify'))
+    ? 'npx netlify'
+    : fileURLToPath(new URL('../../node_modules/.bin/netlify', import.meta.url))
+  let cmd = `${netlify} deploy --build --site ${siteId} --alias ${NETLIFY_DEPLOY_ALIAS}`
 
   if (packagePath) {
     cmd += ` --filter ${packagePath}`
