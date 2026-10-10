@@ -25,7 +25,7 @@ import {
   produceTarget,
   renderErrorPage,
 } from './adapter/dispatch.js'
-import { finalize } from './adapter/finalize.js'
+import { finalize, finalizeNext } from './adapter/finalize.js'
 import { basePath, manifest } from './adapter/manifest.js'
 import { servePrerenderGroup } from './adapter/prerender-store.js'
 import type { AdapterRequestContext, NextCallbacks, ProduceRequest } from './adapter/types.js'
@@ -262,35 +262,42 @@ export default async function ServerHandler(
         handlerHeaders.delete('x-nextjs-data')
       }
 
-      const handlerArgs: ProduceRequest = {
-        request: new Request(publicUrl, {
-          method: request.method,
-          headers: handlerHeaders,
-          body: request.body,
-          // @ts-expect-error duplex is needed for streaming bodies
-          duplex: 'half',
-        }),
-        requestContext,
-        resolution,
-        tracer,
-        span,
-        nextCallbacks,
-      }
-
-      const produced = await produceTarget(target, handlerArgs)
-
       const isNotFoundPage = isNotFoundPageRequest(request, resolution.resolvedPathname)
       const status = isNotFoundPage
         ? 404
         : isStatusPageRequest(request, resolution.resolvedPathname, 500)
           ? 500
           : resolution.status
+      const routedProduced = (routed: Response) => applyResolutionToProduced(routed, status)
+      const handlerRequest = new Request(publicUrl, {
+        method: request.method,
+        headers: handlerHeaders,
+        body: request.body,
+        // @ts-expect-error duplex is needed for streaming bodies
+        duplex: 'half',
+      })
+
+      const handlerArgs: ProduceRequest = {
+        request: handlerRequest,
+        requestContext,
+        resolution,
+        tracer,
+        span,
+        nextCallbacks,
+        // a direct request for the 404 page is finalized as an error page instead
+        commit: isNotFoundPage
+          ? undefined
+          : (response) => finalizeNext(response, handlerRequest, routedProduced),
+      }
+
+      const produced = await produceTarget(target, handlerArgs)
+
       // Next's server responds 404 to a direct request for the 404 page, served like any error page
       // (CACHE_404_PAGE cache-control handling keys off the status)
       return finalize(
         isNotFoundPage ? { kind: 'error', status: 404, produced } : produced,
-        handlerArgs.request,
-        (routed) => applyResolutionToProduced(routed, status),
+        handlerRequest,
+        routedProduced,
       )
     }
 

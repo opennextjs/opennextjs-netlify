@@ -72,7 +72,11 @@ export async function resumePrerender(
           async start(controller) {
             controller.enqueue(shell)
             try {
-              const resumed = await finalize(await invokeHandler(output, args, { resume }), request)
+              // only its body goes out, after the shell
+              const resumed = await finalize(
+                await invokeHandler(output, { ...args, commit: undefined }, { resume }),
+                request,
+              )
               if (resumed.body) {
                 const reader = resumed.body.getReader()
                 for (;;) {

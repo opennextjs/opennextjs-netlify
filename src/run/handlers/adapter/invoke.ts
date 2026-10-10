@@ -68,6 +68,47 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   return handler
 }
 
+// Next commits its headers through `writeHead`, implicitly too (`_implicitHeader` on the first write),
+// so they get finalized right then, before the body streams
+function onCommit(res: ServerResponse, transform: (response: Response) => Response) {
+  const writeHead = res.writeHead.bind(res)
+  res.writeHead = ((statusCode: number, ...rest: unknown[]) => {
+    const passed = typeof rest[0] === 'string' ? rest[1] : rest[0]
+    if (Array.isArray(passed)) {
+      const flat = passed.flat()
+      for (let index = 0; index < flat.length; index += 2) {
+        res.appendHeader(String(flat[index]), String(flat[index + 1]))
+      }
+    } else if (passed && typeof passed === 'object') {
+      for (const [name, value] of Object.entries(passed)) {
+        if (value !== undefined) {
+          res.setHeader(name, value as string | string[])
+        }
+      }
+    }
+    const headers = new Headers()
+    for (const [name, value] of Object.entries(res.getHeaders())) {
+      for (const item of [value ?? []].flat()) {
+        headers.append(name, String(item))
+      }
+    }
+    const committed = transform(new Response(null, { status: statusCode, headers }))
+    for (const name of res.getHeaderNames()) {
+      res.removeHeader(name)
+    }
+    for (const [name, value] of committed.headers) {
+      if (name !== 'set-cookie') {
+        res.setHeader(name, value)
+      }
+    }
+    const cookies = committed.headers.getSetCookie()
+    if (cookies.length !== 0) {
+      res.setHeader('set-cookie', cookies)
+    }
+    return writeHead(committed.status)
+  }) as ServerResponse['writeHead']
+}
+
 export async function invokeHandler(
   { id, entrypoint, runtime, sourcePage }: InvokeHandlerArg,
   {
@@ -78,6 +119,7 @@ export async function invokeHandler(
     span,
     invokeStatus,
     nextCallbacks,
+    commit,
   }: ProduceRequest,
   { invocationId, raw, resume, postponed, onCacheEntry }: InvokeOptions = {},
 ): Promise<Produced> {
@@ -129,6 +171,12 @@ export async function invokeHandler(
       if (invokeStatus) {
         res.statusCode = invokeStatus
       }
+      let failedBeforeHeaders = false
+      const committing = commit && !raw
+      if (committing) {
+        // the plain 500 below is only a signal, dispatch serves the 500 page
+        onCommit(res, (response) => (failedBeforeHeaders ? response : commit(response)))
+      }
 
       // Invoke the route handler using the Node.js handler signature
       // as defined by the Next.js adapter contract:
@@ -152,7 +200,6 @@ export async function invokeHandler(
 
       // Route modules rethrow render errors for the host to serve the error page (Next's router
       // renders /500 then). Ending the response here also avoids leaving it open until timeout.
-      let failedBeforeHeaders = false
       nextHandlerPromise.catch((error) => {
         console.error('route handler error', error)
         if (!res.headersSent) {
@@ -224,7 +271,7 @@ export async function invokeHandler(
       }
 
       return {
-        kind: 'next' as const,
+        kind: committing ? ('committed' as const) : ('next' as const),
         response: new Response(
           response.body?.pipeThrough(keepOpenUntilNextFullyRendered),
           response,

@@ -65,6 +65,17 @@ function applyStoredCacheHeaders(response: Response, request: Request, cache: St
   setCacheStatusHeader(headers, cache.nextCache)
 }
 
+// Next's rendered response: routing's headers and status, then its cache-control translated for the CDN
+export function finalizeNext(
+  rendered: Response,
+  request: Request,
+  routed: (response: Response) => Response = (response) => response,
+): Response {
+  const response = routed(rendered)
+  applyCacheHeaders(response, request)
+  return response
+}
+
 /**
  * The one place a produced response gets its platform headers (CDN cache control, cache tags,
  * Netlify-Vary, Cache-Status), see `Produced`. `request` is the one the producer answered.
@@ -77,11 +88,10 @@ export async function finalize(
   routed: (response: Response) => Response = (response) => response,
 ): Promise<Response> {
   switch (produced.kind) {
-    case 'next': {
-      const response = routed(produced.response)
-      applyCacheHeaders(response, request)
-      return response
-    }
+    case 'next':
+      return finalizeNext(produced.response, request, routed)
+    case 'committed':
+      return produced.response
     case 'stored': {
       const { headers } = produced.response
       if (produced.cache.revalidate !== 0) {

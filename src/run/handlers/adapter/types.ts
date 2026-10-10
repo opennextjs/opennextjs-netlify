@@ -34,6 +34,8 @@ export type ProduceRequest = {
   // set when rendering the error page for this status (like Next's router does with res.statusCode)
   invokeStatus?: number
   nextCallbacks: NextCallbacks
+  // the request's own render: finalizes its headers as Next commits them (`finalizeNext`)
+  commit?: (response: Response) => Response
 }
 
 // what the layer driving an invocation adds: the prerender store regenerating a group, PPR resuming
@@ -87,6 +89,8 @@ export type Produced =
   | { kind: 'error'; status: 404 | 500; produced: Produced }
   // complete as is
   | { kind: 'final'; response: Response }
+  // the request's own render, finalized when Next committed its headers (`ProduceRequest.commit`)
+  | { kind: 'committed'; response: Response }
   // a render that failed before its headers: dispatch answers with the 500 page, `response` is the
   // plain 500 for whoever doesn't (a regeneration, which then doesn't store it)
   | { kind: 'failed'; response: Response }
