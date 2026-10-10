@@ -53,6 +53,10 @@ for (const [key, value] of Object.entries(env)) {
 process.stdout.write(out.join(''))
 ")
 fi
+# Next's detailed spans, for the Honeycomb tracing the workflow's honeycombTracing input enables
+if [ -n "${HONEYCOMB_API_KEY:-}" ]; then
+  DEPLOY_ENV_ARGS+=(--env NEXT_OTEL_VERBOSE=1)
+fi
 
 # Which package manager installs the fixture is not ours to pick. The harness
 # always writes a `packageManager` field into the temp app's package.json
