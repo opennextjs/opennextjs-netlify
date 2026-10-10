@@ -284,6 +284,7 @@ async function writeRoutingEdgeFunctionEntry(
     join(handlerDirectory, `${handlerName}.js`),
     `
     import { runNextRouting } from './adapter-runtime-edge/middleware.js';
+    import { setupHoneycombTracing, withHoneycombTracing } from './adapter-runtime-edge/honeycomb-tracing.js';
     import routingConfig from './routing-config.json' with { type: 'json' };
 
     let middlewareHandlerPromise = undefined
@@ -303,7 +304,12 @@ async function writeRoutingEdgeFunctionEntry(
           `{ enabled: false }`
     };
 
-    export default (req, context) => runNextRouting(req, context, routingConfig, middlewareConfig);
+    await setupHoneycombTracing('next-runtime-edge');
+
+    export default (req, context) =>
+      withHoneycombTracing(req, context.waitUntil?.bind(context), () =>
+        runNextRouting(req, context, routingConfig, middlewareConfig),
+      );
     export const config = { pattern: '.*' };
     `,
   )

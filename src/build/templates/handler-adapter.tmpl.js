@@ -4,6 +4,10 @@ import {
 } from '{{runtimeModulesDir}}/dist/run/handlers/request-context.cjs'
 import serverHandler from '{{runtimeModulesDir}}/dist/run/handlers/server-adapter.js'
 import { getTracer, withActiveSpan } from '{{runtimeModulesDir}}/dist/run/handlers/tracer.cjs'
+import {
+  setupHoneycombTracing,
+  withHoneycombTracing,
+} from '{{runtimeModulesDir}}/dist/adapter-runtime-shared/honeycomb-tracing.js'
 
 // eslint-disable-next-line no-constant-condition
 if ('{{cwd}}' && '{{cwd}}' !== '.') {
@@ -13,7 +17,12 @@ if ('{{cwd}}' && '{{cwd}}' !== '.') {
 // Set feature flag for regional blobs
 process.env.USE_REGIONAL_BLOBS = '{{useRegionalBlobs}}'
 
-export default async function handler(req, context) {
+await setupHoneycombTracing('next-runtime-function')
+
+export default (req, context) =>
+  withHoneycombTracing(req, context.waitUntil?.bind(context), () => handler(req, context))
+
+async function handler(req, context) {
   const requestContext = createRequestContext(req, context)
   const tracer = getTracer()
 

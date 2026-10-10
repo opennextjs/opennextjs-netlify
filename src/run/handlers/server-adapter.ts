@@ -221,6 +221,15 @@ export default async function ServerHandler(
     if (resolution.resolvedPathname) {
       span?.setAttribute('matched.pathname', resolution.resolvedPathname)
       const target = dispatch(resolution.resolvedPathname, resolution, request, requestHeaders)
+      span?.setAttributes({
+        'matched.target': target.kind,
+        'matched.output': target.kind === 'output' ? target.output.kind : undefined,
+        'matched.router':
+          target.kind === 'output' && target.output.kind === 'compute'
+            ? target.output.output.router
+            : undefined,
+        'matched.prerender': target.kind === 'output' && Boolean(target.prerender),
+      })
       if (target.kind === 'error') {
         span?.setAttribute('matched.noOutput', true)
         return finalize(

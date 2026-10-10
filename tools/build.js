@@ -1,6 +1,7 @@
 // @ts-check
 
 import { cp, readFile, rm, writeFile } from 'node:fs/promises'
+import { builtinModules } from 'node:module'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -85,6 +86,17 @@ async function bundle(entryPoints, bundleOptions) {
         },
       },
       {
+        // Deno (the routing edge function) only resolves Node builtins with the `node:` prefix, which
+        // bundled npm packages (OTel's) don't always use
+        name: 'prefix-node-builtins',
+        setup(pluginBuild) {
+          pluginBuild.onResolve(
+            { filter: new RegExp(`^(${builtinModules.join('|').replaceAll('/', '\\/')})$`) },
+            (args) => ({ path: `node:${args.path}`, external: true }),
+          )
+        },
+      },
+      {
         // runtime modules are all entrypoints, so importing them should mark them as external
         // to avoid duplicating them in the bundle (which also can cause import path issues)
         name: 'mark-runtime-modules-as-external',
@@ -164,6 +176,26 @@ await Promise.all([
     format: 'esm',
     chunkNames: 'adapter-runtime-chunks/[name]-[hash]',
     banner: { js: `${bannerRequireShim}${bannerDirnameShim}` },
+  }),
+  // the routing edge function's copy of the Honeycomb tracing module, resolving npm packages like
+  // edge-bundler does (their browser builds): OTel's Node builds need what the edge denies
+  bundle(['src/adapter-runtime-shared/honeycomb-tracing.ts'], {
+    format: 'esm',
+    entryNames: 'adapter-runtime-edge/[name]',
+    chunkNames: 'adapter-runtime-chunks/honeycomb-[name]-[hash]',
+    mainFields: ['module', 'browser', 'main'],
+    // and the Node globals edge-bundler's banner defines for npm packages
+    banner: {
+      js: `${bannerRequireShim}${bannerDirnameShim}
+import { Buffer as __nfBuffer } from 'node:buffer';
+import __nfProcess from 'node:process';
+import { setImmediate as __nfSetImmediate, clearImmediate as __nfClearImmediate } from 'node:timers';
+globalThis.Buffer ??= __nfBuffer;
+globalThis.process ??= __nfProcess;
+globalThis.setImmediate ??= __nfSetImmediate;
+globalThis.clearImmediate ??= __nfClearImmediate;
+`,
+    },
   }),
   cp('src/build/templates', join(OUT_DIR, 'build/templates'), { recursive: true, force: true }),
 ])

@@ -11,7 +11,7 @@ import { PLUGIN_DIR } from '../../constants.js'
 import { toComputeResponse, toReqRes } from '../../fetch-api-to-req-res.js'
 import { invokeEdgeRuntimeOutput } from '../edge-runtime-sandbox.js'
 import { getLogger } from '../request-context.cjs'
-import { withActiveSpan } from '../tracer.cjs'
+import { getTracer, withActiveSpan } from '../tracer.cjs'
 
 import { type InvokeHandlerArg, manifest } from './manifest.js'
 import type { InvokeOptions, Produced, ProduceRequest } from './types.js'
@@ -58,8 +58,11 @@ async function loadHandler(filePath: string): Promise<NodeHandlerFn> {
   if (cached) {
     return cached
   }
-  // eslint-disable-next-line import/no-dynamic-require
-  const mod = await import(resolvedPath)
+  const mod = await withActiveSpan(getTracer(), 'load route handler', (span) => {
+    span?.setAttribute('filePath', filePath)
+    // eslint-disable-next-line import/no-dynamic-require
+    return import(resolvedPath)
+  })
   const { handler } = (await preferDefault(mod)) as { handler: NodeHandlerFn }
   nodeHandlerCache.set(resolvedPath, handler)
   return handler

@@ -21,6 +21,11 @@ import {
   type RequestMeta,
 } from '../../edge-runtime/lib/private-request-meta.ts'
 import {
+  setActiveSpanAttributes,
+  traceForward,
+  withSpan,
+} from '../adapter-runtime-shared/honeycomb-tracing.js'
+import {
   answerWithoutCompute,
   applyResolutionToResponse,
   getInvocationUrl,
@@ -57,7 +62,26 @@ interface MiddlewareContext {
 /**
  * Main entry point for the routing + middleware edge function.
  */
-export async function runNextRouting(
+export function runNextRouting(
+  request: Request,
+  context: Context,
+  routingConfig: RoutingConfig,
+  middlewareConfig: MiddlewareConfig,
+): Promise<Response | undefined> {
+  return withSpan('Next.js Routing', async () => {
+    setActiveSpanAttributes({
+      'http.method': request.method,
+      'http.url': request.url,
+      'request.id': request.headers.get('x-nf-request-id') ?? undefined,
+      'next.middleware.enabled': middlewareConfig.enabled,
+    })
+    const response = await runNextRoutingUntraced(request, context, routingConfig, middlewareConfig)
+    setActiveSpanAttributes({ 'http.status_code': response?.status })
+    return response
+  })
+}
+
+async function runNextRoutingUntraced(
   request: Request,
   context: Context,
   routingConfig: RoutingConfig,
@@ -112,15 +136,17 @@ export async function runNextRouting(
         originBody = forOrigin
       }
       // the entry's documented handler: it passes background work to `waitUntil` itself
-      const rawResponse = await handler(
-        new Request(middlewareRequestUrl, {
-          headers: middlewareCtx.headers,
-          method: request.method,
-          body: middlewareBody,
-          // @ts-expect-error duplex is needed for streaming bodies
-          duplex: 'half',
-        }),
-        { waitUntil: context.waitUntil?.bind(context), signal: request.signal },
+      const rawResponse = await withSpan('Next.js Middleware', () =>
+        handler(
+          new Request(middlewareRequestUrl, {
+            headers: middlewareCtx.headers,
+            method: request.method,
+            body: middlewareBody,
+            // @ts-expect-error duplex is needed for streaming bodies
+            duplex: 'half',
+          }),
+          { waitUntil: context.waitUntil?.bind(context), signal: request.signal },
+        ),
       )
       // middleware that never read its branch would otherwise make the tee buffer the whole body
       if (middlewareBody && !middlewareBody.locked) {
@@ -159,6 +185,16 @@ export async function runNextRouting(
       return middlewareResult
     },
   )
+
+  setActiveSpanAttributes({
+    'next.routing.resolved_pathname': resolution.resolvedPathname,
+    'next.routing.invocation_target': JSON.stringify(resolution.invocationTarget),
+    'next.routing.status': resolution.status,
+    'next.routing.redirect': resolution.redirect?.url.href,
+    'next.routing.redirect_status': resolution.redirect?.status,
+    'next.routing.external_rewrite': resolution.externalRewrite?.href,
+    'next.routing.middleware_responded': resolution.middlewareResponded,
+  })
 
   const applyResolutionToThisResponse = applyResolutionToResponse.bind(null, {
     request,
@@ -212,6 +248,7 @@ export async function runNextRouting(
       }),
   })
   if (answered) {
+    setActiveSpanAttributes({ 'next.routing.outcome': 'answered at edge' })
     // a response middleware returned already carries its headers
     return resolution.middlewareResponded ? answered : withMiddlewareResponseHeaders(answered)
   }
@@ -223,6 +260,7 @@ export async function runNextRouting(
       middlewareMatchers: routingConfig.routes.middlewareMatchers,
     })
   ) {
+    setActiveSpanAttributes({ 'next.routing.outcome': 'unmatched data request' })
     return withMiddlewareResponseHeaders(applyResolutionToThisResponse(Response.json({})))
   }
 
@@ -252,6 +290,7 @@ export async function runNextRouting(
   }
 
   const invocationUrl = getInvocationUrl(request, resolution, routingConfig.publishedPaths)
+  setActiveSpanAttributes({ 'next.routing.invocation_url': invocationUrl.toString() })
   const ppr = resolution.resolvedPathname
     ? routingConfig.ppr[resolution.resolvedPathname]
     : undefined
@@ -261,23 +300,27 @@ export async function runNextRouting(
     !request.headers.has('rsc') &&
     !(ppr.bypassFor ?? []).some((has) => matchesHas(has, request, url))
   ) {
+    setActiveSpanAttributes({ 'next.routing.outcome': 'forward ppr' })
     forwardHeaders.set(PPR_SHELL_HEADER, '1')
-    const shell = await context.next(
-      new Request(invocationUrl, { method: request.method, headers: forwardHeaders }),
+    const shell = await traceForward('forward ppr shell', forwardHeaders, () =>
+      context.next(new Request(invocationUrl, { method: request.method, headers: forwardHeaders })),
     )
     forwardHeaders.delete(PPR_SHELL_HEADER)
     const composed = await composePPR(shell, request, (postponed) =>
-      context.next(
-        new Request(invocationUrl, {
-          method: 'POST',
-          headers: { ...Object.fromEntries(forwardHeaders), ...ppr.resumeHeaders },
-          body: postponed,
-        }),
+      traceForward('forward ppr resume', forwardHeaders, () =>
+        context.next(
+          new Request(invocationUrl, {
+            method: 'POST',
+            headers: { ...Object.fromEntries(forwardHeaders), ...ppr.resumeHeaders },
+            body: postponed,
+          }),
+        ),
       ),
     )
     return withMiddlewareResponseHeaders(applyResolutionToThisResponse(composed))
   }
 
+  setActiveSpanAttributes({ 'next.routing.outcome': 'forward' })
   const forwardRequest = new Request(invocationUrl, {
     method: request.method,
     headers: forwardHeaders,
@@ -288,9 +331,11 @@ export async function runNextRouting(
   // context.next() forwards to the origin (server handler or CDN). We only change headers of what it
   // returns, so the origin may answer a conditional request with a 304, unless routing sets the
   // status (a 404 page), which would replace the 304.
-  const response = await context.next(forwardRequest, {
-    sendConditionalRequest: resolution.status === undefined,
-  })
+  const response = await traceForward('forward', forwardRequest.headers, () =>
+    context.next(forwardRequest, {
+      sendConditionalRequest: resolution.status === undefined,
+    }),
+  )
   return withMiddlewareResponseHeaders(
     applyResolutionToThisResponse(withFlightVary(request, response)),
   )

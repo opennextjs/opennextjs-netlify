@@ -4,6 +4,7 @@ import {
   matchesHas,
   type ResolveRoutesResult,
 } from '../../../adapter-runtime-shared/next-routing.js'
+import { withActiveSpan } from '../tracer.cjs'
 
 import { invokeHandler } from './invoke.js'
 import {
@@ -171,12 +172,25 @@ export async function produceTarget(
   args: ProduceRequest,
 ): Promise<Produced> {
   if (prerender) {
-    const served = await servePrerenderGroup(
-      prerender.variant,
-      prerender.group,
-      args,
-      prerender.onDemand,
-    )
+    const served = await withActiveSpan(args.tracer, 'serve prerender', async (span) => {
+      span?.setAttributes({
+        'prerender.group': prerender.group.entry.pathname,
+        'prerender.variant': prerender.variant.pathname,
+        'prerender.onDemand': Boolean(prerender.onDemand),
+      })
+      const result = await servePrerenderGroup(
+        prerender.variant,
+        prerender.group,
+        args,
+        prerender.onDemand,
+      )
+      // nothing served means the output renders the request
+      span?.setAttributes({
+        'prerender.served': result?.kind ?? 'none',
+        'next.cache': result?.kind === 'next' ? result.cache?.nextCache : undefined,
+      })
+      return result
+    })
     if (served) {
       return answerFailure(served, args)
     }
