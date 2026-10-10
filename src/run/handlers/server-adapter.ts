@@ -149,10 +149,15 @@ function createNextCallbacks(
   return nextCallbacks
 }
 
+/**
+ * Without `node` (a function) the response is returned. With it (a Netlify Server) the request's own
+ * render is sent to `node.res` by Next, and anything else is returned for the caller to send.
+ */
 export default async function ServerHandler(
   request: Request,
   requestContext: AdapterRequestContext,
-) {
+  node?: ProduceRequest['node'],
+): Promise<Response | undefined> {
   const tracer = getTracer()
   const nextCallbacks = createNextCallbacks(request, requestContext)
 
@@ -288,9 +293,13 @@ export default async function ServerHandler(
         commit: isNotFoundPage
           ? undefined
           : (response) => finalizeNext(response, handlerRequest, routedProduced),
+        node: isNotFoundPage ? undefined : node,
       }
 
       const produced = await produceTarget(target, handlerArgs)
+      if (produced.kind === 'sent') {
+        return
+      }
 
       // Next's server responds 404 to a direct request for the 404 page, served like any error page
       // (CACHE_404_PAGE cache-control handling keys off the status)

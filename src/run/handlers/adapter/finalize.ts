@@ -92,6 +92,9 @@ export async function finalize(
       return finalizeNext(produced.response, request, routed)
     case 'committed':
       return produced.response
+    case 'sent':
+      // only the request's own render is sent, and nothing wraps that
+      throw new Error('A response already sent cannot be finalized')
     case 'stored': {
       const { headers } = produced.response
       if (produced.cache.revalidate !== 0) {

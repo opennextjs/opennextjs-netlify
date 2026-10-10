@@ -109,6 +109,17 @@ function onCommit(res: ServerResponse, transform: (response: Response) => Respon
   }) as ServerResponse['writeHead']
 }
 
+// Next gets the client's own `req` and `res`, as the matched output is invoked
+function toInvocationReqRes(
+  { req, res }: NonNullable<ProduceRequest['node']>,
+  handlerRequest: Request,
+) {
+  const url = new URL(handlerRequest.url)
+  req.url = `${url.pathname}${url.search}`
+  req.headers = Object.fromEntries(handlerRequest.headers)
+  return { req, res }
+}
+
 export async function invokeHandler(
   { id, entrypoint, runtime, sourcePage }: InvokeHandlerArg,
   {
@@ -120,6 +131,7 @@ export async function invokeHandler(
     invokeStatus,
     nextCallbacks,
     commit,
+    node,
   }: ProduceRequest,
   { invocationId, raw, resume, postponed, onCacheEntry }: InvokeOptions = {},
 ): Promise<Produced> {
@@ -166,16 +178,27 @@ export async function invokeHandler(
         handlerRequest.headers.set(key, value)
       }
 
+      const committing = commit && !raw
+      // Netlify Server: the request's own render goes straight to the client
+      const sending = committing ? node : undefined
       // Convert Web Request to Node.js IncomingMessage/ServerResponse
-      const { req, res } = toReqRes(handlerRequest)
+      const { req, res } = sending
+        ? toInvocationReqRes(sending, handlerRequest)
+        : toReqRes(handlerRequest)
       if (invokeStatus) {
         res.statusCode = invokeStatus
       }
       let failedBeforeHeaders = false
-      const committing = commit && !raw
+      let headersCommitted: (() => void) | undefined
+      const committed = new Promise<void>((resolve) => {
+        headersCommitted = resolve
+      })
       if (committing) {
-        // the plain 500 below is only a signal, dispatch serves the 500 page
-        onCommit(res, (response) => (failedBeforeHeaders ? response : commit(response)))
+        onCommit(res, (response) => {
+          headersCommitted?.()
+          // the plain 500 below is only a signal, dispatch serves the 500 page
+          return failedBeforeHeaders ? response : commit(response)
+        })
       }
 
       // Invoke the route handler using the Node.js handler signature
@@ -204,17 +227,30 @@ export async function invokeHandler(
         console.error('route handler error', error)
         if (!res.headersSent) {
           failedBeforeHeaders = true
-          res.statusCode = 500
-          res.end('Internal Server Error')
+          // a client's response is left for the 500 page
+          if (!sending) {
+            res.statusCode = 500
+            res.end('Internal Server Error')
+          }
         }
       })
+
+      if (sending) {
+        // Next streams the body to the client itself
+        await Promise.race([
+          committed,
+          nextHandlerPromise.catch(() => {
+            // reported above
+          }),
+        ])
+      }
 
       // below is for now copied from standalone handler (without some extras, that generally could also be removed from standalone)
       // but will be nice to extract common handling to shared module and cleanup some things
 
       // Contrary to the docs, this resolves when the headers are available, not when the stream closes.
       // See https://github.com/fastly/http-compute-js/blob/main/src/http-compute-js/http-server.ts#L168-L173
-      const response = await toComputeResponse(res)
+      const response = sending ? undefined : await toComputeResponse(res)
 
       if (failedBeforeHeaders && !invokeStatus) {
         invokeSpan?.setAttribute('http.status_code', 500)
@@ -222,6 +258,11 @@ export async function invokeHandler(
           kind: 'failed' as const,
           response: new Response('Internal Server Error', { status: 500 }),
         }
+      }
+
+      if (!response) {
+        invokeSpan?.setAttribute('http.status_code', res.statusCode)
+        return { kind: 'sent' as const }
       }
 
       invokeSpan?.setAttribute('http.status_code', response.status)

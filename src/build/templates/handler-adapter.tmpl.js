@@ -7,6 +7,10 @@ import {
   withHoneycombTracing,
 } from '{{runtimeModulesDir}}/dist/adapter-runtime-shared/honeycomb-tracing.js'
 import {
+  toFetchRequest,
+  writeResponse,
+} from '{{runtimeModulesDir}}/dist/run/fetch-api-to-req-res.js'
+import {
   createRequestContext,
   runWithRequestContext,
 } from '{{runtimeModulesDir}}/dist/run/handlers/request-context.cjs'
@@ -34,9 +38,36 @@ await setupHoneycombTracing('next-runtime-function', {
 export default (req, context) =>
   withHoneycombTracing(req, context.waitUntil?.bind(context), () => handler(req, context))
 
-async function handler(req, context) {
+// Netlify Server (`netlify/server/`): the context comes from the request store
+export const listener = (nodeReq, res) => {
+  const { context } = globalThis.Netlify
+  const req = toFetchRequest(nodeReq, context.url)
+  withHoneycombTracing(req, context.waitUntil.bind(context), () =>
+    handler(req, context, { req: nodeReq, res }),
+  ).catch((error) => {
+    console.error('Netlify Server handler error', error)
+    if (res.headersSent) {
+      res.destroy(error)
+    } else {
+      res.writeHead(500).end('Internal Server Error')
+    }
+  })
+}
+
+async function handler(req, context, node) {
   const requestContext = createRequestContext(req, context)
   const tracer = getTracer()
+
+  if (node) {
+    // whoever sends the response, Next or `writeResponse` below
+    const writeHead = node.res.writeHead.bind(node.res)
+    node.res.writeHead = (...args) => {
+      if (requestContext.serverTiming) {
+        node.res.setHeader('server-timing', requestContext.serverTiming)
+      }
+      return writeHead(...args)
+    }
+  }
 
   const handlerResponse = await runWithRequestContext(requestContext, () => {
     return withActiveSpan(tracer, 'Next.js Server Handler', async (span) => {
@@ -50,13 +81,20 @@ async function handler(req, context) {
         isBackgroundRevalidation: requestContext.isBackgroundRevalidation,
         cwd: '{{cwd}}',
       })
-      const response = await serverHandler(req, requestContext)
+      const response = await serverHandler(req, requestContext, node)
       span?.setAttributes({
-        'http.status_code': response.status,
+        'http.status_code': response?.status ?? node.res.statusCode,
       })
       return response
     })
   })
+
+  if (node) {
+    if (handlerResponse) {
+      await writeResponse(handlerResponse, node.res)
+    }
+    return
+  }
 
   if (requestContext.serverTiming) {
     handlerResponse.headers.set('server-timing', requestContext.serverTiming)

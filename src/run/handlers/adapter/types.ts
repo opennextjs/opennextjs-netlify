@@ -1,5 +1,7 @@
 // The contracts between the adapter's layers: what producers get, what drives an invocation, and
 // what a produced response tells finalization.
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
 import type { Span } from '@opentelemetry/api'
 import type { RequestMeta } from 'next-with-adapters/dist/server/request-meta.js'
 
@@ -36,6 +38,8 @@ export type ProduceRequest = {
   nextCallbacks: NextCallbacks
   // the request's own render: finalizes its headers as Next commits them (`finalizeNext`)
   commit?: (response: Response) => Response
+  // Netlify Server: the request's own render goes to the client through these
+  node?: { req: IncomingMessage; res: ServerResponse }
 }
 
 // what the layer driving an invocation adds: the prerender store regenerating a group, PPR resuming
@@ -91,6 +95,8 @@ export type Produced =
   | { kind: 'final'; response: Response }
   // the request's own render, finalized when Next committed its headers (`ProduceRequest.commit`)
   | { kind: 'committed'; response: Response }
+  // the request's own render, already sent to the client (`ProduceRequest.node`)
+  | { kind: 'sent' }
   // a render that failed before its headers: dispatch answers with the 500 page, `response` is the
   // plain 500 for whoever doesn't (a regeneration, which then doesn't store it)
   | { kind: 'failed'; response: Response }

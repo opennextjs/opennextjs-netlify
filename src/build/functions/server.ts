@@ -161,14 +161,16 @@ const writeNetlifyServerEntry = async (ctx: PluginContext) => {
   await mkdir(entryDir, { recursive: true })
   await writeFile(
     join(entryDir, 'index.mjs'),
-    `import { fileURLToPath } from 'node:url'
+    `import { createServer } from 'node:http'
+import { fileURLToPath } from 'node:url'
 
 // the handler's {{cwd}} is relative to its own directory, the function root in function mode
 process.chdir(fileURLToPath(new URL('${handlerDir}/', import.meta.url)))
 
-const { default: handler } = await import('${handlerDir}/${SERVER_HANDLER_NAME}.mjs')
+const { listener } = await import('${handlerDir}/${SERVER_HANDLER_NAME}.mjs')
 
-export default handler
+// never listens: Netlify Server adopts it and hands it each request
+export default createServer(listener)
 `,
   )
 
