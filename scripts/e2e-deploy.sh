@@ -54,8 +54,9 @@ process.stdout.write(out.join(''))
 ")
 fi
 # Honeycomb tracing (the workflow's honeycombTracing input), with Next's detailed spans: on the
-# deploy, like the test's env, so it doesn't trace every deploy of the shared site
-if [ -n "${HONEYCOMB_API_KEY:-}" ]; then
+# deploy, like the test's env, so it doesn't trace every deploy of the shared site. Not for tests
+# registering their own tracer provider: ours registers first and OTel rejects theirs.
+if [ -n "${HONEYCOMB_API_KEY:-}" ] && [[ "${TEST_FILE_PATH:-}" != */opentelemetry/client-trace-metadata/* ]]; then
   DEPLOY_ENV_ARGS+=(--env "HONEYCOMB_API_KEY=$HONEYCOMB_API_KEY" --env NEXT_OTEL_VERBOSE=1)
 fi
 
