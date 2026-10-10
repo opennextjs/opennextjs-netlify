@@ -1,4 +1,6 @@
 import { Buffer } from 'node:buffer'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
 
 import {
   setupHoneycombTracing,
@@ -19,10 +21,15 @@ if ('{{cwd}}' && '{{cwd}}' !== '.') {
 // Set feature flag for regional blobs
 process.env.USE_REGIONAL_BLOBS = '{{useRegionalBlobs}}'
 
-await setupHoneycombTracing(
-  'next-runtime-function',
-  JSON.parse(Buffer.from('{{honeycombBuildConfig}}', 'base64').toString()),
-)
+await setupHoneycombTracing('next-runtime-function', {
+  ...JSON.parse(Buffer.from('{{honeycombBuildConfig}}', 'base64').toString()),
+  // what Next does after an app's instrumentation registers a provider: spans start outside the
+  // prerender's scope, or their random ids and timestamps abort Cache Components prerenders
+  afterRegistration: () =>
+    createRequire(join(process.cwd(), 'package.json'))(
+      'next/dist/server/lib/router-utils/instrumentation-node-extensions.js',
+    ).afterRegistration(),
+})
 
 export default (req, context) =>
   withHoneycombTracing(req, context.waitUntil?.bind(context), () => handler(req, context))

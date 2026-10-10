@@ -39,7 +39,6 @@ export function getHoneycombBuildConfig(): BuildConfig {
   const {
     E2E_TEST_TYPE,
     E2E_FIXTURE,
-    GITHUB_ACTIONS,
     GITHUB_SERVER_URL,
     GITHUB_REPOSITORY,
     GITHUB_RUN_ID,
@@ -50,8 +49,9 @@ export function getHoneycombBuildConfig(): BuildConfig {
       ? {
           'e2e.test_type': E2E_TEST_TYPE,
           'e2e.fixture': E2E_FIXTURE,
-          'e2e.runner': GITHUB_ACTIONS ? 'github-actions' : 'local',
-          'e2e.github_action_run_url': GITHUB_ACTIONS
+          // GITHUB_RUN_ID: Next's run-tests.js blanks GITHUB_ACTIONS (and CI) for the tests it runs
+          'e2e.runner': GITHUB_RUN_ID ? 'github-actions' : 'local',
+          'e2e.github_action_run_url': GITHUB_RUN_ID
             ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}`
             : undefined,
         }
@@ -62,7 +62,7 @@ export function getHoneycombBuildConfig(): BuildConfig {
 /** Call once at module scope, before anything asks for a tracer. */
 export async function setupHoneycombTracing(
   serviceName: string,
-  { attributes = {} }: BuildConfig = {},
+  { attributes = {}, afterRegistration }: BuildConfig & { afterRegistration?: () => void } = {},
 ): Promise<void> {
   const apiKey = getEnv('HONEYCOMB_API_KEY')
   if (!apiKey || state.tracing) {
@@ -77,6 +77,7 @@ export async function setupHoneycombTracing(
       { SimpleSpanProcessor },
       { OTLPTraceExporter },
       { suppressTracing },
+      { AsyncLocalStorage },
     ] = await Promise.all([
       import('@netlify/otel'),
       import('@netlify/otel/opentelemetry'),
@@ -84,7 +85,9 @@ export async function setupHoneycombTracing(
       interop(import('@opentelemetry/sdk-trace-node')),
       interop(import('@opentelemetry/exporter-trace-otlp-http')),
       interop(import('@opentelemetry/core')),
+      import('node:async_hooks'),
     ])
+    const outsideRequest = AsyncLocalStorage.snapshot()
     const processor = new SimpleSpanProcessor(
       new OTLPTraceExporter({
         url: `${getEnv('HONEYCOMB_API_ENDPOINT') ?? 'https://api.honeycomb.io'}/v1/traces`,
@@ -98,18 +101,19 @@ export async function setupHoneycombTracing(
       siteUrl: getEnv('URL') ?? '',
       siteId: getEnv('SITE_ID') ?? '',
       siteName: getEnv('SITE_NAME') ?? '',
-      // on every span rather than the resource: bootstrap takes no extra resource attributes
       spanProcessors: [
         {
+          // on every span rather than the resource: bootstrap takes no extra resource attributes
           onStart: (span) => span.setAttributes(attributes),
-          // eslint-disable-next-line @typescript-eslint/no-empty-function
-          onEnd: () => {},
-          forceFlush: () => Promise.resolve(),
-          shutdown: () => Promise.resolve(),
+          // exporting reads the clock: outside the request's async context, where a Cache
+          // Components prerender would count that as dynamic IO and abort
+          onEnd: (span) => outsideRequest(() => processor.onEnd(span)),
+          forceFlush: () => processor.forceFlush(),
+          shutdown: () => processor.shutdown(),
         },
-        processor,
       ],
     })
+    afterRegistration?.()
     state.tracing = { netlifyOtel, api, suppressTracing, flush: () => processor.forceFlush() }
   } catch (error) {
     console.error('Honeycomb tracing setup failed', error)
