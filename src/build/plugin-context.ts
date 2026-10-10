@@ -223,7 +223,15 @@ export class PluginContext {
    * `.netlify/functions-internal`
    */
   get serverFunctionsDir(): string {
-    return this.resolveFromPackagePath('.netlify/functions-internal')
+    // outside functions-internal in server mode: a function route on /* would win over the server
+    return this.resolveFromPackagePath(
+      this.useNetlifyServer ? '.netlify/next-server' : '.netlify/functions-internal',
+    )
+  }
+
+  /** Spike: run the adapter handler as a Netlify Server (`netlify/server/`) instead of a function */
+  get useNetlifyServer(): boolean {
+    return this.hasAdapter() && process.env.NETLIFY_NEXT_SERVER === '1'
   }
 
   /** Absolute path of the server handler */

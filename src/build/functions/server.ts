@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
 
 import { trace } from '@opentelemetry/api'
@@ -150,6 +150,38 @@ const writeHandlerFile = async (ctx: PluginContext) => {
   await writeFile(join(ctx.serverHandlerRootDir, `${SERVER_HANDLER_NAME}.mjs`), handler)
 }
 
+/**
+ * Spike: `netlify/server/index.mjs` wrapping the same handler, which @netlify/build ships as the
+ * `___netlify-server` function and Play runs as a Netlify Server
+ */
+const writeNetlifyServerEntry = async (ctx: PluginContext) => {
+  const entryDir = ctx.resolveFromPackagePath('netlify/server')
+  const handlerDir = relative(entryDir, ctx.serverHandlerRootDir).split(sep).join('/')
+
+  await mkdir(entryDir, { recursive: true })
+  await writeFile(
+    join(entryDir, 'index.mjs'),
+    `import { fileURLToPath } from 'node:url'
+
+// the handler's {{cwd}} is relative to its own directory, the function root in function mode
+process.chdir(fileURLToPath(new URL('${handlerDir}/', import.meta.url)))
+
+const { default: handler } = await import('${handlerDir}/${SERVER_HANDLER_NAME}.mjs')
+
+export default handler
+`,
+  )
+
+  // like the handler function: no bundling, ship the files as they are
+  ctx.netlifyConfig.functions['___netlify-server'] = {
+    node_bundler: 'none',
+    included_files: [
+      posixJoin(ctx.constants.PACKAGE_PATH || '', 'netlify/server/**'),
+      posixJoin(ctx.constants.PACKAGE_PATH || '', '.netlify/next-server/**'),
+    ],
+  }
+}
+
 export const clearStaleServerHandlers = async (ctx: PluginContext) => {
   await rm(ctx.serverFunctionsDir, { recursive: true, force: true })
 }
@@ -171,6 +203,10 @@ export const createServerHandler = async (ctx: PluginContext) => {
     await copyHandlerDependencies(ctx)
     await writeHandlerManifest(ctx)
     await writeHandlerFile(ctx)
+
+    if (ctx.useNetlifyServer) {
+      await writeNetlifyServerEntry(ctx)
+    }
 
     if (!ctx.hasAdapter()) {
       await verifyHandlerDirStructure(ctx)
