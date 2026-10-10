@@ -5,6 +5,7 @@ import type { Manifest } from '@netlify/edge-functions'
 import type { AdapterOutput } from 'next-with-adapters'
 
 import type { AdapterBuildCompleteContext } from '../../adapter/adapter-output.js'
+import { getHoneycombBuildConfig } from '../../adapter-runtime-shared/honeycomb-tracing.js'
 import type { RoutingConfig } from '../../adapter-runtime-shared/next-routing.js'
 import { isGroupEntry } from '../content/prerendered.js'
 import { getPublishedPath, isStatusPagePathname } from '../content/static.js'
@@ -304,7 +305,7 @@ async function writeRoutingEdgeFunctionEntry(
           `{ enabled: false }`
     };
 
-    await setupHoneycombTracing('next-runtime-edge');
+    await setupHoneycombTracing('next-runtime-edge', ${JSON.stringify(getHoneycombBuildConfig())});
 
     export default (req, context) =>
       withHoneycombTracing(req, context.waitUntil?.bind(context), () =>

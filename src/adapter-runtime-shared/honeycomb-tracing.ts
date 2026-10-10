@@ -8,6 +8,7 @@ type WaitUntil = ((promise: Promise<unknown>) => void) | undefined
 
 type Tracing = {
   netlifyOtel: typeof import('@netlify/otel')
+  suppressTracing: (typeof import('@opentelemetry/core'))['suppressTracing']
   api: typeof import('@netlify/otel/opentelemetry')
   flush: () => Promise<unknown>
 }
@@ -28,9 +29,44 @@ const interop = async <T extends object>(module: Promise<T>): Promise<T> => {
   return ('default' in loaded ? loaded.default : loaded) as T
 }
 
+type BuildConfig = { apiKey?: string; attributes?: Attributes }
+
+/**
+ * Read at build time and baked into the edge function and the server handler: the e2e deploy
+ * helpers set E2E_TEST_TYPE and E2E_FIXTURE on the `netlify deploy --build` they run, and a key
+ * present at build enables tracing for that deploy alone (the site's env would enable every deploy).
+ */
+export function getHoneycombBuildConfig(): BuildConfig {
+  const {
+    HONEYCOMB_API_KEY,
+    E2E_TEST_TYPE,
+    E2E_FIXTURE,
+    GITHUB_ACTIONS,
+    GITHUB_SERVER_URL,
+    GITHUB_REPOSITORY,
+    GITHUB_RUN_ID,
+    GITHUB_RUN_ATTEMPT,
+  } = process.env
+  return {
+    apiKey: HONEYCOMB_API_KEY,
+    attributes: E2E_TEST_TYPE
+      ? {
+          'e2e.test_type': E2E_TEST_TYPE,
+          'e2e.fixture': E2E_FIXTURE,
+          'e2e.runner': GITHUB_ACTIONS ? 'github-actions' : 'local',
+          'e2e.github_action_run_url': GITHUB_ACTIONS
+            ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}`
+            : undefined,
+        }
+      : undefined,
+  }
+}
+
 /** Call once at module scope, before anything asks for a tracer. */
-export async function setupHoneycombTracing(serviceName: string): Promise<void> {
-  const apiKey = getEnv('HONEYCOMB_API_KEY')
+export async function setupHoneycombTracing(
+  serviceName: string,
+  { apiKey = getEnv('HONEYCOMB_API_KEY'), attributes = {} }: BuildConfig = {},
+): Promise<void> {
   if (!apiKey || state.tracing) {
     return
   }
@@ -42,12 +78,14 @@ export async function setupHoneycombTracing(serviceName: string): Promise<void> 
       { createTracerProvider },
       { SimpleSpanProcessor },
       { OTLPTraceExporter },
+      { suppressTracing },
     ] = await Promise.all([
       import('@netlify/otel'),
       import('@netlify/otel/opentelemetry'),
       interop(import('@netlify/otel/bootstrap')),
       interop(import('@opentelemetry/sdk-trace-node')),
       interop(import('@opentelemetry/exporter-trace-otlp-http')),
+      interop(import('@opentelemetry/core')),
     ])
     const processor = new SimpleSpanProcessor(
       new OTLPTraceExporter({
@@ -62,9 +100,19 @@ export async function setupHoneycombTracing(serviceName: string): Promise<void> 
       siteUrl: getEnv('URL') ?? '',
       siteId: getEnv('SITE_ID') ?? '',
       siteName: getEnv('SITE_NAME') ?? '',
-      spanProcessors: [processor],
+      // on every span rather than the resource: bootstrap takes no extra resource attributes
+      spanProcessors: [
+        {
+          onStart: (span) => span.setAttributes(attributes),
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
+          onEnd: () => {},
+          forceFlush: () => Promise.resolve(),
+          shutdown: () => Promise.resolve(),
+        },
+        processor,
+      ],
     })
-    state.tracing = { netlifyOtel, api, flush: () => processor.forceFlush() }
+    state.tracing = { netlifyOtel, api, suppressTracing, flush: () => processor.forceFlush() }
   } catch (error) {
     console.error('Honeycomb tracing setup failed', error)
   }
@@ -85,6 +133,10 @@ export async function withHoneycombTracing<T>(
     return fn()
   }
   const { context: otelContext, propagation } = tracing.api
+  // static assets are most of the requests and of the span volume, and say little
+  if (new URL(request.url).pathname.includes('/_next/static/')) {
+    return otelContext.with(tracing.suppressTracing(otelContext.active()), fn)
+  }
   const parent = propagation.extract(otelContext.active(), Object.fromEntries(request.headers))
   // consumed here: Next would otherwise start its own root span from it, beside ours
   request.headers.delete('traceparent')

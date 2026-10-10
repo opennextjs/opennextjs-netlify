@@ -58,7 +58,7 @@ var __dirname = await (async () => {
  * @param {Omit<import('esbuild').BuildOptions, 'entryPoints' | 'outdir' | 'outfile' | 'splitting'> & Required<Pick<import('esbuild').BuildOptions, 'format'>} bundleOptions
  * @returns
  */
-async function bundle(entryPoints, bundleOptions) {
+async function bundle(entryPoints, { plugins = [], ...bundleOptions }) {
   /** @type {import('esbuild').BuildOptions} */
   const options = {
     entryPoints,
@@ -69,6 +69,7 @@ async function bundle(entryPoints, bundleOptions) {
     external: ['next', '@next/env'], // don't try to bundle next (adapter runtime resolves the app's @next/env)
     allowOverwrite: watch,
     plugins: [
+      ...plugins,
       {
         // Next internals bundled from next-with-adapters (the edge sandbox) require siblings by bare
         // `next/...` specifiers; resolve those to the same pinned copy instead of the external `next`
@@ -160,6 +161,25 @@ async function generateHtmlRewriterWasmModule() {
   await writeFile(join(middlewareDir, 'html-rewriter-wasm.ts'), moduleContent)
 }
 
+// The Honeycomb tracing SDK registers its OTel globals through whichever `@opentelemetry/api` it
+// resolves, and `@netlify/otel`'s own (newer) copy rejects globals registered by an older minor:
+// bundle the tracing code against that copy rather than bumping the repo's
+/** @type {import('esbuild').Plugin} */
+const resolveOtelApiFromNetlifyOtel = {
+  name: 'resolve-otel-api-from-netlify-otel',
+  setup(pluginBuild) {
+    pluginBuild.onResolve({ filter: /^@opentelemetry\/api(\/|$)/ }, (args) =>
+      args.pluginData?.fromNetlifyOtel
+        ? undefined
+        : pluginBuild.resolve(args.path, {
+            kind: args.kind,
+            resolveDir: join(repoDirectory, 'node_modules/@netlify/otel'),
+            pluginData: { fromNetlifyOtel: true },
+          }),
+    )
+  },
+}
+
 const args = new Set(process.argv.slice(2))
 const watch = args.has('--watch') || args.has('-w')
 
@@ -175,6 +195,7 @@ await Promise.all([
   bundle(adapterEdgeAndSharedRuntimeEntryPointsEsm, {
     format: 'esm',
     chunkNames: 'adapter-runtime-chunks/[name]-[hash]',
+    plugins: [resolveOtelApiFromNetlifyOtel],
     banner: { js: `${bannerRequireShim}${bannerDirnameShim}` },
   }),
   // the routing edge function's copy of the Honeycomb tracing module, resolving npm packages like
@@ -184,6 +205,7 @@ await Promise.all([
     entryNames: 'adapter-runtime-edge/[name]',
     chunkNames: 'adapter-runtime-chunks/honeycomb-[name]-[hash]',
     mainFields: ['module', 'browser', 'main'],
+    plugins: [resolveOtelApiFromNetlifyOtel],
     // and the Node globals edge-bundler's banner defines for npm packages
     banner: {
       js: `${bannerRequireShim}${bannerDirnameShim}

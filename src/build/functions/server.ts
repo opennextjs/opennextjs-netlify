@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { join as posixJoin } from 'node:path/posix'
@@ -6,6 +7,7 @@ import { trace } from '@opentelemetry/api'
 import { wrapTracer } from '@opentelemetry/api/experimental'
 import { glob } from 'fast-glob'
 
+import { getHoneycombBuildConfig } from '../../adapter-runtime-shared/honeycomb-tracing.js'
 import { copyNextServerCodeFromAdapter } from '../content/server-adapter.js'
 import {
   copyNextDependencies,
@@ -113,6 +115,9 @@ const getHandlerFile = async (ctx: PluginContext): Promise<string> => {
 
   const templateVariables: Record<string, string> = {
     '{{useRegionalBlobs}}': ctx.useRegionalBlobs.toString(),
+    '{{honeycombBuildConfig}}': Buffer.from(JSON.stringify(getHoneycombBuildConfig())).toString(
+      'base64',
+    ),
   }
 
   // Adapter mode uses a dedicated template that works for both monorepo and non-monorepo setups
