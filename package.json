@@ -67,7 +67,7 @@
     "@opentelemetry/api": "^1.8.0",
     "@playwright/test": "^1.43.1",
     "@types/adm-zip": "^0.5.7",
-    "@types/node": "^20.12.7",
+    "@types/node": "^24.0.0",
     "@types/picomatch": "^3.0.0",
     "@vercel/nft": "^0.30.0",
     "@web-std/file": "^3.0.3",
