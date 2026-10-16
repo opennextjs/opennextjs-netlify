@@ -43,6 +43,7 @@ test<FixtureTestContext>('requesting a non existing page route that needs to be 
     '/fallback-true/[slug]',
     '/fallback-true/prerendered',
     '/products/prerendered',
+    '/products/プリレンダリング',
     '/products/事前レンダリング,test',
     '/static/revalidate-automatic',
     '/static/revalidate-manual',

@@ -11,6 +11,22 @@ import { getLogger, getRequestContext } from './request-context.cjs'
 
 const purgeCacheUserAgent = `${nextRuntimePkgName}@${nextRuntimePkgVersion}`
 
+// anything other than tab and printable ASCII
+const OUT_OF_HEADER_SAFE_CLASS_CHAR = /[^\t -~]/
+const OUT_OF_HEADER_SAFE_CLASS_RUN = /[^\t -~]+/g
+
+/**
+ * Port of Next.js `encodeHeaderSafe` (https://github.com/vercel/next.js/pull/93601), which Next applies to
+ * tags itself since 16.3.0 (and 16.2 via backport). Older versions hand us some tags raw (e.g. `revalidatePath`)
+ * and some already encoded (implicit tags from the request pathname). It's idempotent, so applying it on both
+ * the `Netlify-Cache-Tag` and the purge side brings every version to the same form, safe for a header value.
+ */
+export function toCdnCacheTag(tag: string): string {
+  return OUT_OF_HEADER_SAFE_CLASS_CHAR.test(tag)
+    ? tag.replace(OUT_OF_HEADER_SAFE_CLASS_RUN, (run) => encodeURIComponent(run))
+    : tag
+}
+
 // written on the first revalidation in a deploy; while it is absent no tag can have a manifest
 export const TAG_REVALIDATION_MARKER_KEY = 'netlify:tags-revalidated'
 
@@ -269,7 +285,7 @@ async function doRevalidateTagAndPurgeEdgeCache(
     }),
   ])
 
-  await purgeEdgeCache(tags)
+  await purgeEdgeCache(tags.map(toCdnCacheTag))
 }
 
 export function markTagsAsStaleAndPurgeEdgeCache(

@@ -17,6 +17,10 @@ export async function generateStaticParams() {
       // Japanese prerendered (non-ascii) and comma
       slug: '事前レンダリング,test',
     },
+    {
+      // Japanese prerendered (non-ascii) without comma
+      slug: 'プリレンダリング',
+    },
   ]
 }
 

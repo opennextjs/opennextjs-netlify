@@ -5,7 +5,9 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const pathToRevalidate = url.searchParams.get('path') ?? '/static-fetch/[id]/page'
 
-  revalidatePath(pathToRevalidate)
+  const type = url.searchParams.get('type') as 'page' | 'layout' | null
+
+  revalidatePath(pathToRevalidate, type ?? undefined)
   return NextResponse.json({ revalidated: true, now: new Date().toISOString() })
 }
 
