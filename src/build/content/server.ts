@@ -429,6 +429,8 @@ const replaceMiddlewareManifest = async (sourcePath: string, destPath: string) =
 // the middleware in the server handler, while still allowing next server to enable some middleware
 // specific handling such as _next/data normalization ( https://github.com/vercel/next.js/blob/7bb72e508572237fe0d4aac5418546d4b4b3a363/packages/next/src/server/lib/router-utils/resolve-routes.ts#L395 )
 const replaceFunctionsConfigManifest = async (sourcePath: string, destPath: string) => {
+  await mkdir(dirname(destPath), { recursive: true })
+
   const data = await readFile(sourcePath, 'utf8')
   const manifest = JSON.parse(data) as FunctionsConfigManifest
 
