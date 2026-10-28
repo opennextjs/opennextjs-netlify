@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.16.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.4...v5.16.5) (2026-10-28)
+
+
+### Bug Fixes
+
+* create server dir before patching functions-config-manifest.json ([#3599](https://github.com/opennextjs/opennextjs-netlify/issues/3599)) ([f9d5a0e](https://github.com/opennextjs/opennextjs-netlify/commit/f9d5a0e1af1daab8a680aae2bd8c3ffe96b505aa))
+
 ## [5.16.4](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.3...v5.16.4) (2026-10-20)
 
 
