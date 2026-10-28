@@ -169,6 +169,33 @@ const fixtures = {
     } as NetlifyPluginOptions)
     return { ...mockFS, reqServerFiles, reqServerPathStandalone, ctx }
   },
+  get simpleWithNodeMiddleware() {
+    const reqServerFiles = JSON.stringify({
+      config: { distDir: '.next' },
+      relativeAppDir: '',
+    } as RequiredServerFilesManifest)
+    const reqServerPath = '.next/required-server-files.json'
+    const reqServerPathStandalone = join('.next/standalone', reqServerPath)
+    const functionsConfigManifestPath =
+      '.next/standalone/.next/server/functions-config-manifest.json'
+    const buildIDPath = join('.netlify/functions-internal/___netlify-server-handler/.next/BUILD_ID')
+    mockFS = mockFileSystem({
+      [reqServerPath]: reqServerFiles,
+      [reqServerPathStandalone]: reqServerFiles,
+      [functionsConfigManifestPath]: JSON.stringify({
+        version: 1,
+        functions: {
+          '/_middleware': {
+            runtime: 'nodejs',
+            matchers: [{ regexp: '^/(?:.*)$', originalSource: '/:path*' }],
+          },
+        },
+      }),
+      [buildIDPath]: 'build-id',
+    })
+    const ctx = new PluginContext({ ...mockPluginOptions, constants: {} } as NetlifyPluginOptions)
+    return { ...mockFS, ctx }
+  },
   get simpleMissingBuildID() {
     const reqServerFiles = JSON.stringify({
       config: { distDir: '.next' },
@@ -217,6 +244,23 @@ describe('copyNextServerCode', () => {
     expect(await readFile(join(cwd, reqServerPathStandalone), 'utf-8')).toBe(
       '{"config":{"distDir":".next"},"relativeAppDir":"apps/my-app"}',
     )
+  })
+
+  test('should disable Node.js middleware in functions-config-manifest.json before the server directory exists', async () => {
+    const { cwd, ctx } = fixtures.simpleWithNodeMiddleware
+    await copyNextServerCode(ctx)
+    const manifest = JSON.parse(
+      await readFile(
+        join(
+          cwd,
+          '.netlify/functions-internal/___netlify-server-handler/.next/server/functions-config-manifest.json',
+        ),
+        'utf-8',
+      ),
+    )
+    expect(manifest.functions['/_middleware'].matchers).toEqual([
+      { regexp: '(?!.*)', originalSource: '/:path*' },
+    ])
   })
 })
 
