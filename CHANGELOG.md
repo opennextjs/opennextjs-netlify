@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.16.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.5...v5.16.6) (2026-11-03)
+
+
+### Bug Fixes
+
+* strip internal x-middleware-set-cookie header from responses ([#3609](https://github.com/opennextjs/opennextjs-netlify/issues/3609)) ([8e8a0c8](https://github.com/opennextjs/opennextjs-netlify/commit/8e8a0c8836367cb6b265c64d547c86804fbc3953))
+
 ## [5.16.5](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.4...v5.16.5) (2026-10-28)
 
 
