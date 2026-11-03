@@ -49,6 +49,11 @@ export const startMockBlobStore = async (ctx: FixtureTestContext) => {
     onRequest: ctx.blobServerOnRequestSpy,
     directory: await mkdtemp(join(tmpdir(), 'opennextjs-netlify-blob-')),
   })
+  // `handleRequest` is private, but it's the only place exposing blob server responses
+  ctx.blobServerHandleRequestSpy = vi.spyOn(
+    ctx.blobServer as unknown as { handleRequest: (request: Request) => Promise<Response> },
+    'handleRequest',
+  )
   await ctx.blobServer.start()
   ctx.blobStoreHost = `localhost:${port}`
   ctx.blobStorePort = port
@@ -81,11 +86,10 @@ export const getBlobEntries = async (ctx: FixtureTestContext) => {
   return blobs
 }
 
-export function getBlobServerGets(ctx: FixtureTestContext, predicate?: (key: string) => boolean) {
+export function getBlobServerRequests(ctx: FixtureTestContext) {
   const isString = (arg: unknown): arg is string => typeof arg === 'string'
   return ctx.blobServerOnRequestSpy.mock.calls
     .map(([request]) => {
-      if (request.type !== Operation.GET) return undefined
       if (!isString(request.url)) return undefined
 
       let urlSegments = request.url.split('/').slice(1)
@@ -97,9 +101,15 @@ export function getBlobServerGets(ctx: FixtureTestContext, predicate?: (key: str
       }
 
       const [_siteID, _deployID, key] = urlSegments
-      return key && decodeBlobKey(key)
+      return key ? { type: request.type, key: decodeBlobKey(key.split('?')[0]) } : undefined
     })
-    .filter(isString)
+    .filter((request): request is { type: Operation; key: string } => Boolean(request))
+}
+
+export function getBlobServerGets(ctx: FixtureTestContext, predicate?: (key: string) => boolean) {
+  return getBlobServerRequests(ctx)
+    .filter(({ type }) => type === Operation.GET)
+    .map(({ key }) => key)
     .filter((key) => !predicate || predicate(key))
 }
 
@@ -113,6 +123,39 @@ const stripRouteCacheScope = (decodedKey: string): string => {
   }
   const marker = decodedKey.indexOf('/$/')
   return marker === -1 ? decodedKey : decodedKey.slice(marker + 2)
+}
+
+/**
+ * Describes blob server GET (with hit/miss based on actual blob server response) and SET
+ * operations, e.g. `get /index (hit)`, `set /index`
+ */
+export async function describeBlobServerOperations(ctx: FixtureTestContext) {
+  const { calls, results } = ctx.blobServerHandleRequestSpy.mock
+  const operations = await Promise.all(
+    calls.map(async ([request], index) => {
+      const response = await results[index].value
+      let urlSegments = new URL(request.url).pathname.split('/').slice(1)
+
+      // ignore region url component when using `experimentalRegion`
+      const REGION_PREFIX = 'region:'
+      if (urlSegments[0].startsWith(REGION_PREFIX)) {
+        urlSegments = urlSegments.slice(1)
+      }
+
+      const [_siteID, _deployID, key] = urlSegments
+      if (!key) return undefined
+
+      switch (request.method) {
+        case 'GET':
+          return `get ${decodeBlobKeyToRoute(key)} (${response.status === 404 ? 'miss' : 'hit'})`
+        case 'PUT':
+          return `set ${decodeBlobKeyToRoute(key)}`
+        default:
+          return undefined
+      }
+    }),
+  )
+  return operations.filter((operation): operation is string => typeof operation === 'string')
 }
 
 export function countOfBlobServerGetsForKey(ctx: FixtureTestContext, key: string) {

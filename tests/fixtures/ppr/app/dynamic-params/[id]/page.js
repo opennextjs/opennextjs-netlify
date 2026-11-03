@@ -36,7 +36,7 @@ async function Content({ id }) {
 export default async function DynamicPageWithDynamicParams({ params }) {
   return (
     <main>
-      <Suspense fallback={<div>loading...</div>}>
+      <Suspense fallback={<div data-testid="suspense-fallback">loading...</div>}>
         <Content id={params.then(({ id }) => id)} />
       </Suspense>
     </main>

@@ -2,6 +2,7 @@ node_modules/
 dist/
 .next
 .next-node-middleware
+.next-partial-prefetching
 edge-runtime/vendor
 # html-rewriter-wasm.ts is generated at plugin build time with base64-encoded WASM
 edge-runtime/html-rewriter-wasm.ts

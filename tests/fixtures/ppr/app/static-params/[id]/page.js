@@ -38,7 +38,7 @@ async function Content({ params }) {
   return (
     <>
       <h1>Dynamic Page (static params): {id}</h1>
-      <Suspense fallback={<div>loading content...</div>}>
+      <Suspense fallback={<div data-testid="content-suspense-fallback">loading content...</div>}>
         <FetchedDataContent id={id} />
       </Suspense>
     </>
@@ -49,7 +49,7 @@ async function Content({ params }) {
 export default async function DynamicPageWithStaticParams({ params }) {
   return (
     <main>
-      <Suspense fallback={<div>loading params...</div>}>
+      <Suspense fallback={<div data-testid="params-suspense-fallback">loading params...</div>}>
         <Content params={params} />
       </Suspense>
     </main>

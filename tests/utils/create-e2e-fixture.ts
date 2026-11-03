@@ -578,6 +578,7 @@ export const fixtureFactories = {
       buildCommand: 'turbo build --filter page-router',
     }),
   serverComponents: () => createE2EFixture('server-components'),
+  ppr: () => createE2EFixture('ppr'),
   next16TagRevalidation: () => createE2EFixture('next-16-tag-revalidation'),
   nxIntegrated: () =>
     createE2EFixture('nx-integrated', {

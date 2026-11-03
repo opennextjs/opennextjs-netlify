@@ -1,0 +1,13 @@
+{
+  "partial-prefetching": {
+    "distDir": ".next-partial-prefetching",
+    "env": {
+      "PARTIAL_PREFETCHING": "true"
+    },
+    "test": {
+      "dependencies": {
+        "next": ">=16.3.0-canary.103"
+      }
+    }
+  }
+}
