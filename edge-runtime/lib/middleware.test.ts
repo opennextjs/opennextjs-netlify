@@ -1,7 +1,45 @@
-import { assertEquals } from 'https://deno.land/std@0.175.0/testing/asserts.ts'
-import { mergeMiddlewareCookies } from './middleware.ts'
+import { assertEquals, assertStrictEquals } from 'https://deno.land/std@0.175.0/testing/asserts.ts'
+import { mergeMiddlewareCookies, removeInternalCookieHeader } from './middleware.ts'
 
 const MIDDLEWARE_HEADER = 'x-middleware-set-cookie'
+
+Deno.test('removeInternalCookieHeader', async (t) => {
+  await t.step('should return the same response when the header is not set', () => {
+    const response = new Response('body')
+
+    assertStrictEquals(removeInternalCookieHeader(response), response)
+  })
+
+  await t.step('should remove the header and keep the rest of the response', async () => {
+    const headers = new Headers({ [MIDDLEWARE_HEADER]: 'a=1; Path=/; HttpOnly,b=2; Path=/' })
+    headers.append('set-cookie', 'a=1; Path=/; HttpOnly')
+    headers.append('set-cookie', 'b=2; Path=/')
+    const response = new Response('body', { status: 201, headers })
+
+    const result = removeInternalCookieHeader(response)
+
+    assertEquals(result.headers.get(MIDDLEWARE_HEADER), null)
+    assertEquals(result.headers.getSetCookie(), ['a=1; Path=/; HttpOnly', 'b=2; Path=/'])
+    assertEquals(result.status, 201)
+    assertEquals(await result.text(), 'body')
+  })
+
+  await t.step('should remove the header from responses with immutable headers', async () => {
+    const server = Deno.serve({ hostname: '127.0.0.1', port: 0, onListen: () => {} }, () => {
+      return new Response('body', { headers: { [MIDDLEWARE_HEADER]: 'a=1; Path=/; HttpOnly' } })
+    })
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.addr.port}`)
+
+      const result = removeInternalCookieHeader(response)
+
+      assertEquals(result.headers.get(MIDDLEWARE_HEADER), null)
+      assertEquals(await result.text(), 'body')
+    } finally {
+      await server.shutdown()
+    }
+  })
+})
 
 Deno.test('mergeMiddlewareCookies', async (t) => {
   await t.step('should handle empty cookies', async () => {

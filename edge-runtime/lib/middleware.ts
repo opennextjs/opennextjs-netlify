@@ -52,6 +52,17 @@ export const hasMiddlewareResponseHeadersToApply = (
   )
 }
 
+export const removeInternalCookieHeader = (response: Response) => {
+  if (!response.headers.has('x-middleware-set-cookie')) {
+    return response
+  }
+
+  // headers of responses passed through unchanged might be immutable (e.g. fetch responses)
+  const sanitizedResponse = new Response(response.body, response)
+  sanitizedResponse.headers.delete('x-middleware-set-cookie')
+  return sanitizedResponse
+}
+
 export const addMiddlewareHeaders = async (
   originResponse: Promise<Response> | Response,
   middlewareResponse: Response,

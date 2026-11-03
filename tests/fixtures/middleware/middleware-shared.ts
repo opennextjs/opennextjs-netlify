@@ -102,6 +102,20 @@ const getResponse = (request: NextRequest) => {
     return NextResponse.redirect(new URL('/caching-redirect-target', request.url))
   }
 
+  if (request.nextUrl.pathname.startsWith('/test/set-cookie/')) {
+    const kind = request.nextUrl.pathname.slice('/test/set-cookie/'.length)
+    const responses: Record<string, () => NextResponse> = {
+      direct: () => NextResponse.json({ ok: true }),
+      redirect: () => NextResponse.redirect(new URL('/other', request.url)),
+      'rewrite-external': () =>
+        NextResponse.rewrite(new URL(request.nextUrl.searchParams.get('external-url') as string)),
+      'rewrite-internal': () => NextResponse.rewrite(new URL('/rewrite-target', request.url)),
+    }
+    const response = Object.hasOwn(responses, kind) ? responses[kind]() : NextResponse.next()
+    response.cookies.set('session', 'http-only-value', { httpOnly: true, path: '/' })
+    return response
+  }
+
   // Public URLs are served from an internal route tree whose paths must not be directly visitable
   if (request.nextUrl.pathname.startsWith('/test/internal-prefix/')) {
     return new NextResponse(null, { status: 404 })

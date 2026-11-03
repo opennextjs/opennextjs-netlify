@@ -194,6 +194,125 @@ for (const {
       })
     })
 
+    // Next.js mirrors cookies into the internal x-middleware-set-cookie header. Unlike set-cookie,
+    // it's readable with fetch()/XHR, so it would expose HttpOnly cookie values if it reached the client
+    describe('cookies set by middleware', () => {
+      const expectCookieWithoutInternalHeader = (response: Response) => {
+        const setCookie = response.headers.get('set-cookie')
+        expect(setCookie).toContain('session=http-only-value')
+        expect(setCookie).toMatch(/;\s*HttpOnly/i)
+        expect(response.headers.get('x-middleware-set-cookie')).toBeNull()
+        // catches the value leaking through any other header too, e.g. if Next.js renames it
+        expect(
+          [...response.headers].filter(
+            ([name, value]) => name !== 'set-cookie' && value.includes('http-only-value'),
+          ),
+        ).toEqual([])
+      }
+
+      test<FixtureTestContext>('are not exposed in an internal header for responses returned by middleware', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const origin = new LocalServer()
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: '/test/set-cookie/direct',
+        })
+
+        expect(await response.json()).toEqual({ ok: true })
+        expectCookieWithoutInternalHeader(response)
+        expect(origin.calls).toBe(0)
+      })
+
+      test<FixtureTestContext>('are not exposed in an internal header for redirects', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const origin = new LocalServer()
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          redirect: 'manual',
+          url: '/test/set-cookie/redirect',
+        })
+
+        expect(response.status).toBe(307)
+        expect(new URL(response.headers.get('location') as string, 'http://n').pathname).toBe(
+          '/other',
+        )
+        expectCookieWithoutInternalHeader(response)
+        expect(origin.calls).toBe(0)
+      })
+
+      test<FixtureTestContext>('are not exposed in an internal header for external rewrites', async (ctx) => {
+        await createFixture('middleware', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const external = await LocalServer.run(async (req, res) => {
+          res.write('Hello from external host!')
+          res.end()
+        })
+        ctx.cleanup?.push(() => external.stop())
+
+        const origin = new LocalServer()
+        ctx.cleanup?.push(() => origin.stop())
+
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/test/set-cookie/rewrite-external?external-url=http://localhost:${external.port}/some-path`,
+        })
+
+        expect(await response.text()).toBe('Hello from external host!')
+        expectCookieWithoutInternalHeader(response)
+        expect(origin.calls).toBe(0)
+      })
+
+      // The internal header is read to forward the cookies to the origin, so it must only be removed
+      // after that. Next.js only sets it since 14.2.8.
+      for (const { kind, originPath } of [
+        { kind: 'next', originPath: '/test/set-cookie/next' },
+        { kind: 'rewrite-internal', originPath: '/rewrite-target' },
+      ]) {
+        test.skipIf(!nextVersionSatisfies('>=14.2.8'))<FixtureTestContext>(
+          `are still forwarded to the origin for ${kind}`,
+          async (ctx) => {
+            await createFixture('middleware', ctx)
+            await runPlugin(ctx, runPluginConstants)
+
+            let originRequest: { url?: string; cookie?: string } | undefined
+            const origin = await LocalServer.run(async (req, res) => {
+              originRequest = { url: req.url, cookie: req.headers.cookie }
+              // mergeMiddlewareCookies already removed the middleware's own copy, so this checks that
+              // the header is also removed from the origin's response returned by the edge function
+              res.setHeader('x-middleware-set-cookie', 'session=http-only-value; Path=/; HttpOnly')
+              res.write('Hello from origin!')
+              res.end()
+            })
+            ctx.cleanup?.push(() => origin.stop())
+
+            const response = await invokeEdgeFunction(ctx, {
+              functions: [edgeFunctionNameRoot],
+              origin,
+              url: `/test/set-cookie/${kind}`,
+            })
+
+            expect(await response.text()).toBe('Hello from origin!')
+            expect(originRequest?.url).toBe(originPath)
+            expect(originRequest?.cookie).toContain('session=http-only-value')
+            expectCookieWithoutInternalHeader(response)
+            expect(origin.calls).toBe(1)
+          },
+        )
+      }
+    })
+
     describe('rewrite', () => {
       test<FixtureTestContext>('should rewrite to an external URL', async (ctx) => {
         await createFixture('middleware', ctx)
@@ -910,6 +1029,23 @@ for (const {
 //   )
 // },
 // )
+
+test<FixtureTestContext>('cookies set by edge runtime API routes are not exposed in an internal header', async (ctx) => {
+  await createFixture('middleware-pages', ctx)
+  await runPlugin(ctx)
+
+  const response = await invokeFunction(ctx, { url: '/api/edge-set-cookie/' })
+
+  expect(response.statusCode).toBe(200)
+  expect(response.headers['set-cookie']).toContain('session=http-only-value')
+  expect(response.headers['set-cookie']).toMatch(/;\s*HttpOnly/i)
+  expect(response.headers['x-middleware-set-cookie']).toBeUndefined()
+  expect(
+    Object.entries(response.headers).filter(
+      ([name, value]) => name !== 'set-cookie' && String(value).includes('http-only-value'),
+    ),
+  ).toEqual([])
+})
 
 describe('public URL of a middleware rewrite in the server handler', () => {
   const requestId = '01JTESTREQUESTID0000000000'
