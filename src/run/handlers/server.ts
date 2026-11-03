@@ -149,6 +149,11 @@ export default async (
     // See https://github.com/fastly/http-compute-js/blob/main/src/http-compute-js/http-server.ts#L168-L173
     const response = await toComputeResponse(resProxy)
 
+    // Next.js mirrors cookies set via NextResponse#cookies (incl. HttpOnly ones) into this internal
+    // header. It doesn't remove it from edge runtime route handler responses, and versions before
+    // 14.2.24 / 15.1.7 don't remove it from Node.js runtime ones either.
+    response.headers.delete('x-middleware-set-cookie')
+
     if (requestContext.responseCacheKey) {
       topLevelSpan?.setAttribute('responseCacheKey', requestContext.responseCacheKey)
     }

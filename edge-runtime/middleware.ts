@@ -6,6 +6,7 @@ import nextConfig from './next.config.json' with { type: 'json' }
 import { InternalHeaders } from './lib/headers.ts'
 import { REQUEST_META_HEADER } from './lib/private-request-meta.ts'
 import { logger, LogLevel } from './lib/logging.ts'
+import { removeInternalCookieHeader } from './lib/middleware.ts'
 import { buildNextRequest, localizeRequest, RequestData } from './lib/next-request.ts'
 import { buildResponse, FetchEventResult } from './lib/response.ts'
 import {
@@ -74,7 +75,8 @@ export async function handleMiddleware(
       nextConfig,
     })
 
-    return response
+    // only after buildResponse, which reads the header to forward the cookies to the origin
+    return response ? removeInternalCookieHeader(response) : response
   } catch (error) {
     console.error(error)
 
