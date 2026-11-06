@@ -27,6 +27,7 @@ const e2eOnlyFixtures = new Set([
   'middleware-i18n-excluded-paths',
   'middleware-included-paths',
   'middleware-node-runtime-specific',
+  'middleware-path-normalization',
   'middleware-static-asset-matcher',
   'middleware-subrequest-vuln',
   // There is a bug on Windows on Node.js 18.20.6, that causes build failures on this fixture

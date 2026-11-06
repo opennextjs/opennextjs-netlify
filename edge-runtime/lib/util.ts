@@ -30,12 +30,13 @@ export const addBasePath = (path: string, basePath?: string) => {
 }
 
 // add locale prefix if not present, allowing for locale fallbacks
+// Next.js adds the default locale to every path except `/_next/` ones (including `/api/` paths)
+// before matching middleware, so we do the same (see `packages/next/src/server/lib/router-utils/resolve-routes.ts`)
 export const addLocale = (path: string, locale?: string) => {
   if (
     locale &&
     path.toLowerCase() !== `/${locale.toLowerCase()}` &&
     !path.toLowerCase().startsWith(`/${locale.toLowerCase()}/`) &&
-    !path.startsWith(`/api/`) &&
     !path.startsWith(`/_next/`)
   ) {
     return `/${locale}${path}`
