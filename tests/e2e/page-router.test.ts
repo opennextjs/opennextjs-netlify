@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
-import { test } from '../utils/playwright-helpers.js'
+import { isNotModifiedRevalidation, test } from '../utils/playwright-helpers.js'
 
 export function waitFor(millis: number) {
   return new Promise((resolve) => setTimeout(resolve, millis))
@@ -439,9 +439,15 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
 
     const response2 = await page.goto(new URL(pathname, pageRouter.url).href)
     expect(response2?.status()).toBe(200)
-    expect(response2?.headers()['cache-status']).toMatch(
-      /("Netlify Edge"; fwd=stale|"Netlify Durable"; hit; ttl=-[0-9]+)/m,
-    )
+    if (await isNotModifiedRevalidation(response2)) {
+      // browser's copy (same stale content) was revalidated with 304 Not Modified by the Edge,
+      // which only carries Edge's cache-status entry - stale content is asserted below
+      expect(response2?.headers()['cache-status']).toMatch(/"Netlify Edge"; fwd=(miss|stale)/m)
+    } else {
+      expect(response2?.headers()['cache-status']).toMatch(
+        /("Netlify Edge"; fwd=stale|"Netlify Durable"; hit; ttl=-[0-9]+)/m,
+      )
+    }
     expect(response2?.headers()['debug-netlify-cdn-cache-control']).toMatch(
       /(max-age|s-maxage)=60, stale-while-revalidate=[0-9]+, durable/,
     )
