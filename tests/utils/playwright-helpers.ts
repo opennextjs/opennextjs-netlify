@@ -1,4 +1,11 @@
-import { test as base, PlaywrightWorkerArgs, WorkerFixture, Page, expect } from '@playwright/test'
+import {
+  test as base,
+  PlaywrightWorkerArgs,
+  WorkerFixture,
+  Page,
+  Response,
+  expect,
+} from '@playwright/test'
 import { Fixture, fixtureFactories } from './create-e2e-fixture'
 
 const makeE2EFixture = (
@@ -108,3 +115,26 @@ export const test = base.extend<
     { auto: true },
   ],
 })
+
+const normalizeETag = (etag: string | undefined) => etag?.trim().replace(/^W\//, '')
+
+/**
+ * With browser cache enabled (like for regular users), repeat navigations to pages with
+ * `cache-control: public, max-age=0, must-revalidate` are conditional requests (`If-None-Match`).
+ * If the CDN determines that browser's copy is still current, it answers with `304 Not Modified`
+ * and browser reuses its cached body. Playwright still reports such response as `200`, with
+ * headers from browser cache updated with headers from the 304. A 304 is produced by the CDN
+ * Edge itself, so `cache-status` only contains "Netlify Edge" entry and headers set by upstream
+ * (Durable cache, Next.js) are not part of it.
+ *
+ * Use this to relax assertions on upstream headers for such responses - content assertions
+ * should still be used to verify that user sees expected content.
+ */
+export async function isNotModifiedRevalidation(response: Response | null): Promise<boolean> {
+  if (!response) {
+    return false
+  }
+  const ifNoneMatch = normalizeETag((await response.request().allHeaders())['if-none-match'])
+  const etag = normalizeETag((await response.allHeaders())['etag'])
+  return Boolean(ifNoneMatch && etag && ifNoneMatch === etag)
+}

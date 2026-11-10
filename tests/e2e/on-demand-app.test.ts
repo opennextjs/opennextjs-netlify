@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { test } from '../utils/playwright-helpers.js'
+import { isNotModifiedRevalidation, test } from '../utils/playwright-helpers.js'
 import { nextVersionSatisfies } from '../utils/next-version-helpers.mjs'
 
 test.describe('app router on-demand revalidation (pre Next 16 APIs)', () => {
@@ -325,7 +325,10 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
             const headers2 = response2?.headers() || {}
             expect(response2?.status()).toBe(200)
             expect(headers2['x-nextjs-cache']).toBeUndefined()
-            if (!headers2['cache-status'].includes('"Netlify Edge"; hit')) {
+            if (
+              !headers2['cache-status'].includes('"Netlify Edge"; hit') &&
+              !(await isNotModifiedRevalidation(response2))
+            ) {
               // if we missed CDN cache, we will see Next cache hit status
               // as we reuse cached response
               expect(headers2['cache-status']).toMatch(/"Next.js"; hit/m)
@@ -355,7 +358,10 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
                   // automatically refreshes the cache. This request should result
                   // in serving stale content and trigger background revalidation.
                   'cache-status': [
-                    /"Next.js"; hit; fwd=stale/m,
+                    // Either we see stale response from Next.js, or browser's copy (which is
+                    // the same stale content) was revalidated with 304 Not Modified by the Edge,
+                    // in which case only Edge's entry is present (no Next.js entry).
+                    /"Next.js"; hit; fwd=stale|^(?![\s\S]*"Next\.js")[\s\S]*"Netlify Edge"; fwd=(miss|stale)/,
                     /"Netlify Edge"; fwd=(miss|stale)/m,
                   ],
                 },
@@ -366,9 +372,12 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
             const headers3 = response3?.headers() || {}
             expect(response3?.status()).toBe(200)
             expect(headers3?.['x-nextjs-cache']).toBeUndefined()
-            expect(headers3['debug-netlify-cdn-cache-control'], 'Stale is not cacheable').toBe(
-              'public, max-age=0, must-revalidate, durable',
-            )
+            if (!(await isNotModifiedRevalidation(response3))) {
+              // 304 doesn't carry upstream headers, browser would show cdn cache control of its cached copy
+              expect(headers3['debug-netlify-cdn-cache-control'], 'Stale is not cacheable').toBe(
+                'public, max-age=0, must-revalidate, durable',
+              )
+            }
 
             // the page is stale but still served, because we hit it before expiration
             const date3 = await page.getByTestId('date-now').textContent()
@@ -396,7 +405,10 @@ if (nextVersionSatisfies('>=16.0.0-alpha.0')) {
             const headers4 = response4?.headers() || {}
             expect(response4?.status()).toBe(200)
             expect(headers4?.['x-nextjs-cache']).toBeUndefined()
-            if (!headers4['cache-status'].includes('"Netlify Edge"; hit')) {
+            if (
+              !headers4['cache-status'].includes('"Netlify Edge"; hit') &&
+              !(await isNotModifiedRevalidation(response4))
+            ) {
               // if we missed CDN cache, we will see Next cache hit status
               // as we reuse cached response
               expect(headers4['cache-status']).toMatch(/"Next.js"; hit/m)
