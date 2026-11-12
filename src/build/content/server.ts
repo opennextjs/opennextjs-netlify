@@ -112,6 +112,7 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         `server/edge-chunks/**/*`,
         `server/edge/**/*`,
         `server/+(app|pages)/**/*.js`,
+        `server/+(app|pages)/**/*-manifest.json`,
       ],
       {
         cwd: srcDir,
