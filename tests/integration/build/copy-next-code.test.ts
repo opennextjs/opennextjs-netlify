@@ -9,17 +9,23 @@ import { PluginContext, RequiredServerFilesManifest } from '../../../src/build/p
 import { type FixtureTestContext } from '../../utils/contexts.js'
 import { createFsFixture } from '../../utils/fixture.js'
 
+// `copyNextServerCode` reads the prerender manifest to tell which page data files the server
+// handler doesn't need; every real build emits one, so these fixtures have to as well
+const EMPTY_PRERENDER_MANIFEST = JSON.stringify({ routes: {} })
+
 test<FixtureTestContext>('should copy the next standalone folder correctly for a simple site', async (ctx) => {
   const reqServerFiles = JSON.stringify({
     config: { distDir: '.next' },
     relativeAppDir: '',
   } as RequiredServerFilesManifest)
   const reqServerPath = '.next/required-server-files.json'
+  const prerenderManifestPath = '.next/prerender-manifest.json'
   const reqServerPathStandalone = join('.next/standalone', reqServerPath)
   const { cwd } = await createFsFixture(
     {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     },
     ctx,
   )
@@ -39,11 +45,13 @@ test<FixtureTestContext>('should copy the next standalone folder correctly based
     relativeAppDir: '',
   } as RequiredServerFilesManifest)
   const reqServerPath = 'out/dir/required-server-files.json'
+  const prerenderManifestPath = 'out/dir/prerender-manifest.json'
   const reqServerPathStandalone = join('out/dir/standalone', reqServerPath)
   const { cwd } = await createFsFixture(
     {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     },
     ctx,
   )
@@ -63,11 +71,13 @@ test<FixtureTestContext>('should copy the next standalone folder correctly for m
     relativeAppDir: 'apps/my-app',
   } as RequiredServerFilesManifest)
   const reqServerPath = 'apps/my-app/.next/required-server-files.json'
+  const prerenderManifestPath = 'apps/my-app/.next/prerender-manifest.json'
   const reqServerPathStandalone = join('apps/my-app/.next/standalone', reqServerPath)
   const { cwd } = await createFsFixture(
     {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     },
     ctx,
   )
@@ -92,11 +102,13 @@ test<FixtureTestContext>('should copy the next standalone folder correctly for m
     relativeAppDir: 'apps/my-app',
   } as RequiredServerFilesManifest)
   const reqServerPath = 'apps/my-app/.next/required-server-files.json'
+  const prerenderManifestPath = 'apps/my-app/.next/prerender-manifest.json'
   const reqServerPathStandalone = join('apps/my-app/.next/standalone', reqServerPath)
   const { cwd } = await createFsFixture(
     {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     },
     ctx,
   )
@@ -118,11 +130,13 @@ test<FixtureTestContext>('should copy the next standalone folder correctly for m
     relativeAppDir: 'apps/my-app',
   } as RequiredServerFilesManifest)
   const reqServerPath = 'apps/my-app/deep/out/dir/required-server-files.json'
+  const prerenderManifestPath = 'apps/my-app/deep/out/dir/prerender-manifest.json'
   const reqServerPathStandalone = join('apps/my-app/deep/out/dir/standalone', reqServerPath)
   const { cwd } = await createFsFixture(
     {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     },
     ctx,
   )
@@ -145,11 +159,13 @@ test<FixtureTestContext>('should copy the next standalone folder correctly for m
     relativeAppDir: 'apps/my-app',
   } as RequiredServerFilesManifest)
   const reqServerPath = 'apps/my-app/deep/out/dir/required-server-files.json'
+  const prerenderManifestPath = 'apps/my-app/deep/out/dir/prerender-manifest.json'
   const reqServerPathStandalone = join('apps/my-app/deep/out/dir/standalone', reqServerPath)
   const { cwd } = await createFsFixture(
     {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     },
     ctx,
   )
@@ -173,11 +189,13 @@ test<FixtureTestContext>('should copy the next standalone folder correctly in a 
     relativeAppDir: 'apps/my-app',
   } as RequiredServerFilesManifest)
   const reqServerPath = 'dist/apps/my-app/.next/required-server-files.json'
+  const prerenderManifestPath = 'dist/apps/my-app/.next/prerender-manifest.json'
   const reqServerPathStandalone = join('dist/apps/my-app/.next/standalone', reqServerPath)
   const { cwd } = await createFsFixture(
     {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     },
     ctx,
   )
@@ -207,11 +225,13 @@ test<FixtureTestContext>('should copy the next standalone folder correctly in a 
     relativeAppDir: 'apps/my-app',
   } as RequiredServerFilesManifest)
   const reqServerPath = 'dist/apps/my-app/.next/required-server-files.json'
+  const prerenderManifestPath = 'dist/apps/my-app/.next/prerender-manifest.json'
   const reqServerPathStandalone = join('dist/apps/my-app/.next/standalone', reqServerPath)
   const { cwd } = await createFsFixture(
     {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     },
     ctx,
   )
