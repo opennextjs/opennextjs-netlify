@@ -82,6 +82,8 @@ const mockPluginOptions = {
   },
 } as unknown as NetlifyPluginOptions
 
+const EMPTY_PRERENDER_MANIFEST = JSON.stringify({ routes: {} })
+
 const fixtures = {
   get simple() {
     const reqServerFiles = JSON.stringify({
@@ -89,13 +91,13 @@ const fixtures = {
       relativeAppDir: '',
     } as RequiredServerFilesManifest)
     const reqServerPath = '.next/required-server-files.json'
+    const prerenderManifestPath = '.next/prerender-manifest.json'
     const reqServerPathStandalone = join('.next/standalone', reqServerPath)
     const buildIDPath = join('.netlify/functions-internal/___netlify-server-handler/.next/BUILD_ID')
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
-      [reqServerPath.replace('required-server-files.json', 'prerender-manifest.json')]:
-        '{"routes":{}}',
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [buildIDPath]: 'build-id',
     })
     const ctx = new PluginContext({ ...mockPluginOptions, constants: {} } as NetlifyPluginOptions)
@@ -107,6 +109,7 @@ const fixtures = {
       relativeAppDir: 'apps/my-app',
     } as RequiredServerFilesManifest)
     const reqServerPath = 'apps/my-app/.next/required-server-files.json'
+    const prerenderManifestPath = 'apps/my-app/.next/prerender-manifest.json'
     const reqServerPathStandalone = join('apps/my-app/.next/standalone', reqServerPath)
     const buildIDPath = join(
       'apps/my-app/.netlify/functions-internal/___netlify-server-handler/apps/my-app/.next/BUILD_ID',
@@ -114,8 +117,7 @@ const fixtures = {
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
-      [reqServerPath.replace('required-server-files.json', 'prerender-manifest.json')]:
-        '{"routes":{}}',
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [buildIDPath]: 'build-id',
     })
     const ctx = new PluginContext({
@@ -132,6 +134,7 @@ const fixtures = {
       relativeAppDir: 'apps/my-app',
     } as RequiredServerFilesManifest)
     const reqServerPath = 'dist/apps/my-app/.next/required-server-files.json'
+    const prerenderManifestPath = 'dist/apps/my-app/.next/prerender-manifest.json'
     const reqServerPathStandalone = join('dist/apps/my-app/.next/standalone', reqServerPath)
     const buildIDPath = join(
       'apps/my-app/.netlify/functions-internal/___netlify-server-handler/dist/apps/my-app/.next/BUILD_ID',
@@ -139,8 +142,7 @@ const fixtures = {
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
-      [reqServerPath.replace('required-server-files.json', 'prerender-manifest.json')]:
-        '{"routes":{}}',
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [buildIDPath]: 'build-id',
     })
     const ctx = new PluginContext({
@@ -158,6 +160,7 @@ const fixtures = {
       relativeAppDir: 'apps/my-app',
     } as RequiredServerFilesManifest)
     const reqServerPath = 'apps/my-app/.next/required-server-files.json'
+    const prerenderManifestPath = 'apps/my-app/.next/prerender-manifest.json'
     const reqServerPathStandalone = join('apps/my-app/.next/standalone', reqServerPath)
     const buildIDPath = join(
       '.netlify/functions-internal/___netlify-server-handler/apps/my-app/.next/BUILD_ID',
@@ -165,8 +168,7 @@ const fixtures = {
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
-      [reqServerPath.replace('required-server-files.json', 'prerender-manifest.json')]:
-        '{"routes":{}}',
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [buildIDPath]: 'build-id',
     })
     const ctx = new PluginContext({
@@ -183,6 +185,7 @@ const fixtures = {
       relativeAppDir: '',
     } as RequiredServerFilesManifest)
     const reqServerPath = '.next/required-server-files.json'
+    const prerenderManifestPath = '.next/prerender-manifest.json'
     const reqServerPathStandalone = join('.next/standalone', reqServerPath)
     const functionsConfigManifestPath =
       '.next/standalone/.next/server/functions-config-manifest.json'
@@ -190,8 +193,7 @@ const fixtures = {
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
-      [reqServerPath.replace('required-server-files.json', 'prerender-manifest.json')]:
-        '{"routes":{}}',
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [functionsConfigManifestPath]: JSON.stringify({
         version: 1,
         functions: {
@@ -212,6 +214,7 @@ const fixtures = {
       relativeAppDir: '',
     } as RequiredServerFilesManifest)
     const reqServerPath = '.next/required-server-files.json'
+    const prerenderManifestPath = '.next/prerender-manifest.json'
     const reqServerPathStandalone = join('.next/standalone', reqServerPath)
     const buildIDPath = join('.netlify/functions-internal/___netlify-server-handler/.next/BUILD_ID')
     const serverDir = '.next/standalone/.next/server'
@@ -219,12 +222,11 @@ const fixtures = {
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
       [buildIDPath]: 'build-id',
-      [reqServerPath.replace('required-server-files.json', 'prerender-manifest.json')]:
-        JSON.stringify({
-          routes: {
-            '/blog/hello': { dataRoute: '/_next/data/build-id/blog/hello.json' },
-          },
-        }),
+      [prerenderManifestPath]: JSON.stringify({
+        routes: {
+          '/blog/hello': { dataRoute: '/_next/data/build-id/blog/hello.json' },
+        },
+      }),
       // page template, and the per-page manifests Turbopack emits in a directory next to it
       [`${serverDir}/pages/blog/[slug].js`]: 'page',
       [`${serverDir}/pages/blog/[slug]/react-loadable-manifest.json`]: '{}',
@@ -249,12 +251,12 @@ const fixtures = {
       relativeAppDir: 'apps/my-app',
     } as RequiredServerFilesManifest)
     const reqServerPath = 'apps/my-app/.next/required-server-files.json'
+    const prerenderManifestPath = 'apps/my-app/.next/prerender-manifest.json'
     const reqServerPathStandalone = join('apps/my-app/.next/standalone', reqServerPath)
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
-      [reqServerPath.replace('required-server-files.json', 'prerender-manifest.json')]:
-        '{"routes":{}}',
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     })
     const ctx = new PluginContext({
       ...mockPluginOptions,
