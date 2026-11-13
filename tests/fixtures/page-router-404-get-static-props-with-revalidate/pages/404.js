@@ -1,7 +1,7 @@
 export default function NotFound({ timestamp }) {
   return (
     <p data-testid="custom-404">
-      Custom 404 page with revalidate: <pre data-testid="timestamp">{timestamp}</pre>
+      Custom 404 page with revalidate: <span data-testid="timestamp">{timestamp}</span>
     </p>
   )
 }
