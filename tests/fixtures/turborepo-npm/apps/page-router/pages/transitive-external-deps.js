@@ -3,7 +3,7 @@ import depB from '@repo/dep-b'
 
 export default function TransitiveDeps() {
   return (
-    <body>
+    <main>
       <ul>
         <li>
           dep-a uses lodash version 3.10.1 and we should see this version here:{' '}
@@ -14,7 +14,7 @@ export default function TransitiveDeps() {
           <span data-testId="dep-b-version">{depB}</span>
         </li>
       </ul>
-    </body>
+    </main>
   )
 }
 

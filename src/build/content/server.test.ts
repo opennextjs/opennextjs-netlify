@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { cp, readFile } from 'node:fs/promises'
+import { join, relative } from 'node:path'
 
 import { NetlifyPluginOptions } from '@netlify/build'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
@@ -82,6 +82,8 @@ const mockPluginOptions = {
   },
 } as unknown as NetlifyPluginOptions
 
+const EMPTY_PRERENDER_MANIFEST = JSON.stringify({ routes: {} })
+
 const fixtures = {
   get simple() {
     const reqServerFiles = JSON.stringify({
@@ -89,11 +91,13 @@ const fixtures = {
       relativeAppDir: '',
     } as RequiredServerFilesManifest)
     const reqServerPath = '.next/required-server-files.json'
+    const prerenderManifestPath = '.next/prerender-manifest.json'
     const reqServerPathStandalone = join('.next/standalone', reqServerPath)
     const buildIDPath = join('.netlify/functions-internal/___netlify-server-handler/.next/BUILD_ID')
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [buildIDPath]: 'build-id',
     })
     const ctx = new PluginContext({ ...mockPluginOptions, constants: {} } as NetlifyPluginOptions)
@@ -105,6 +109,7 @@ const fixtures = {
       relativeAppDir: 'apps/my-app',
     } as RequiredServerFilesManifest)
     const reqServerPath = 'apps/my-app/.next/required-server-files.json'
+    const prerenderManifestPath = 'apps/my-app/.next/prerender-manifest.json'
     const reqServerPathStandalone = join('apps/my-app/.next/standalone', reqServerPath)
     const buildIDPath = join(
       'apps/my-app/.netlify/functions-internal/___netlify-server-handler/apps/my-app/.next/BUILD_ID',
@@ -112,6 +117,7 @@ const fixtures = {
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [buildIDPath]: 'build-id',
     })
     const ctx = new PluginContext({
@@ -128,6 +134,7 @@ const fixtures = {
       relativeAppDir: 'apps/my-app',
     } as RequiredServerFilesManifest)
     const reqServerPath = 'dist/apps/my-app/.next/required-server-files.json'
+    const prerenderManifestPath = 'dist/apps/my-app/.next/prerender-manifest.json'
     const reqServerPathStandalone = join('dist/apps/my-app/.next/standalone', reqServerPath)
     const buildIDPath = join(
       'apps/my-app/.netlify/functions-internal/___netlify-server-handler/dist/apps/my-app/.next/BUILD_ID',
@@ -135,6 +142,7 @@ const fixtures = {
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [buildIDPath]: 'build-id',
     })
     const ctx = new PluginContext({
@@ -152,6 +160,7 @@ const fixtures = {
       relativeAppDir: 'apps/my-app',
     } as RequiredServerFilesManifest)
     const reqServerPath = 'apps/my-app/.next/required-server-files.json'
+    const prerenderManifestPath = 'apps/my-app/.next/prerender-manifest.json'
     const reqServerPathStandalone = join('apps/my-app/.next/standalone', reqServerPath)
     const buildIDPath = join(
       '.netlify/functions-internal/___netlify-server-handler/apps/my-app/.next/BUILD_ID',
@@ -159,6 +168,7 @@ const fixtures = {
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [buildIDPath]: 'build-id',
     })
     const ctx = new PluginContext({
@@ -175,6 +185,7 @@ const fixtures = {
       relativeAppDir: '',
     } as RequiredServerFilesManifest)
     const reqServerPath = '.next/required-server-files.json'
+    const prerenderManifestPath = '.next/prerender-manifest.json'
     const reqServerPathStandalone = join('.next/standalone', reqServerPath)
     const functionsConfigManifestPath =
       '.next/standalone/.next/server/functions-config-manifest.json'
@@ -182,6 +193,7 @@ const fixtures = {
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
       [functionsConfigManifestPath]: JSON.stringify({
         version: 1,
         functions: {
@@ -196,16 +208,55 @@ const fixtures = {
     const ctx = new PluginContext({ ...mockPluginOptions, constants: {} } as NetlifyPluginOptions)
     return { ...mockFS, ctx }
   },
+  get turbopackPagesRouter() {
+    const reqServerFiles = JSON.stringify({
+      config: { distDir: '.next' },
+      relativeAppDir: '',
+    } as RequiredServerFilesManifest)
+    const reqServerPath = '.next/required-server-files.json'
+    const prerenderManifestPath = '.next/prerender-manifest.json'
+    const reqServerPathStandalone = join('.next/standalone', reqServerPath)
+    const buildIDPath = join('.netlify/functions-internal/___netlify-server-handler/.next/BUILD_ID')
+    const serverDir = '.next/standalone/.next/server'
+    mockFS = mockFileSystem({
+      [reqServerPath]: reqServerFiles,
+      [reqServerPathStandalone]: reqServerFiles,
+      [buildIDPath]: 'build-id',
+      [prerenderManifestPath]: JSON.stringify({
+        routes: {
+          '/blog/hello': { dataRoute: '/_next/data/build-id/blog/hello.json' },
+        },
+      }),
+      // page template, and the per-page manifests Turbopack emits in a directory next to it
+      [`${serverDir}/pages/blog/[slug].js`]: 'page',
+      [`${serverDir}/pages/blog/[slug]/react-loadable-manifest.json`]: '{}',
+      [`${serverDir}/pages/blog/[slug]/build-manifest.json`]: '{}',
+      // file tracing output for that template, only consumed by the build
+      [`${serverDir}/pages/blog/[slug].js.nft.json`]: '{"files":[]}',
+      // prerendered page - its data is seeded into the blob store, not read by the server handler
+      [`${serverDir}/pages/blog/hello.html`]: '<html></html>',
+      [`${serverDir}/pages/blog/hello.json`]: '{"pageProps":{}}',
+    })
+    const ctx = new PluginContext({ ...mockPluginOptions, constants: {} } as NetlifyPluginOptions)
+    return {
+      ...mockFS,
+      ctx,
+      handlerPagesDir:
+        '.netlify/functions-internal/___netlify-server-handler/.next/server/pages/blog',
+    }
+  },
   get simpleMissingBuildID() {
     const reqServerFiles = JSON.stringify({
       config: { distDir: '.next' },
       relativeAppDir: 'apps/my-app',
     } as RequiredServerFilesManifest)
     const reqServerPath = 'apps/my-app/.next/required-server-files.json'
+    const prerenderManifestPath = 'apps/my-app/.next/prerender-manifest.json'
     const reqServerPathStandalone = join('apps/my-app/.next/standalone', reqServerPath)
     mockFS = mockFileSystem({
       [reqServerPath]: reqServerFiles,
       [reqServerPathStandalone]: reqServerFiles,
+      [prerenderManifestPath]: EMPTY_PRERENDER_MANIFEST,
     })
     const ctx = new PluginContext({
       ...mockPluginOptions,
@@ -260,6 +311,33 @@ describe('copyNextServerCode', () => {
     )
     expect(manifest.functions['/_middleware'].matchers).toEqual([
       { regexp: '(?!.*)', originalSource: '/:path*' },
+    ])
+  })
+
+  test('should copy per-page manifests, but not file tracing output or prerendered page data', async () => {
+    const { cwd, ctx } = fixtures.turbopackPagesRouter
+    await copyNextServerCode(ctx)
+
+    const serverPagesDir = join(cwd, '.next/standalone/.next/server/pages')
+    const copiedPages = vi
+      .mocked(cp)
+      .mock.calls.map(([srcPath]) => String(srcPath))
+      .filter((srcPath) => srcPath.startsWith(serverPagesDir))
+      .map((srcPath) => relative(serverPagesDir, srcPath))
+
+    // file tracing output is only consumed by the build
+    expect(copiedPages, 'file tracing output should not be copied').not.toContain(
+      join('blog', '[slug].js.nft.json'),
+    )
+    // prerendered page data is seeded into the response cache instead
+    expect(copiedPages, 'prerendered page data should not be copied').not.toContain(
+      join('blog', 'hello.json'),
+    )
+
+    expect(copiedPages.sort()).toEqual([
+      join('blog', '[slug].js'),
+      join('blog/[slug]', 'build-manifest.json'),
+      join('blog/[slug]', 'react-loadable-manifest.json'),
     ])
   })
 })

@@ -567,6 +567,20 @@ test.describe('Simple Page Router (no basePath, no i18n)', () => {
     expect(headers['cache-control']).toBe('public,max-age=0,must-revalidate')
   })
 
+  // Turbopack emits react-loadable-manifest.json per page; if the server handler doesn't have it,
+  // SSR can't tell which chunks next/dynamic components need, so they aren't loaded before
+  // hydration and React reports a mismatch (caught by the global ensureNoHydrationErrors fixture)
+  test('next/dynamic components are server rendered and hydrate without mismatch', async ({
+    page,
+    pageRouter,
+  }) => {
+    await page.goto(new URL('dynamic-import', pageRouter.url).href)
+
+    await expect(page.getByTestId('dynamic-content')).toBeVisible()
+    const nextData = await page.evaluate(() => (window as any).__NEXT_DATA__)
+    expect(nextData.dynamicIds?.length).toBeGreaterThan(0)
+  })
+
   test('environment variables from .env files should be available for functions', async ({
     pageRouter,
   }) => {

@@ -24,6 +24,8 @@ import type { RunConfig } from '../../run/config.js'
 import { RUN_CONFIG_FILE } from '../../run/constants.js'
 import type { PluginContext, RequiredServerFilesManifest } from '../plugin-context.js'
 
+import { routeToFilePath } from './prerendered.js'
+
 const tracer = wrapTracer(trace.getTracer('Next runtime'))
 
 const toPosixPath = (path: string) =>
@@ -104,6 +106,17 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         : ctx.nextDistDir
     const destDir = join(ctx.serverHandlerDir, nextFolder)
 
+    // Prerendered Pages Router pages emit their data as `<page>.json`. `copyPrerenderedContent`
+    // reads those same files to seed the response cache in the blob store, so the server handler
+    // never reads them, while their size scales with the number of prerendered pages and the
+    // weight of their props - enough to push large sites over the function size limit.
+    const prerenderManifest = await ctx.getPrerenderManifest()
+    const prerenderedPageData = new Set(
+      Object.entries(prerenderManifest.routes)
+        .filter(([, route]) => route.dataRoute?.endsWith('.json'))
+        .map(([route]) => posixJoin('server/pages', `${routeToFilePath(route)}.json`)),
+    )
+
     const paths = await glob(
       [
         `*`,
@@ -112,6 +125,11 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
         `server/edge-chunks/**/*`,
         `server/edge/**/*`,
         `server/+(app|pages)/**/*.js`,
+        // Turbopack emits manifests per page (e.g. react-loadable-manifest.json), which the
+        // server reads at runtime, so these need to be copied as well
+        `server/+(app|pages)/**/*.json`,
+        // file tracing output, only consumed by the build - never at runtime
+        `!server/+(app|pages)/**/*.nft.json`,
       ],
       {
         cwd: srcDir,
@@ -120,41 +138,48 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
       },
     )
 
-    const promises = paths.map(async (path: string) => {
-      const srcPath = join(srcDir, path)
-      const destPath = join(destDir, path)
+    const promises = paths
+      // the server handler doesn't need prerendered page data (see `prerenderedPageData` above)
+      .filter((path) => !prerenderedPageData.has(path))
+      .map(async (path: string) => {
+        const srcPath = join(srcDir, path)
+        const destPath = join(destDir, path)
 
-      // If this is the middleware manifest file, replace it with an empty
-      // manifest to avoid running middleware again in the server handler.
-      if (path === 'server/middleware-manifest.json') {
-        try {
-          await replaceMiddlewareManifest(srcPath, destPath)
-        } catch (error) {
-          throw new Error('Could not patch middleware manifest file', { cause: error })
+        // If this is the middleware manifest file, replace it with an empty
+        // manifest to avoid running middleware again in the server handler.
+        if (path === 'server/middleware-manifest.json') {
+          try {
+            await replaceMiddlewareManifest(srcPath, destPath)
+          } catch (error) {
+            throw new Error('Could not patch middleware manifest file', { cause: error })
+          }
+
+          return
         }
 
-        return
-      }
+        if (path === 'server/functions-config-manifest.json') {
+          try {
+            await replaceFunctionsConfigManifest(srcPath, destPath)
+          } catch (error) {
+            throw new Error('Could not patch functions config manifest file', { cause: error })
+          }
 
-      if (path === 'server/functions-config-manifest.json') {
-        try {
-          await replaceFunctionsConfigManifest(srcPath, destPath)
-        } catch (error) {
-          throw new Error('Could not patch functions config manifest file', { cause: error })
+          return
         }
 
-        return
-      }
-
-      await cp(srcPath, destPath, { recursive: true, force: true })
-    })
+        await cp(srcPath, destPath, { recursive: true, force: true })
+      })
 
     // this is different node_modules than ones handled by `copyNextDependencies`
     // this is under the standalone/.next folder (not standalone/node_modules or standalone/<some-workspace/node_modules)
     // and started to be created by Next.js in some cases in next@16.1.0-canary.3
     // this node_modules is artificially created and doesn't have equivalent in the repo
     // so we only copy it, without additional symlinks handling
-    if (existsSync(join(srcDir, 'node_modules'))) {
+    const copyExtraNodeModules = async () => {
+      if (!existsSync(join(srcDir, 'node_modules'))) {
+        return
+      }
+
       const filter = ctx.constants.IS_LOCAL ? undefined : nodeModulesFilter
       const src = join(srcDir, 'node_modules')
       const dest = join(destDir, 'node_modules')
@@ -166,7 +191,10 @@ export const copyNextServerCode = async (ctx: PluginContext): Promise<void> => {
       })
     }
 
-    await Promise.all(promises)
+    // the copies in `promises` are already in flight, so they have to be awaited together with the
+    // node_modules copy - awaiting that one first means a failure in it leaves every one of them
+    // without a handler, and they surface as unhandled rejections instead of as this build's error
+    await Promise.all([...promises, copyExtraNodeModules()])
   })
 }
 
