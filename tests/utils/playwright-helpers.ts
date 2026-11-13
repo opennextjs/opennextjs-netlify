@@ -19,8 +19,14 @@ const makeE2EFixture = (
   { scope: 'worker' },
 ]
 
+// React hydration failures: minified production codes (418 hydration failed, 423 root switched to
+// client rendering, 425 text content mismatch) and their development-mode messages
+const HYDRATION_ERROR =
+  /Minified React error #(418|423|425)\b|Hydration failed|error while hydrating|didn't match the client/i
+
 export const test = base.extend<
   {
+    ensureNoHydrationErrors: void
     ensureStaticAssetsHaveImmutableCacheControl: void
     takeScreenshot: void
     pollUntilHeadersMatch: (
@@ -96,6 +102,28 @@ export const test = base.extend<
         })
         await page.screenshot({ path: screenshotPath, timeout: 5000 })
       }
+    },
+    { auto: true },
+  ],
+  ensureNoHydrationErrors: [
+    async ({ context }, use) => {
+      const errors: string[] = []
+
+      context.on('weberror', (webError) => {
+        const message = webError.error().message
+        if (HYDRATION_ERROR.test(message)) {
+          errors.push(`${webError.page()?.url()}: ${message}`)
+        }
+      })
+      context.on('console', (consoleMessage) => {
+        if (consoleMessage.type() === 'error' && HYDRATION_ERROR.test(consoleMessage.text())) {
+          errors.push(`${consoleMessage.page()?.url()}: ${consoleMessage.text()}`)
+        }
+      })
+
+      await use()
+
+      expect(errors, 'React hydration errors were reported in the browser').toEqual([])
     },
     { auto: true },
   ],
