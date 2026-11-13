@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.16.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.6...v5.16.7) (2026-11-13)
+
+
+### Bug Fixes
+
+* copy per-page turbopack manifests into the netlify function ([#3617](https://github.com/opennextjs/opennextjs-netlify/issues/3617)) ([a0371d8](https://github.com/opennextjs/opennextjs-netlify/commit/a0371d80b0e379d20b95540e8abc3a3e55b58721))
+
 ## [5.16.6](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.5...v5.16.6) (2026-11-03)
 
 
