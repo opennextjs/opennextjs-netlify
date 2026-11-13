@@ -1,7 +1,7 @@
 export default function NotFound({ locale }) {
   return (
     <p data-testid="custom-404">
-      Custom 404 page for locale: <pre data-testid="locale">{locale}</pre>
+      Custom 404 page for locale: <span data-testid="locale">{locale}</span>
     </p>
   )
 }
