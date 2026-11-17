@@ -10,6 +10,9 @@ export const config = {
       source: '/hello',
     },
     {
+      source: '/api/:path*',
+    },
+    {
       source: '/nl/about',
       locale: false,
     },

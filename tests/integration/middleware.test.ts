@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
 import { v4 } from 'uuid'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { type FixtureTestContext } from '../utils/contexts.js'
@@ -540,6 +543,48 @@ for (const {
         expect(origin.calls).toBe(2)
       })
 
+      test<FixtureTestContext>('should generate edge function patterns matching locales in any letter case', async (ctx) => {
+        await createFixture('middleware-conditions', ctx)
+        await runPlugin(ctx, runPluginConstants)
+
+        const manifest = JSON.parse(
+          await readFile(join(ctx.cwd, '.netlify/edge-functions/manifest.json'), 'utf8'),
+        )
+        const patterns: RegExp[] = manifest.functions
+          .filter(({ function: name }: { function: string }) => name === edgeFunctionNameRoot)
+          .map(({ pattern }: { pattern: string }) => new RegExp(pattern))
+
+        for (const path of [
+          '/hello',
+          '/en/hello',
+          '/EN/hello',
+          '/nL/hello',
+          '/api/foo',
+          '/FR/api/foo',
+          '/_next/data/build-id/EN/hello.json',
+        ]) {
+          expect(
+            patterns.some((pattern) => pattern.test(path)),
+            `edge function should match ${path}`,
+          ).toBe(true)
+        }
+        // only locale is matched case-insensitively, rest of the path is case-sensitive
+        for (const path of [
+          '/invalid/hello',
+          '/ens/hello',
+          '/about',
+          '/HELLO',
+          '/EN/HELLO',
+          '/API/foo',
+          '/EN/API/foo',
+        ]) {
+          expect(
+            patterns.some((pattern) => pattern.test(path)),
+            `edge function should not match ${path}`,
+          ).toBe(false)
+        }
+      })
+
       test<FixtureTestContext>('should handle locale matching correctly', async (ctx) => {
         await createFixture('middleware-conditions', ctx)
         await runPlugin(ctx, runPluginConstants)
@@ -553,7 +598,20 @@ for (const {
 
         ctx.cleanup?.push(() => origin.stop())
 
-        for (const path of ['/hello', '/en/hello', '/nl/hello', '/nl/about']) {
+        for (const path of [
+          '/hello',
+          '/en/hello',
+          '/nl/hello',
+          '/nl/about',
+          // Next.js matches locales case-insensitively
+          '/EN/hello',
+          '/Nl/hello',
+          // Next.js adds default locale to `/api` paths too before matching middleware
+          '/api/foo',
+          '/en/api/foo',
+          '/EN/api/foo',
+          '/FR/api/foo',
+        ]) {
           const response = await invokeEdgeFunction(ctx, {
             functions: [edgeFunctionNameRoot],
             origin,
@@ -568,7 +626,17 @@ for (const {
           expect(response.status).toBe(200)
         }
 
-        for (const path of ['/invalid/hello', '/hello/invalid', '/about', '/en/about']) {
+        for (const path of [
+          '/invalid/hello',
+          '/hello/invalid',
+          '/about',
+          '/en/about',
+          // only locale is matched case-insensitively, rest of the path is case-sensitive
+          '/HELLO',
+          '/EN/HELLO',
+          '/API/foo',
+          '/EN/API/foo',
+        ]) {
           const response = await invokeEdgeFunction(ctx, {
             functions: [edgeFunctionNameRoot],
             origin,
@@ -884,6 +952,52 @@ for (const {
         expect(bodyFr.requestUrlPathname).toBe('/fr/json')
         expect(bodyFr.nextUrlPathname).toBe('/json')
         expect(bodyFr.nextUrlLocale).toBe('fr')
+      })
+
+      test<FixtureTestContext>('should preserve locale in request.nextUrl for api paths', async (ctx) => {
+        await createFixture('middleware-i18n', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(JSON.stringify({ url: req.url }))
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+
+        for (const { url, requestUrlPathname, nextUrlPathname, nextUrlLocale } of [
+          {
+            url: '/api/json',
+            requestUrlPathname: '/api/json',
+            nextUrlPathname: '/api/json',
+            nextUrlLocale: 'en',
+          },
+          {
+            url: '/en/api/json',
+            requestUrlPathname: '/api/json',
+            nextUrlPathname: '/api/json',
+            nextUrlLocale: 'en',
+          },
+          // API routes are not localized (Next.js serves 404 for `/fr/api/*`), current behavior
+          // is that locale is stripped from request url passed to middleware and default locale is used
+          {
+            url: '/fr/api/json',
+            requestUrlPathname: '/api/json',
+            nextUrlPathname: '/api/json',
+            nextUrlLocale: 'en',
+          },
+        ]) {
+          const response = await invokeEdgeFunction(ctx, {
+            functions: [edgeFunctionNameRoot],
+            origin,
+            url,
+          })
+          expect(response.status, url).toBe(200)
+          expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+          expect(await response.json(), url).toEqual({
+            requestUrlPathname,
+            nextUrlPathname,
+            nextUrlLocale,
+          })
+        }
       })
 
       test<FixtureTestContext>('should preserve locale in request.nextUrl with skipMiddlewareUrlNormalize', async (ctx) => {

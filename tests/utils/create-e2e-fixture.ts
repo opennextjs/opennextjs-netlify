@@ -550,6 +550,17 @@ export const fixtureFactories = {
       publishDirectory: '.next-node-middleware',
     }),
   middlewareOg: () => createE2EFixture('middleware-og'),
+  middlewarePathNormalization: () => createE2EFixture('middleware-path-normalization'),
+  middlewarePathNormalizationNode: () =>
+    createE2EFixture('middleware-path-normalization', {
+      buildCommand: getBuildFixtureVariantCommand('node-middleware'),
+      publishDirectory: '.next-node-middleware',
+    }),
+  middlewarePathNormalizationCatchAll: () =>
+    createE2EFixture('middleware-path-normalization', {
+      buildCommand: getBuildFixtureVariantCommand('catch-all'),
+      publishDirectory: '.next-catch-all',
+    }),
   middlewarePages: () => createE2EFixture('middleware-pages'),
   middlewarePagesNode: () =>
     createE2EFixture('middleware-pages', {

@@ -438,11 +438,16 @@ export function getMiddlewareRouteMatcher(matchers: MiddlewareMatcher[]): Middle
     req: Pick<Request, 'headers' | 'url'>,
     query: Params,
   ) => {
-    const pathname = decodeMaybeEncodedPath(unsafePathname ?? '')
+    // Same as Next.js, we try to match both raw and decoded pathname. Matching only decoded pathname
+    // is not enough, because decoding `%2F` adds path segments (e.g. `/acme%2F/dash` is decoded
+    // as `/acme//dash`), so matcher like `/:tenant/dash` wouldn't match, while Next.js would serve
+    // the page with `tenant` param set to `acme/` (see `packages/next/src/server/lib/router-utils/resolve-routes.ts`)
+    const rawPathname = unsafePathname ?? ''
+    const decodedPathname = decodeMaybeEncodedPath(rawPathname)
 
     for (const matcher of matchers) {
-      const routeMatch = new RegExp(matcher.regexp).exec(pathname)
-      if (!routeMatch) {
+      const regexp = new RegExp(matcher.regexp)
+      if (!regexp.test(rawPathname) && !regexp.test(decodedPathname)) {
         continue
       }
 

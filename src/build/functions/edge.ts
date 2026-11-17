@@ -69,13 +69,33 @@ const fixEdgeRuntimeTurbopackMatcherJsonPart = (matchers: EdgeMiddlewareDefiniti
   })
 }
 
+const escapeRegExp = (value: string) => value.replaceAll(/[$()*+.?[\\\]^{|}]/g, '\\$&')
+
+/**
+ * Next.js resolves locales case-insensitively (`/EN/page` is served as `en` locale),
+ * so the edge function pattern needs to match locale segment regardless of casing.
+ * Edge function patterns don't support regex flags, so we use character classes instead,
+ * e.g. `en-US` becomes `[eE][nN]-[uU][sS]`.
+ */
+export const getCaseInsensitiveLocaleRegExpSource = (locale: string) =>
+  [...locale]
+    .map((char) => {
+      const lower = char.toLowerCase()
+      const upper = char.toUpperCase()
+      if (lower === upper || lower.length !== 1 || upper.length !== 1) {
+        return escapeRegExp(char)
+      }
+      return `[${lower}${upper}]`
+    })
+    .join('')
+
 /**
  * When i18n is enabled the matchers assume that paths _always_ include the
  * locale. We manually add an extra matcher for the original path without
  * the locale to ensure that the edge function can handle it.
  * We don't need to do this for data routes because they always have the locale.
  */
-const augmentMatchers = (
+export const augmentMatchers = (
   matchers: EdgeMiddlewareDefinition['matchers'],
   ctx: PluginContext,
 ): EdgeMiddlewareDefinition['matchers'] => {
@@ -96,12 +116,12 @@ const augmentMatchers = (
               // additionally we don't have a way to normalize i18n paths for request without locale information, so we need to adjust the regexp to mark locale part as optional
               regexp: matcher.regexp
                 // replace i18n part matching:
-                //  - target locales only
+                //  - target locales only (matched case-insensitively, same as Next.js does)
                 //  - make it optional to allow matching both with and without locale
                 // (?:\\/((?!_next\\/)[^/.]{1,}))
                 .replace(
                   '(?:\\/((?!_next\\/)[^/.]{1,}))',
-                  `(?:\\/((?!_next\\/)(${i18NConfig.locales.join('|')}){1,}))?`,
+                  `(?:\\/((?!_next\\/)(${i18NConfig.locales.map(getCaseInsensitiveLocaleRegExpSource).join('|')}){1,}))?`,
                 ),
             }
           : matcher,

@@ -1,5 +1,24 @@
 import { assertEquals } from 'https://deno.land/std@0.175.0/testing/asserts.ts'
-import { relativizeURL, rewriteDataPath } from './util.ts'
+import { addLocale, relativizeURL, rewriteDataPath } from './util.ts'
+
+Deno.test('addLocale', async (t) => {
+  await t.step('adds the locale to a path without one', () => {
+    assertEquals(addLocale('/admin/secret', 'en'), '/en/admin/secret')
+  })
+
+  await t.step('adds the locale to an api path', () => {
+    assertEquals(addLocale('/api/secret', 'en'), '/en/api/secret')
+  })
+
+  await t.step('keeps a locale in any letter case', () => {
+    assertEquals(addLocale('/EN/admin/secret', 'en'), '/EN/admin/secret')
+    assertEquals(addLocale('/en-us/admin/secret', 'en-US'), '/en-us/admin/secret')
+  })
+
+  await t.step('does not add the locale to a _next path', () => {
+    assertEquals(addLocale('/_next/static/chunk.js', 'en'), '/_next/static/chunk.js')
+  })
+})
 
 Deno.test('rewriteDataPath', async (t) => {
   await t.step('should rewrite a data url', async () => {

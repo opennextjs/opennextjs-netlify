@@ -1,0 +1,30 @@
+{
+  "node-middleware": {
+    "distDir": ".next-node-middleware",
+    "files": {
+      "middleware.js": "middleware-node.js"
+    },
+    "test": {
+      "dependencies": {
+        "next": [
+          {
+            "versionConstraint": ">=15.2.6",
+            "canaryOnly": true
+          },
+          {
+            "versionConstraint": ">=15.5.7"
+          }
+        ]
+      }
+    }
+  },
+  "catch-all": {
+    "distDir": ".next-catch-all",
+    "files": {
+      "middleware.js": "middleware-catch-all.js"
+    },
+    "env": {
+      "NEXT_I18N": "false"
+    }
+  }
+}
