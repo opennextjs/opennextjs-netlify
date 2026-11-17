@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.16.8](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.7...v5.16.8) (2026-11-17)
+
+
+### Bug Fixes
+
+* run middleware for i18n locale casing ([#3622](https://github.com/opennextjs/opennextjs-netlify/issues/3622)) ([7ee37e9](https://github.com/opennextjs/opennextjs-netlify/commit/7ee37e98db735d971e7b8012f5390259afa6bbcb))
+
 ## [5.16.7](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.6...v5.16.7) (2026-11-13)
 
 
