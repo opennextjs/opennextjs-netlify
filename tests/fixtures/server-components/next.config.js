@@ -4,6 +4,10 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    // for next@<14.0.0
+    serverActions: true,
+  },
   outputFileTracingRoot: __dirname,
 }
 
