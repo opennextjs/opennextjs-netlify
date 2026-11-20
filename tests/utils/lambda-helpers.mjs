@@ -30,7 +30,9 @@ Object.defineProperty(globalThis, Symbol.for('nf-not-patched-fetch'), {
  * @property {Record<string, string>} [env] Environment variables that should be set during the invocation
  * @property {string} [httpMethod] The http method that is used for the invocation. Defaults to 'GET'
  * @property {string} [url] TThe relative path that should be requested. Defaults to '/'
+ * @property {string} [baseUrl] The origin the relative path is resolved against. Defaults to 'https://example.netlify'
  * @property {Record<string, string>} [headers] The headers used for the invocation
+ * @property {string} [body] The request body used for the invocation
  * @property {Record<string, unknown>} [flags] Feature flags that should be set during the invocation
  *
  * @typedef {Pick<FunctionInvocationOptions, 'env'>} LoadFunctionOptions
@@ -135,7 +137,15 @@ export async function loadFunction(ctx, { env } = {}) {
   /**
    * @param {FunctionInvocationOptions} options
    */
-  async function invokeFunction({ headers, httpMethod, flags, url, env: invokeEnv } = {}) {
+  async function invokeFunction({
+    headers,
+    httpMethod,
+    flags,
+    url,
+    baseUrl,
+    body,
+    env: invokeEnv,
+  } = {}) {
     const restoreEnvironment = temporarilySetEnv(ctx, {
       ...env,
       ...invokeEnv,
@@ -151,8 +161,9 @@ export async function loadFunction(ctx, { env } = {}) {
       event: {
         headers: headers || {},
         httpMethod: httpMethod || 'GET',
-        rawUrl: new URL(url || '/', 'https://example.netlify').href,
+        rawUrl: new URL(url || '/', baseUrl || 'https://example.netlify').href,
         flags: flags ?? DEFAULT_FLAGS,
+        ...(body === undefined ? {} : { body }),
       },
       lambdaFunc: { handler },
       timeoutMs: 10_000,
