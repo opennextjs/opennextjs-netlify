@@ -1206,3 +1206,71 @@ describe('public URL of a middleware rewrite in the server handler', () => {
     expect(url.search).toBe('?added=1')
   })
 })
+
+// Regression: since #2957, the server handler keeps a dummy middleware entry to enable
+// `_next/data` normalization. With `skipMiddlewareUrlNormalize` + `trailingSlash`, Next.js
+// skips restoring the trailing slash, causing its own redirect to send data requests to
+// the HTML page with a 308.
+describe('skipMiddlewareUrlNormalize with trailingSlash', () => {
+  const runPluginConstants = { PUBLISH_DIR: '.next-trailing-slash' }
+
+  test<FixtureTestContext>('data requests reaching the server handler are not redirected', async (ctx) => {
+    await createFixture('middleware-i18n-skip-normalize', ctx)
+    await runPlugin(ctx, runPluginConstants)
+
+    for (const [url, slug] of [
+      ['/_next/data/build-id/en/dynamic/test.json', 'test'],
+      ['/_next/data/build-id/fr/dynamic/other.json', 'other'],
+    ]) {
+      const response = await invokeFunction(ctx, { url, headers: { 'x-nextjs-data': '1' } })
+      expect(response.statusCode, url).toBe(200)
+      expect(response.headers.location, url).toBeUndefined()
+      expect(JSON.parse(response.body).pageProps, url).toEqual({ slug })
+    }
+  })
+
+  test<FixtureTestContext>('page requests keep trailing slash behavior', async (ctx) => {
+    await createFixture('middleware-i18n-skip-normalize', ctx)
+    await runPlugin(ctx, runPluginConstants)
+
+    for (const url of ['/dynamic/test/', '/fr/dynamic/test/']) {
+      const response = await invokeFunction(ctx, { url })
+      expect(response.statusCode, url).toBe(200)
+      expect(response.headers['content-type'], url).toMatch(/text\/html/)
+    }
+
+    for (const [url, location] of [
+      ['/dynamic/test', '/dynamic/test/'],
+      ['/fr/dynamic/test', '/fr/dynamic/test/'],
+    ]) {
+      const response = await invokeFunction(ctx, { url })
+      expect(response.statusCode, url).toBe(308)
+      expect(response.headers.location, url).toBe(location)
+    }
+  })
+
+  test<FixtureTestContext>('middleware still receives non-normalized data URLs', async (ctx) => {
+    await createFixture('middleware-i18n-skip-normalize', ctx)
+    await runPlugin(ctx, runPluginConstants)
+    const origin = await LocalServer.run(async (req, res) => {
+      res.write(JSON.stringify({ url: req.url }))
+      res.end()
+    })
+    ctx.cleanup?.push(() => origin.stop())
+
+    const response = await invokeEdgeFunction(ctx, {
+      functions: [EDGE_MIDDLEWARE_FUNCTION_NAME],
+      headers: { 'x-nextjs-data': '1' },
+      origin,
+      url: '/_next/data/build-id/en/dynamic/test.json',
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('x-next-url-pathname')).toBe(
+      '/_next/data/build-id/en/dynamic/test.json',
+    )
+    expect(new URL((await response.json()).url, 'http://n/').pathname).toBe(
+      '/_next/data/build-id/en/dynamic/test.json',
+    )
+  })
+})
