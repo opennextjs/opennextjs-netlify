@@ -17,5 +17,11 @@
         ]
       }
     }
+  },
+  "trailing-slash": {
+    "distDir": ".next-trailing-slash",
+    "env": {
+      "TRAILING_SLASH": "true"
+    }
   }
 }
