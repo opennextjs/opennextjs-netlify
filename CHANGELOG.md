@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.16.9](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.8...v5.16.9) (2026-11-23)
+
+
+### Bug Fixes
+
+* don't redirect _next/data requests with skipMiddlewareUrlNormalize and trailingSlash ([#3628](https://github.com/opennextjs/opennextjs-netlify/issues/3628)) ([71a0323](https://github.com/opennextjs/opennextjs-netlify/commit/71a0323973442eedd866a44b6983ff3f116cdb28))
+* pin initURL ([#3625](https://github.com/opennextjs/opennextjs-netlify/issues/3625)) ([f165035](https://github.com/opennextjs/opennextjs-netlify/commit/f165035f8280e98caad70f22b2c68442348caba1))
+
 ## [5.16.8](https://github.com/opennextjs/opennextjs-netlify/compare/v5.16.7...v5.16.8) (2026-11-17)
 
 
