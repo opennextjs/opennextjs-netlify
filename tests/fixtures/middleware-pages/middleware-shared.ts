@@ -56,6 +56,14 @@ const getResponse = (request: NextRequest) => {
     return NextResponse.rewrite(url)
   }
 
+  if (url.pathname === '/ssr-page-replaced-request-headers/') {
+    url.pathname = '/ssr-page-2'
+    // replaces all request headers, so x-nextjs-data doesn't reach the origin
+    return NextResponse.rewrite(url, {
+      request: { headers: new Headers({ 'x-from-middleware': '1' }) },
+    })
+  }
+
   if (url.pathname === '/') {
     url.pathname = '/ssg/first'
     return NextResponse.rewrite(url)

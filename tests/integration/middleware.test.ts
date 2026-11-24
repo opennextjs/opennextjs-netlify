@@ -788,6 +788,31 @@ for (const {
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })
 
+      for (const [label, headers] of [
+        ['with', { 'x-nextjs-data': '1' }],
+        ['without', {}],
+      ] as const) {
+        test<FixtureTestContext>(`middleware replacing request headers keeps data requests ${label} x-nextjs-data header on the data route`, async (ctx) => {
+          await createFixture('middleware-pages', ctx)
+          await runPlugin(ctx, runPluginConstants)
+          const origin = await LocalServer.run(async (req, res) => {
+            res.write(JSON.stringify({ url: req.url, headers: req.headers }))
+            res.end()
+          })
+          ctx.cleanup?.push(() => origin.stop())
+          const response = await invokeEdgeFunction(ctx, {
+            functions: [edgeFunctionNameRoot],
+            headers,
+            origin,
+            url: `/_next/data/build-id/ssr-page-replaced-request-headers.json`,
+          })
+          const res = await response.json()
+          const url = new URL(res.url, 'http://n/')
+          expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
+          expect(response.status).toBe(200)
+        })
+      }
+
       test<FixtureTestContext>('middleware should leave non-data requests untouched', async (ctx) => {
         await createFixture('middleware-pages', ctx)
         await runPlugin(ctx, runPluginConstants)
