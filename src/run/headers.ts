@@ -31,17 +31,32 @@ const getRequestMeta = (request: Request): RequestMeta | undefined => {
   }
 }
 
+// Same check as Next.js uses to pick a data response (prefix only, no `.json` or build id needed)
+const isNextDataPathname = (pathname: string, basePath?: string) => {
+  const path =
+    basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname
+  return path === '/_next/data' || path.startsWith('/_next/data/')
+}
+
 /**
  * When the edge middleware rewrites, the server handler receives the rewrite target as its URL
  * (that's the CDN cache key) and the URL the client requested in the request meta.
  */
-export const getRewritePublicUrl = (request: Request): URL | undefined => {
+export const getRewritePublicUrl = (request: Request, basePath?: string): URL | undefined => {
   const publicUrlHeader = getRequestMeta(request)?.publicUrl
   if (!publicUrlHeader) {
     return
   }
   try {
     const publicUrl = new URL(publicUrlHeader, request.url)
+    // Next.js renders page data for any /_next/data public URL. Don't let that end up cached
+    // under a page URL.
+    if (
+      isNextDataPathname(publicUrl.pathname, basePath) &&
+      !isNextDataPathname(new URL(request.url).pathname, basePath)
+    ) {
+      return
+    }
     // assigning pathname/search can't change the origin, unlike parsing a `//host/...` string
     const url = new URL(request.url)
     url.pathname = publicUrl.pathname

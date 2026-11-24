@@ -17,6 +17,7 @@ import {
 import { RequestData } from './next-request.ts'
 import {
   addBasePath,
+  isDataPath,
   normalizeDataUrl,
   normalizeLocalePath,
   normalizeTrailingSlash,
@@ -201,7 +202,9 @@ export const buildResponse = async ({
       return addMiddlewareHeaders(fetch(proxyRequest, { redirect: 'manual' }), edgeResponse)
     }
 
-    if (isDataReq) {
+    // Check the path too, since the header can be missing. Sending a data request to the page
+    // path would cache its JSON as the page's HTML.
+    if (isDataReq || isDataPath(baseUrl.pathname, nextConfig?.basePath)) {
       rewriteUrl.pathname = rewriteDataPath({
         dataUrl: new URL(request.url).pathname,
         newRoute: removeBasePath(rewriteUrl.pathname, nextConfig?.basePath),

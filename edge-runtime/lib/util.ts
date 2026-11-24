@@ -15,6 +15,17 @@ export function normalizeDataUrl(urlPath: string) {
   return urlPath
 }
 
+/**
+ * Whether middleware sees this as a data URL. Next.js parses /_next/data paths ending in .json that
+ * way, with or without the `x-nextjs-data` header.
+ */
+export const isDataPath = (pathname: string, basePath?: string) => {
+  const pathnameWithoutBasePath = removeBasePath(pathname, basePath)
+  return (
+    pathnameWithoutBasePath.startsWith('/_next/data/') && pathnameWithoutBasePath.endsWith('.json')
+  )
+}
+
 export const removeBasePath = (path: string, basePath?: string) => {
   if (basePath && path.startsWith(basePath)) {
     return path.replace(basePath, '')
@@ -114,13 +125,17 @@ export function rewriteDataPath({
   newRoute: string
   basePath?: string
 }) {
-  const normalizedDataUrl = normalizeDataUrl(removeBasePath(dataUrl, basePath))
+  const dataUrlWithoutBasePath = removeBasePath(dataUrl, basePath)
+  const newRoutePath = stripTrailingSlash(normalizeIndex(newRoute))
 
-  return addBasePath(
-    dataUrl.replace(
-      normalizeIndex(normalizedDataUrl),
-      stripTrailingSlash(normalizeIndex(newRoute)),
-    ),
-    basePath,
-  )
+  // Rebuild from the `/_next/data/<buildId>` prefix. Replacing the old route as a substring would
+  // also match inside the build id, e.g. route `/a` in `/_next/data/abc123/a.json`.
+  const dataPrefix = dataUrlWithoutBasePath.match(/^\/_next\/data\/[^/]+/)?.[0]
+  if (dataPrefix && dataUrlWithoutBasePath.endsWith('.json')) {
+    return addBasePath(`${dataPrefix}${newRoutePath}.json`, basePath)
+  }
+
+  const normalizedDataUrl = normalizeDataUrl(dataUrlWithoutBasePath)
+
+  return addBasePath(dataUrl.replace(normalizeIndex(normalizedDataUrl), newRoutePath), basePath)
 }

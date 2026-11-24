@@ -758,6 +758,32 @@ for (const {
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })
 
+      test<FixtureTestContext>('middleware should rewrite data requests without x-nextjs-data header to data route', async (ctx) => {
+        // The rewrite target is the cache key, so routing this to the page would cache JSON as HTML.
+        await createFixture('middleware-pages', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/_next/data/build-id/ssr-page.json`,
+        })
+        const res = await response.json()
+        const url = new URL(res.url, 'http://n/')
+        expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+
       test<FixtureTestContext>('middleware should leave non-data requests untouched', async (ctx) => {
         await createFixture('middleware-pages', ctx)
         await runPlugin(ctx, runPluginConstants)
