@@ -667,10 +667,12 @@ for (const {
 
         ctx.cleanup?.push(() => origin.stop())
 
+        // like `next start`, a /_next/data request is a data request even without the header, so the
+        // redirect is left to the client router
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(response.headers.get('location'), 'no location header').toBeNull()
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(response.headers.get('x-nextjs-redirect') as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -692,10 +694,12 @@ for (const {
 
         ctx.cleanup?.push(() => origin.stop())
 
+        // like `next start`, a /_next/data request is a data request even without the header, so the
+        // redirect is left to the client router
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(response.headers.get('location'), 'no location header').toBeNull()
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(response.headers.get('x-nextjs-redirect') as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')

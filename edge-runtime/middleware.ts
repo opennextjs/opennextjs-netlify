@@ -9,6 +9,7 @@ import { logger, LogLevel } from './lib/logging.ts'
 import { removeInternalCookieHeader } from './lib/middleware.ts'
 import { buildNextRequest, localizeRequest, RequestData } from './lib/next-request.ts'
 import { buildResponse, FetchEventResult } from './lib/response.ts'
+import { isDataPath } from './lib/util.ts'
 import {
   getMiddlewareRouteMatcher,
   searchParamsToUrlQuery,
@@ -38,6 +39,11 @@ export async function handleMiddleware(
   // only buildResponse may set this, a client must not be able to pre-populate it (or have
   // middleware copy it into its request header overrides). See lib/private-request-meta.ts
   request.headers.delete(REQUEST_META_HEADER)
+
+  // `next start` marks /_next/data requests as data requests even without the header, do the same
+  if (isDataPath(url.pathname, nextConfig?.basePath)) {
+    request.headers.set('x-nextjs-data', '1')
+  }
 
   const reqLogger = logger
     .withLogLevel(
