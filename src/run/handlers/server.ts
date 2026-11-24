@@ -129,7 +129,7 @@ export default async (
     })
 
     disableFaultyTransferEncodingHandling(res as unknown as ComputeJsOutgoingMessage)
-    const publicUrl = getRewritePublicUrl(request) ?? new URL(request.url)
+    const publicUrl = getRewritePublicUrl(request, nextConfig.basePath) ?? new URL(request.url)
     lockInitURL(req, publicUrl.href)
 
     const resProxy = augmentNextResponse(res, requestContext)
