@@ -43,7 +43,8 @@ export async function handleMiddleware(
   // `next start` marks /_next/data requests as data requests even without the header, do the same.
   // Decided once here, because middleware can replace request headers before buildResponse runs.
   const isDataRequest =
-    request.headers.has('x-nextjs-data') || isDataPath(url.pathname, nextConfig?.basePath)
+    request.headers.has('x-nextjs-data') ||
+    isDataPath(url.pathname, (nextConfig as RequestData['nextConfig'])?.basePath)
   if (isDataRequest) {
     request.headers.set('x-nextjs-data', '1')
   }
