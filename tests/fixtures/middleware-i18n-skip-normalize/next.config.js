@@ -9,6 +9,9 @@ module.exports = {
     defaultLocale: 'en',
   },
   skipMiddlewareUrlNormalize: true,
+  // `trailing-slash` test variant
+  trailingSlash: process.env.TRAILING_SLASH === 'true',
+  generateBuildId: () => 'build-id',
   experimental: {
     clientRouterFilter: true,
     clientRouterFilterRedirects: true,

@@ -73,6 +73,18 @@ export const setRunConfig = (config: NextConfigForMultipleVersions) => {
     maximumDiskCacheSize: 0,
   }
 
+  // This setting controls URL normalization in middleware, which runs in the edge function,
+  // not the server handler. The server handler still needs a dummy middleware entry to normalize
+  // `_next/data` requests (see `replaceMiddlewareManifest`). With this enabled, Next.js skips
+  // restoring the trailing slash, causing `trailingSlash: true` to redirect data requests to
+  // the HTML page with a 308. Only enabled settings are overridden, leaving other configs untouched.
+  const configWithSkipNormalize = config as Record<string, unknown>
+  for (const key of ['skipMiddlewareUrlNormalize', 'skipProxyUrlNormalize']) {
+    if (configWithSkipNormalize[key]) {
+      configWithSkipNormalize[key] = false
+    }
+  }
+
   // honor the in-memory cache size from next.config (either one set by user or Next.js default)
   setInMemoryCacheMaxSizeFromNextConfig(
     config.cacheMaxMemorySize ?? config.experimental?.isrMemoryCacheSize,
