@@ -667,10 +667,12 @@ for (const {
 
         ctx.cleanup?.push(() => origin.stop())
 
+        // like `next start`, a /_next/data request is a data request even without the header, so the
+        // redirect is left to the client router
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(response.headers.get('location'), 'no location header').toBeNull()
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(response.headers.get('x-nextjs-redirect') as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -692,10 +694,12 @@ for (const {
 
         ctx.cleanup?.push(() => origin.stop())
 
+        // like `next start`, a /_next/data request is a data request even without the header, so the
+        // redirect is left to the client router
         expect(response.status).toBe(307)
-        expect(response.headers.get('location'), 'added a location header').toBeTypeOf('string')
+        expect(response.headers.get('location'), 'no location header').toBeNull()
         expect(
-          new URL(response.headers.get('location') as string, 'http://n').pathname,
+          new URL(response.headers.get('x-nextjs-redirect') as string, 'http://n').pathname,
           'redirected to the correct path',
         ).toEqual('/other')
         expect(response.headers.get('x-header-from-redirect'), 'hello').toBe('hello')
@@ -757,6 +761,57 @@ for (const {
         expect(response.headers.get('x-nextjs-rewrite')).toBe('/ssr-page-2/')
         expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
       })
+
+      test<FixtureTestContext>('middleware should rewrite data requests without x-nextjs-data header to data route', async (ctx) => {
+        // The rewrite target is the cache key, so routing this to the page would cache JSON as HTML.
+        await createFixture('middleware-pages', ctx)
+        await runPlugin(ctx, runPluginConstants)
+        const origin = await LocalServer.run(async (req, res) => {
+          res.write(
+            JSON.stringify({
+              url: req.url,
+              headers: req.headers,
+            }),
+          )
+          res.end()
+        })
+        ctx.cleanup?.push(() => origin.stop())
+        const response = await invokeEdgeFunction(ctx, {
+          functions: [edgeFunctionNameRoot],
+          origin,
+          url: `/_next/data/build-id/ssr-page.json`,
+        })
+        const res = await response.json()
+        const url = new URL(res.url, 'http://n/')
+        expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
+        expect(response.status).toBe(200)
+        expect(response.headers.get('x-runtime')).toEqual(expectedRuntime)
+      })
+
+      for (const [label, headers] of [
+        ['with', { 'x-nextjs-data': '1' }],
+        ['without', {}],
+      ] as const) {
+        test<FixtureTestContext>(`middleware replacing request headers keeps data requests ${label} x-nextjs-data header on the data route`, async (ctx) => {
+          await createFixture('middleware-pages', ctx)
+          await runPlugin(ctx, runPluginConstants)
+          const origin = await LocalServer.run(async (req, res) => {
+            res.write(JSON.stringify({ url: req.url, headers: req.headers }))
+            res.end()
+          })
+          ctx.cleanup?.push(() => origin.stop())
+          const response = await invokeEdgeFunction(ctx, {
+            functions: [edgeFunctionNameRoot],
+            headers,
+            origin,
+            url: `/_next/data/build-id/ssr-page-replaced-request-headers.json`,
+          })
+          const res = await response.json()
+          const url = new URL(res.url, 'http://n/')
+          expect(url.pathname).toBe('/_next/data/build-id/ssr-page-2.json')
+          expect(response.status).toBe(200)
+        })
+      }
 
       test<FixtureTestContext>('middleware should leave non-data requests untouched', async (ctx) => {
         await createFixture('middleware-pages', ctx)

@@ -301,6 +301,36 @@ describe('headers', () => {
       expect(publicUrl?.origin).toBe('https://example.com')
       expect(publicUrl?.pathname).toBe('/public/target')
     })
+
+    // Next.js renders page data for a /_next/data public URL, which must not be cached under a page URL
+    test.each([
+      ['data URL', '/_next/data/build-id/page.json', undefined],
+      ['data URL without .json', '/_next/data/build-id/page', undefined],
+      ['data URL under a base path', '/base/_next/data/build-id/page.json', '/base'],
+    ])('ignores a %s public URL when the target is a page', (_, publicPath, basePath) => {
+      const request = new Request(`https://example.com${basePath ?? ''}/en/page`, {
+        headers: {
+          'x-nf-request-id': requestId,
+          ...meta({ requestID: requestId, publicUrl: `https://example.com${publicPath}` }),
+        },
+      })
+
+      expect(getRewritePublicUrl(request, basePath)).toBeUndefined()
+    })
+
+    test('keeps a data public URL when the target is a data URL too', () => {
+      const request = new Request('https://example.com/_next/data/build-id/en/page.json', {
+        headers: {
+          'x-nf-request-id': requestId,
+          ...meta({
+            requestID: requestId,
+            publicUrl: 'https://example.com/_next/data/build-id/page.json',
+          }),
+        },
+      })
+
+      expect(getRewritePublicUrl(request)?.pathname).toBe('/_next/data/build-id/page.json')
+    })
   })
 
   describe('setCacheControlHeaders', () => {

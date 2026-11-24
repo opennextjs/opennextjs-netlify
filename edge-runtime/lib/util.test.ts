@@ -1,5 +1,5 @@
 import { assertEquals } from 'https://deno.land/std@0.175.0/testing/asserts.ts'
-import { addLocale, relativizeURL, rewriteDataPath } from './util.ts'
+import { addLocale, isDataPath, relativizeURL, rewriteDataPath } from './util.ts'
 
 Deno.test('addLocale', async (t) => {
   await t.step('adds the locale to a path without one', () => {
@@ -55,6 +55,30 @@ Deno.test('rewriteDataPath', async (t) => {
     const result = rewriteDataPath({ dataUrl, newRoute })
     assertEquals(result, '/_next/data/build-id/target.json')
   })
+
+  await t.step('should not replace a build id that starts with the route', async () => {
+    const dataUrl = '/_next/data/abc123/a.json'
+    const newRoute = '/target'
+    const result = rewriteDataPath({ dataUrl, newRoute })
+    assertEquals(result, '/_next/data/abc123/target.json')
+  })
+
+  await t.step(
+    'should not replace a build id that starts with the route under a base path',
+    async () => {
+      const dataUrl = '/baseDir/_next/data/abc123/a.json'
+      const newRoute = '/target'
+      const result = rewriteDataPath({ dataUrl, newRoute, basePath: '/baseDir' })
+      assertEquals(result, '/baseDir/_next/data/abc123/target.json')
+    },
+  )
+
+  await t.step('should rewrite a locale index data url', async () => {
+    const dataUrl = '/_next/data/build-id/en.json'
+    const newRoute = '/en/target'
+    const result = rewriteDataPath({ dataUrl, newRoute })
+    assertEquals(result, '/_next/data/build-id/en/target.json')
+  })
 })
 
 Deno.test('relativizeURL', async (t) => {
@@ -77,5 +101,27 @@ Deno.test('relativizeURL', async (t) => {
     const base = 'https://example.com/'
     const result = relativizeURL(url, base)
     assertEquals(result, '/pathname')
+  })
+})
+
+Deno.test('isDataPath', async (t) => {
+  await t.step('matches data URLs', () => {
+    assertEquals(isDataPath('/_next/data/build-id/en/page.json'), true)
+    assertEquals(isDataPath('/_next/data/build-id/index.json'), true)
+  })
+
+  await t.step('matches data URLs under basePath', () => {
+    assertEquals(isDataPath('/base/_next/data/build-id/page.json', '/base'), true)
+  })
+
+  await t.step('does not match page or static URLs', () => {
+    assertEquals(isDataPath('/en/page'), false)
+    assertEquals(isDataPath('/_next/static/chunks/main.js'), false)
+    assertEquals(isDataPath('/_next/data/build-id/page'), false)
+  })
+
+  await t.step('does not match paths that only contain .json', () => {
+    // middleware only parses /_next/data URLs ending in .json as data requests
+    assertEquals(isDataPath('/_next/data/build-id/page.json/extra'), false)
   })
 })

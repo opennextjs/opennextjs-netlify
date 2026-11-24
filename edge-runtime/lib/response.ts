@@ -36,6 +36,7 @@ interface BuildResponseOptions {
   request: Request
   result: FetchEventResult
   nextConfig?: RequestData['nextConfig']
+  isDataRequest: boolean
 }
 
 export const buildResponse = async ({
@@ -44,6 +45,7 @@ export const buildResponse = async ({
   request,
   result,
   nextConfig,
+  isDataRequest,
 }: BuildResponseOptions): Promise<Response | void> => {
   logger
     .withFields({ is_nextresponse_next: result.response.headers.has('x-middleware-next') })
@@ -149,7 +151,7 @@ export const buildResponse = async ({
   let nextRedirect = edgeResponse.headers.get('x-nextjs-redirect')
 
   // Data requests (i.e. requests for /_next/data ) need special handling
-  const isDataReq = request.headers.has('x-nextjs-data')
+  const isDataReq = isDataRequest
   // Data requests need to be normalized to the route path
   if (isDataReq && !redirect && !rewrite && !nextRedirect) {
     const requestUrl = new URL(request.url)
